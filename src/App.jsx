@@ -91,7 +91,7 @@ export default function App() {
                 )}
 
                 {/* Contenido principal */}
-                <main className="flex-1 py-6 pr-4 pl-14 md:ml-64 md:pl-4">
+                <main className="flex-1 mt-12 py-6 px-4 md:mt-0 md:ml-64 md:pl-4">
                   <Routes>
                     <Route path="/" element={<Home />} />
                     <Route path="/checkout" element={<Checkout />} />
