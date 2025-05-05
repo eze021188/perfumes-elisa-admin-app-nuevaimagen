@@ -18,7 +18,7 @@ import UsersPermissions from './pages/UsersPermissions'
 
 export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const toggleSidebar = () => setSidebarOpen(open => !open)
+  const toggleSidebar = () => setSidebarOpen(o => !o)
 
   return (
     <ClientesProvider>
@@ -71,7 +71,8 @@ export default function App() {
                 {/* Toggle móvil */}
                 <button
                   className={`
-                    fixed top-4 left-4 z-60 p-2 bg-black text-white rounded-md
+                    fixed top-4 left-4 z-60 bg-black text-white rounded-md
+                    w-14 h-12 flex items-center justify-center
                     md:hidden transform transition-transform duration-200
                     ${sidebarOpen ? 'translate-x-64' : 'translate-x-0'}
                   `}
@@ -90,7 +91,7 @@ export default function App() {
                 )}
 
                 {/* Contenido principal */}
-                <main className="flex-1 py-6 px-4 md:ml-64 md:px-4">
+                <main className="flex-1 py-6 pr-4 pl-14 md:ml-64 md:pl-4">
                   <Routes>
                     <Route path="/" element={<Home />} />
                     <Route path="/checkout" element={<Checkout />} />
