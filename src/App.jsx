@@ -12,6 +12,7 @@ import Compras from './pages/Compras'
 import Ventas from './pages/Ventas'
 import Reportes from './pages/Reportes'
 import UsersPermissions from './pages/UsersPermissions'
+import TestPDF from './pages/TestPDF';
 
 export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -96,6 +97,7 @@ export default function App() {
                   <Route path="/ventas" element={<Ventas />} />
                   <Route path="/reportes" element={<Reportes />} />
                   <Route path="/usuarios" element={<UsersPermissions />} />
+                  <Route path="/test-pdf" element={<TestPDF />} />
                   {/* Ruta comodín para evitar errores 404 */}
                   <Route path="*" element={<Home />} />
                 </Routes>
