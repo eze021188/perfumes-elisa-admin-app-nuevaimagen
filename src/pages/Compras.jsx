@@ -22,16 +22,34 @@ export default function Compras() {
   const [editingIdx, setEditingIdx] = useState(null)
   const [editItems, setEditItems] = useState([])
   const [invConfig, setInvConfig] = useState({
+  
+  
     gastosImportacion: '',
     tipoCambioImportacion: '',
     otrosGastos: '',
     targetIdx: null
-  })
+  });
+  const [nombresSugeridos, setNombresSugeridos] = useState([]);
 
   // 1) Carga inicial de compras + items
   useEffect(() => {
     fetchCompras()
   }, [])
+  useEffect(() => {
+    const cargarNombresProductos = async () => {
+      const { data, error } = await supabase.from('productos').select('nombre');
+  
+      if (!error && data) {
+        const nombresUnicos = Array.from(new Set(data.map(p => p.nombre)));
+        setNombresSugeridos(nombresUnicos);
+      } else {
+        console.error('Error al obtener productos:', error);
+      }
+    };
+  
+    cargarNombresProductos();
+  }, []);
+  
 
   async function fetchCompras() {
     const { data: cabeceras, error: errCab } = await supabase
@@ -320,12 +338,20 @@ p.costoFinalMXN = parseFloat(costoFinalMXN.toFixed(2));
 
   return (
     <div className="max-w-4xl mx-auto p-6 bg-white rounded shadow">
-      <button
-        onClick={() => setMostrarFormulario(!mostrarFormulario)}
-        className="mb-4 bg-blue-600 text-white px-4 py-2 rounded"
-      >
-        {mostrarFormulario ? 'Cancelar' : 'Registrar Compra'}
-      </button>
+      <div className="mb-4 flex gap-2">
+  <button
+    onClick={() => window.location.href = '/'}
+    className="bg-gray-700 hover:bg-gray-800 text-white px-4 py-2 rounded"
+  >
+    Volver al inicio
+  </button>
+  <button
+    onClick={() => setMostrarFormulario(!mostrarFormulario)}
+    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"
+  >
+    {mostrarFormulario ? 'Cancelar' : 'Registrar Compra'}
+  </button>
+</div>
 
       {mostrarFormulario && (
         <div className="mb-6">
@@ -384,13 +410,36 @@ p.costoFinalMXN = parseFloat(costoFinalMXN.toFixed(2));
 
           {/* Agregar producto */}
           <div className="flex gap-2 mb-4">
-            <input
-              name="nombreProducto"
-              placeholder="Producto"
-              value={formulario.nombreProducto}
-              onChange={manejarCambio}
-              className="border p-2 rounded flex-1"
-            />
+          <div className="relative flex-1">
+  <input
+    name="nombreProducto"
+    placeholder="Producto"
+    value={formulario.nombreProducto}
+    onChange={manejarCambio}
+    className="border p-2 rounded w-full"
+    autoComplete="off"
+  />
+  {formulario.nombreProducto.length > 0 && (
+    <ul className="absolute z-10 bg-white border border-gray-300 w-full rounded mt-1 max-h-40 overflow-y-auto">
+      {nombresSugeridos
+        .filter(nombre =>
+          nombre.toLowerCase().includes(formulario.nombreProducto.toLowerCase())
+        )
+        .slice(0, 8)
+        .map((nombre, i) => (
+          <li
+            key={i}
+            className="p-2 hover:bg-blue-100 cursor-pointer"
+            onClick={() =>
+              setFormulario(prev => ({ ...prev, nombreProducto: nombre }))
+            }
+          >
+            {nombre}
+          </li>
+        ))}
+    </ul>
+  )}
+</div>
             <input
               name="cantidad"
               type="number"
