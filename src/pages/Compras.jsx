@@ -1,4 +1,5 @@
 // src/pages/Compras.jsx
+
 import React, { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
 
@@ -183,53 +184,96 @@ export default function Compras() {
     }
   }
 
-  // 8) Afectar inventario: actualizar stock y precio
-  const confirmarAfectInventory = async () => {
-    const { gastosImportacion, tipoCambioImportacion, otrosGastos, targetIdx } = invConfig
-    if (targetIdx === null) return alert('Selecciona la compra a afectar')
-    if (!gastosImportacion || !tipoCambioImportacion || !otrosGastos)
-      return alert('Completa los campos de gastos')
+  // 8) Afectar inventario: actualizar stock, precio y registrar en movimientos
+const confirmarAfectInventory = async () => {
+  console.log('⚙️ confirmarAfectInventory invocado con invConfig:', invConfig);
 
-    const { compra, items } = savedCompras[targetIdx]
-    await supabase
-      .from('compras')
-      .update({
-        gastos_importacion: Number(gastosImportacion),
-        tipo_cambio_importacion: Number(tipoCambioImportacion),
-        otros_gastos: Number(otrosGastos),
-        inventario_afectado: true
-      })
-      .eq('id', compra.id)
+  const { gastosImportacion, tipoCambioImportacion, otrosGastos, targetIdx } = invConfig;
+  if (targetIdx === null) return alert('Selecciona la compra a afectar');
+  if (!gastosImportacion || !tipoCambioImportacion || !otrosGastos)
+    return alert('Completa los campos de gastos');
 
-    const { data: catalogo = [] } = await supabase
-      .from('productos')
-      .select('id, nombre, stock, precio_unitario_usd')
+  // 1) Marcar la cabecera como afectada
+  const { compra, items } = savedCompras[targetIdx];
+  const { error: errCab } = await supabase
+    .from('compras')
+    .update({
+      gastos_importacion: Number(gastosImportacion),
+      tipo_cambio_importacion: Number(tipoCambioImportacion),
+      otros_gastos: Number(otrosGastos),
+      inventario_afectado: true
+    })
+    .eq('id', compra.id);
+  if (errCab) {
+    console.error('Error actualizando compra:', errCab);
+    return alert('Error al actualizar cabecera: ' + errCab.message);
+  }
 
-    for (const p of items) {
-      const prod = catalogo.find(x => x.nombre === p.nombreProducto)
-      if (prod) {
-        await supabase
-          .from('productos')
-          .update({
-            stock: prod.stock + p.cantidad,
-            precio_unitario_usd: p.precioUnitarioUSD
-          })
-          .eq('id', prod.id)
-      } else {
-        await supabase
-          .from('productos')
-          .insert({
-            nombre: p.nombreProducto,
-            stock: p.cantidad,
-            precio_unitario_usd: p.precioUnitarioUSD
-          })
+  // 2) Obtener catálogo
+  const { data: catalogo = [], error: errCat } = await supabase
+    .from('productos')
+    .select('id, nombre, stock, precio_unitario_usd');
+  if (errCat) {
+    console.error('Error al traer catálogo:', errCat);
+    return alert('Error al cargar catálogo: ' + errCat.message);
+  }
+
+  // 3) Recorrer items y actualizar/insertar + registrar movimiento
+  for (const p of items) {
+    let prodId;
+    const prod = catalogo.find(x => x.nombre === p.nombreProducto);
+
+    if (prod) {
+      prodId = prod.id;
+      const { error: errUpd } = await supabase
+        .from('productos')
+        .update({
+          stock: prod.stock + p.cantidad,
+          precio_unitario_usd: p.precioUnitarioUSD
+        })
+        .eq('id', prodId);
+      if (errUpd) {
+        console.error('Error actualizando producto:', errUpd);
+        return alert('Error al actualizar producto: ' + errUpd.message);
       }
+    } else {
+      const { data: newProd, error: errInsProd } = await supabase
+        .from('productos')
+        .insert({
+          nombre: p.nombreProducto,
+          stock: p.cantidad,
+          precio_unitario_usd: p.precioUnitarioUSD
+        })
+        .select('id')
+        .single();
+      if (errInsProd) {
+        console.error('Error insertando producto:', errInsProd);
+        return alert('Error al crear producto: ' + errInsProd.message);
+      }
+      prodId = newProd.id;
     }
 
-    fetchCompras()
-    setInvConfig({ gastosImportacion: '', tipoCambioImportacion: '', otrosGastos: '', targetIdx: null })
-    alert(`Inventario afectado para pedido ${compra.numero_pedido}`)
+    // 4) Insertar movimiento
+    const { data: movData, error: errMov } = await supabase
+      .from('movimientos_inventario')
+      .insert({
+        tipo: 'ENTRADA',
+        producto_id: prodId,
+        cantidad: p.cantidad,
+        referencia: compra.numero_pedido,
+        fecha: new Date().toISOString()
+      });
+    if (errMov) {
+      console.error('Error insertando movimiento:', errMov);
+      return alert('Error al registrar movimiento de inventario: ' + errMov.message);
+    }
   }
+
+  // 5) Refrescar y limpiar
+  fetchCompras();
+  setInvConfig({ gastosImportacion: '', tipoCambioImportacion: '', otrosGastos: '', targetIdx: null });
+  alert(`Inventario afectado para pedido ${compra.numero_pedido}`);
+};
 
   return (
     <div className="max-w-4xl mx-auto p-6 bg-white rounded shadow">
@@ -266,6 +310,7 @@ export default function Compras() {
               className="border p-2 rounded"
             />
           </div>
+
           {/* Gastos/Descuento */}
           <div className="grid grid-cols-3 gap-4 mb-4">
             <input
@@ -293,6 +338,7 @@ export default function Compras() {
               className="border p-2 rounded"
             />
           </div>
+
           {/* Agregar producto */}
           <div className="flex gap-2 mb-4">
             <input
@@ -322,6 +368,7 @@ export default function Compras() {
               Agregar
             </button>
           </div>
+
           {/* Tabla productos agregados */}
           {productosAgregados.length > 0 && (
             <>
@@ -394,7 +441,9 @@ export default function Compras() {
               </div>
               <table className="w-full border-collapse mb-4 text-center">
                 <thead className="bg-gray-200">
-                  <tr><th>#</th><th>Producto</th><th>Cant.</th><th>Precio</th><th>Subtotal</th></tr>
+                  <tr>
+                    <th>#</th><th>Producto</th><th>Cant.</th><th>Precio</th><th>Subtotal</th>
+                  </tr>
                 </thead>
                 <tbody>
                   {(editingIdx === idx ? editItems : items).map((p, i) => (
