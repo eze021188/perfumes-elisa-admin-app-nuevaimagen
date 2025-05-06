@@ -4,6 +4,7 @@ import { ClientesProvider } from './contexts/ClientesContext'
 import { ProductosProvider } from './contexts/ProductosContext'
 import { ComprasProvider } from './contexts/ComprasContext'
 
+import DebugVentas from './pages/DebugVentas';
 import Home from './pages/Home'
 import Checkout from './pages/Checkout'
 import Productos from './pages/Productos'
@@ -97,7 +98,9 @@ export default function App() {
                   <Route path="/ventas" element={<Ventas />} />
                   <Route path="/reportes" element={<Reportes />} />
                   <Route path="/usuarios" element={<UsersPermissions />} />
-                  <Route path="/test-pdf" element={<TestPDF />} />
+                  <Route path="/test-pdf" element={<TestPDF />} />  
+                  <Route path="/debug-ventas" element={<DebugVentas />} />
+
                   {/* Ruta comodín para evitar errores 404 */}
                   <Route path="*" element={<Home />} />
                 </Routes>

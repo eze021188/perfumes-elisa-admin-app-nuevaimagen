@@ -83,6 +83,7 @@ export default function Compras() {
         }))
     }));
     setSavedCompras(combined);
+    console.log("Compras cargadas:", combined);
   }  
 
   // 2) Inputs

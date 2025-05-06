@@ -1,4 +1,4 @@
-// src/Productos.jsx
+// src/pages/Productos.jsx
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
 import { useNavigate } from 'react-router-dom';
@@ -20,26 +20,24 @@ export default function Productos() {
 
   const cargarProductos = async () => {
     const { data, error } = await supabase.from('productos').select('*');
-    if (error) {
-      console.error('Error al cargar productos:', error.message);
-    } else {
-      setProductos(data);
-    }
+    if (error) console.error('Error al cargar productos:', error.message);
+    else setProductos(data);
   };
 
   const handleEditar = (id, campo, valor) => {
-    setProductos((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, [campo]: valor } : p))
+    setProductos(prev =>
+      prev.map(p => (p.id === id ? { ...p, [campo]: valor } : p))
     );
   };
 
-  const actualizarPromocion = async (id, nuevoValor) => {    
+  const actualizarPromocion = async (id, nuevoValor) => {
     const { error } = await supabase
       .from('productos')
       .update({ promocion: Number(nuevoValor) })
       .eq('id', id);
     if (error) console.error('Error actualizando promoción:', error.message);
   };
+
   const actualizarPrecioNormal = async (id, nuevoValor) => {
     const { error } = await supabase
       .from('productos')
@@ -47,17 +45,20 @@ export default function Productos() {
       .eq('id', id);
     if (error) console.error('Error actualizando precio normal:', error.message);
   };
-  const handleSeleccionar = (id) => {
-    setProductosSeleccionados((prev) =>
-      prev.includes(id) ? prev.filter((pid) => pid !== id) : [...prev, id]
+
+  const handleSeleccionar = id => {
+    setProductosSeleccionados(prev =>
+      prev.includes(id) ? prev.filter(pid => pid !== id) : [...prev, id]
     );
   };
 
   const seleccionarTodosVisibles = () => {
-    const visibles = productosFiltradosPaginados.map((p) => p.id);
-    const todos = visibles.every((id) => productosSeleccionados.includes(id));
-    setProductosSeleccionados((prev) =>
-      todos ? prev.filter((id) => !visibles.includes(id)) : Array.from(new Set([...prev, ...visibles]))
+    const visibles = productosFiltradosPaginados.map(p => p.id);
+    const todos = visibles.every(id => productosSeleccionados.includes(id));
+    setProductosSeleccionados(prev =>
+      todos
+        ? prev.filter(id => !visibles.includes(id))
+        : Array.from(new Set([...prev, ...visibles]))
     );
   };
 
@@ -80,12 +81,12 @@ export default function Productos() {
     cargarProductos();
   };
 
-  const handleBuscar = (texto) => {
+  const handleBuscar = texto => {
     setBusqueda(texto);
     setPaginaActual(1);
   };
 
-  const productosFiltrados = productos.filter((p) =>
+  const productosFiltrados = productos.filter(p =>
     p.nombre?.toLowerCase().includes(busqueda.toLowerCase())
   );
   const totalPaginas = Math.ceil(productosFiltrados.length / mostrarCantidad);
@@ -94,20 +95,56 @@ export default function Productos() {
     paginaActual * mostrarCantidad
   );
 
+  /* ---------------------- Movimientos ---------------------- */
   const verMovimientos = async (producto) => {
-    setProductoActual(producto);
-    const { data, error } = await supabase
-      .from('movimientos_inventario')
-      .select('*')
-      .eq('producto_id', producto.id)
-      .order('fecha', { ascending: false });
-    if (error) {
-      console.error('Error al cargar movimientos:', error.message);
-    } else {
-      setMovimientos(data);
-      setModalMovimientos(true);
-    }
-  };
+  setProductoActual(producto);
+
+  // 1) Entradas de stock (solo ENTRADA) desde registros_inventario
+  console.log('Buscando entradas para producto ID:', producto.id);
+  const { data: entradas = [], error: errReg } = await supabase
+    .from('registros_inventario')
+    .select('id, fecha, cantidad, referencia')
+    .eq('producto_id', producto.id)
+    .order('fecha', { ascending: false });
+  if (errReg) {
+    console.error('Error al cargar registros de entrada:', errReg.message);
+  }
+  console.log('Entradas obtenidas:', entradas);
+
+  // 2) Salidas de ventas (detalle_venta + ventas)
+  const { data: detalles = [], error: errDet } = await supabase
+    .from('detalle_venta')
+    .select('cantidad, venta:ventas(codigo_venta, created_at)')
+    .eq('producto_id', producto.id);
+  if (errDet) console.error('Error al cargar salidas:', errDet.message);
+
+  // 3) Unificar y normalizar
+  const movs = [
+    // Entradas positivas
+    ...entradas.map((m) => ({
+      id: m.id,
+      fecha: m.fecha,
+      tipo: 'ENTRADA',
+      displayCantidad: m.cantidad,
+      referencia: m.referencia,
+    })),
+    // Ventas → SALIDA (negativas)
+    ...detalles.map((d) => ({
+      id: `v-${producto.id}-${d.venta.codigo_venta}`,
+      fecha: d.venta.created_at,
+      tipo: 'SALIDA',
+      displayCantidad: -d.cantidad,
+      referencia: d.venta.codigo_venta,
+    }))
+  ];
+
+  // 4) Ordenar por fecha descendente
+  movs.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+
+  console.log('Movimientos combinados:', movs);
+  setMovimientos(movs);
+  setModalMovimientos(true);
+};
 
   return (
     <div className="p-4 md:p-6">
@@ -124,7 +161,7 @@ export default function Productos() {
           type="text"
           placeholder="Buscar producto..."
           value={busqueda}
-          onChange={(e) => handleBuscar(e.target.value)}
+          onChange={e => handleBuscar(e.target.value)}
           className="border border-gray-300 px-3 py-2 rounded w-full md:w-1/3"
         />
 
@@ -150,13 +187,13 @@ export default function Productos() {
           Mostrar{' '}
           <select
             value={mostrarCantidad}
-            onChange={(e) => {
+            onChange={e => {
               setMostrarCantidad(Number(e.target.value));
               setPaginaActual(1);
             }}
             className="border rounded px-2 py-1 text-sm"
           >
-            {[25, 50, 100, 200].map((n) => (
+            {[25, 50, 100, 200].map(n => (
               <option key={n} value={n}>
                 {n}
               </option>
@@ -178,9 +215,7 @@ export default function Productos() {
                 <input
                   type="checkbox"
                   onChange={seleccionarTodosVisibles}
-                  checked={productosFiltradosPaginados.every((p) =>
-                    productosSeleccionados.includes(p.id)
-                  )}
+                  checked={productosFiltradosPaginados.every(p => productosSeleccionados.includes(p.id))}
                 />
               </th>
               <th className="p-3">Producto</th>
@@ -193,16 +228,13 @@ export default function Productos() {
             </tr>
           </thead>
           <tbody>
-            {productosFiltradosPaginados.map((producto) => (
+            {productosFiltradosPaginados.map(producto => (
               <tr
                 key={producto.id}
                 className="hover:bg-gray-50 border-b cursor-pointer"
                 onClick={() => verMovimientos(producto)}
               >
-                <td
-                  onClick={(e) => e.stopPropagation()}
-                  className="p-2"
-                >
+                <td onClick={e => e.stopPropagation()} className="p-2">
                   <input
                     type="checkbox"
                     checked={productosSeleccionados.includes(producto.id)}
@@ -210,60 +242,35 @@ export default function Productos() {
                   />
                 </td>
                 <td className="p-2">{producto.nombre}</td>
-                <td className="p-2 text-right">
-                  ${producto.costo_final_usd?.toFixed(2) ?? '0.00'}
-                </td>
-                <td className="p-2 text-right">
-                  ${producto.costo_final_mxn?.toFixed(2) ?? '0.00'}
-                </td>
-                <td className="p-2 text-right">
-                  ${producto.precio_unitario_usd?.toFixed(2) ?? '0.00'}
-                </td>
-                <td
-                  className="p-2 text-right"
-                  onClick={(e) => e.stopPropagation()}
-                >
+                <td className="p-2 text-right">${producto.costo_final_usd?.toFixed(2) ?? '0.00'}</td>
+                <td className="p-2 text-right">${producto.costo_final_mxn?.toFixed(2) ?? '0.00'}</td>
+                <td className="p-2 text-right">${producto.precio_unitario_usd?.toFixed(2) ?? '0.00'}</td>
+                <td onClick={e => e.stopPropagation()} className="p-2 text-right">
                   <input
                     type="number"
                     value={producto.stock ?? ''}
-                    onChange={(e) =>
-                      handleEditar(producto.id, 'stock', e.target.value)
-                    }
+                    onChange={e => handleEditar(producto.id, 'stock', e.target.value)}
                     className="w-20 border rounded px-2 py-1 text-right"
                   />
                 </td>
-                <td
-                  className="p-2 text-right"
-                  onClick={(e) => e.stopPropagation()}
-                >
+                <td onClick={e => e.stopPropagation()} className="p-2 text-right">
                   <input
                     type="number"
                     value={producto.promocion ?? ''}
-                    onChange={(e) =>
-                      handleEditar(producto.id, 'promocion', e.target.value)
-                    }
-                    onBlur={() =>
-                      actualizarPromocion(producto.id, producto.promocion)
-                    }
+                    onChange={e => handleEditar(producto.id, 'promocion', e.target.value)}
+                    onBlur={() => actualizarPromocion(producto.id, producto.promocion)}
                     className="w-24 border rounded px-2 py-1 text-right"
                   />
                 </td>
-                <td
-  className="p-2 text-right"
-  onClick={(e) => e.stopPropagation()}
->
-  <input
-    type="number"
-    value={producto.precio_normal ?? ''}
-    onChange={(e) =>
-      handleEditar(producto.id, 'precio_normal', e.target.value)
-    }
-    onBlur={() =>
-      actualizarPrecioNormal(producto.id, producto.precio_normal)
-    }
-    className="w-24 border rounded px-2 py-1 text-right"
-  />
-</td>
+                <td onClick={e => e.stopPropagation()} className="p-2 text-right">
+                  <input
+                    type="number"
+                    value={producto.precio_normal ?? ''}
+                    onChange={e => handleEditar(producto.id, 'precio_normal', e.target.value)}
+                    onBlur={() => actualizarPrecioNormal(producto.id, producto.precio_normal)}
+                    className="w-24 border rounded px-2 py-1 text-right"
+                  />
+                </td>
               </tr>
             ))}
           </tbody>
@@ -272,24 +279,11 @@ export default function Productos() {
 
       {/* Modal de Movimientos */}
       {modalMovimientos && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-          onClick={() => setModalMovimientos(false)}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="bg-white rounded-lg shadow-lg w-11/12 md:w-1/2 p-4"
-          >
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setModalMovimientos(false)}>
+          <div onClick={e => e.stopPropagation()} className="bg-white rounded-lg shadow-lg w-11/12 md:w-1/2 p-4">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold">
-                Movimientos de {productoActual?.nombre}
-              </h3>
-              <button
-                onClick={() => setModalMovimientos(false)}
-                className="text-gray-600 hover:text-gray-800 text-2xl leading-none"
-              >
-                &times;
-              </button>
+              <h3 className="text-lg font-semibold">Movimientos de {productoActual?.nombre}</h3>
+              <button onClick={() => setModalMovimientos(false)} className="text-gray-600 hover:text-gray-800 text-2xl leading-none">×</button>
             </div>
             <div className="overflow-y-auto max-h-64">
               <table className="min-w-full text-sm text-left border-collapse">
@@ -302,13 +296,11 @@ export default function Productos() {
                   </tr>
                 </thead>
                 <tbody>
-                  {movimientos.map((mov) => (
+                  {movimientos.map(mov => (
                     <tr key={mov.id} className="border-t">
-                      <td className="p-2">
-                        {new Date(mov.fecha).toLocaleString()}
-                      </td>
+                      <td className="p-2">{new Date(mov.fecha).toLocaleString()}</td>
                       <td className="p-2">{mov.tipo}</td>
-                      <td className="p-2">{mov.cantidad}</td>
+                      <td className="p-2">{mov.displayCantidad}</td>
                       <td className="p-2">{mov.referencia}</td>
                     </tr>
                   ))}
