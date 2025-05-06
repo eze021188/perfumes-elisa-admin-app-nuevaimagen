@@ -1,8 +1,8 @@
 // src/pages/Clientes.jsx
-import React, { useState, useEffect } from 'react'
-import { useClientes } from '../contexts/ClientesContext'
-import AutocompleteInput from '../components/AutocompleteInput'
-import ModalCliente from '../components/ModalCliente'
+import React, { useState, useEffect } from 'react';
+import { useClientes } from '../contexts/ClientesContext';
+import AutocompleteInput from '../components/AutocompleteInput';
+import ModalCliente from '../components/ModalCliente';
 
 export default function Clientes() {
   const {
@@ -12,63 +12,96 @@ export default function Clientes() {
     agregarCliente,
     actualizarCliente,
     eliminarCliente,
-  } = useClientes()
+  } = useClientes();
 
-  const [searchText, setSearchText] = useState('')
-  const [filteredClientes, setFilteredClientes] = useState([])
-  const [modalOpen, setModalOpen] = useState(false)
-  const [editData, setEditData] = useState(null)
+  const [searchText, setSearchText] = useState('');
+  const [filteredClientes, setFilteredClientes] = useState([]);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editData, setEditData] = useState(null);
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [perPage, setPerPage] = useState(25);
 
-  // Carga inicial y recarga cuando se modifiquen clientes
   useEffect(() => {
-    obtenerClientes()
-  }, [])
+    obtenerClientes();
+  }, []);
 
-  // Filtrado al cambiar búsqueda o lista
   useEffect(() => {
-    if (searchText) {
-      const lower = searchText.toLowerCase()
-      setFilteredClientes(
-        clientes.filter(c => c.nombre.toLowerCase().includes(lower))
-      )
-    } else {
-      setFilteredClientes(clientes)
-    }
-  }, [searchText, clientes])
+    const lower = searchText.toLowerCase();
+    const filtered = clientes.filter(c => c.nombre.toLowerCase().includes(lower));
+    setFilteredClientes(filtered);
+    setCurrentPage(1);
+  }, [searchText, clientes]);
 
   const openNew = () => {
-    setEditData(null)
-    setModalOpen(true)
-  }
+    setEditData(null);
+    setModalOpen(true);
+  };
 
   const openEdit = cliente => {
-    setEditData(cliente)
-    setModalOpen(true)
-  }
+    setEditData(cliente);
+    setModalOpen(true);
+  };
 
   const handleSave = async data => {
+    if (!data.nombre || !data.telefono || !data.correo) {
+      alert('Por favor completa nombre, teléfono y correo electrónico.');
+      return;
+    }
     if (editData) {
-      await actualizarCliente(editData.id, data)
+      await actualizarCliente(editData.id, data);
     } else {
-      await agregarCliente(data)
+      await agregarCliente(data);
     }
-    setModalOpen(false)
-  }
+    setModalOpen(false);
+  };
 
-  const handleDelete = async id => {
-    if (confirm('¿Eliminar este cliente?')) {
-      await eliminarCliente(id)
+  const handleDeleteSelected = async () => {
+    if (selectedIds.length === 0) return;
+    if (window.confirm(`¿Eliminar ${selectedIds.length} cliente(s)?`)) {
+      for (const id of selectedIds) {
+        await eliminarCliente(id);
+      }
+      setSelectedIds([]);
     }
-  }
+  };
+
+  const toggleSelect = (id) => {
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+  };
+
+  const toggleSelectAll = () => {
+    const currentItems = paginatedClientes.map(c => c.id);
+    const allSelected = currentItems.every(id => selectedIds.includes(id));
+    if (allSelected) {
+      setSelectedIds(prev => prev.filter(id => !currentItems.includes(id)));
+    } else {
+      setSelectedIds(prev => [...new Set([...prev, ...currentItems])]);
+    }
+  };
+
+  const totalPages = Math.ceil(filteredClientes.length / perPage);
+  const paginatedClientes = filteredClientes.slice((currentPage - 1) * perPage, currentPage * perPage);
 
   return (
     <div className="p-6">
-      {/* Barra de búsqueda + botón, flex-wrap para móviles */}
-      <div className="flex flex-wrap items-center gap-4 mb-6">
+      <div className="flex flex-wrap items-center gap-4 mb-4">
+        <button
+          onClick={() => setCurrentPage(1)}
+          className="px-4 py-2 bg-gray-800 text-white rounded"
+        >
+          Volver al inicio
+        </button>
+        <button
+          onClick={openNew}
+          className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+        >
+          Agregar cliente
+        </button>
         <div className="flex-1 min-w-0">
           <AutocompleteInput
             className="w-full"
-            suggestions={clientes.map(c => ({ label: c.nombre, value: c.id }))}
+            suggestions={(clientes || []).map(c => ({ label: c.nombre, value: c.id }))}
             value={searchText}
             onChange={setSearchText}
             onSelect={item => setSearchText(item.label)}
@@ -76,46 +109,59 @@ export default function Clientes() {
           />
         </div>
         <button
-          onClick={openNew}
-          className="flex-none px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+          disabled={selectedIds.length === 0}
+          onClick={handleDeleteSelected}
+          className={`px-4 py-2 rounded text-white ${selectedIds.length === 0 ? 'bg-red-300 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700'}`}
         >
-          Nuevo Cliente
+          Eliminar {selectedIds.length} seleccionados
         </button>
       </div>
 
+      <div className="flex items-center justify-between mb-2">
+        <select
+          value={perPage}
+          onChange={e => setPerPage(Number(e.target.value))}
+          className="px-2 py-1 border rounded"
+        >
+          {[25, 50, 100, 200].map(n => (
+            <option key={n} value={n}>{n} por página</option>
+          ))}
+        </select>
+      </div>
+
       {loading ? (
-        <p>Cargando clientes...</p>
+        <div className="text-center py-4 text-gray-500">Cargando clientes...</div>
       ) : (
         <div className="overflow-x-auto">
           <table className="min-w-full bg-white">
             <thead className="bg-gray-100">
               <tr>
+                <th className="px-4 py-2">
+                  <input type="checkbox" onChange={toggleSelectAll} checked={paginatedClientes.every(c => selectedIds.includes(c.id))} />
+                </th>
                 <th className="px-4 py-2 text-left">Nombre</th>
                 <th className="px-4 py-2 text-left">Teléfono</th>
                 <th className="px-4 py-2 text-left">Correo</th>
                 <th className="px-4 py-2 text-left">Dirección</th>
-                <th className="px-4 py-2">Acciones</th>
+                <th className="px-4 py-2">Editar</th>
               </tr>
             </thead>
             <tbody>
-              {filteredClientes.map(cliente => (
+              {paginatedClientes.map(cliente => (
                 <tr key={cliente.id} className="border-b">
+                  <td className="px-4 py-2">
+                    <input type="checkbox" checked={selectedIds.includes(cliente.id)} onChange={() => toggleSelect(cliente.id)} />
+                  </td>
                   <td className="px-4 py-2">{cliente.nombre}</td>
                   <td className="px-4 py-2">{cliente.telefono}</td>
                   <td className="px-4 py-2">{cliente.correo}</td>
                   <td className="px-4 py-2">{cliente.direccion || '-'}</td>
-                  <td className="px-4 py-2 text-center space-x-2">
+                  <td className="px-4 py-2 text-center">
                     <button
                       onClick={() => openEdit(cliente)}
                       className="px-2 py-1 bg-yellow-400 text-white rounded hover:bg-yellow-500"
                     >
                       Editar
-                    </button>
-                    <button
-                      onClick={() => handleDelete(cliente.id)}
-                      className="px-2 py-1 bg-red-500 text-white rounded hover:bg-red-600"
-                    >
-                      Eliminar
                     </button>
                   </td>
                 </tr>
@@ -125,6 +171,28 @@ export default function Clientes() {
         </div>
       )}
 
+      <div className="flex justify-between items-center mt-4">
+        <p className="text-sm text-gray-600">
+          Página {currentPage} de {totalPages}
+        </p>
+        <div className="space-x-2">
+          <button
+            disabled={currentPage === 1}
+            onClick={() => setCurrentPage(p => p - 1)}
+            className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50"
+          >
+            Anterior
+          </button>
+          <button
+            disabled={currentPage === totalPages}
+            onClick={() => setCurrentPage(p => p + 1)}
+            className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50"
+          >
+            Siguiente
+          </button>
+        </div>
+      </div>
+
       <ModalCliente
         isOpen={modalOpen}
         initialData={editData || undefined}
@@ -132,5 +200,5 @@ export default function Clientes() {
         onClose={() => setModalOpen(false)}
       />
     </div>
-  )
+  );
 }

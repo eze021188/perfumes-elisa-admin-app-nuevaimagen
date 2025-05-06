@@ -33,14 +33,20 @@ export default function Productos() {
     );
   };
 
-  const actualizarPromocion = async (id, nuevoValor) => {
+  const actualizarPromocion = async (id, nuevoValor) => {    
     const { error } = await supabase
       .from('productos')
       .update({ promocion: Number(nuevoValor) })
       .eq('id', id);
     if (error) console.error('Error actualizando promoción:', error.message);
   };
-
+  const actualizarPrecioNormal = async (id, nuevoValor) => {
+    const { error } = await supabase
+      .from('productos')
+      .update({ precio_normal: Number(nuevoValor) })
+      .eq('id', id);
+    if (error) console.error('Error actualizando precio normal:', error.message);
+  };
   const handleSeleccionar = (id) => {
     setProductosSeleccionados((prev) =>
       prev.includes(id) ? prev.filter((pid) => pid !== id) : [...prev, id]
@@ -183,6 +189,7 @@ export default function Productos() {
               <th className="p-3 text-right">Precio por unidad (USD)</th>
               <th className="p-3 text-right">Stock</th>
               <th className="p-3 text-right">Precio Promoción</th>
+              <th className="p-3 text-right">Precio normal</th>
             </tr>
           </thead>
           <tbody>
@@ -241,6 +248,22 @@ export default function Productos() {
                     className="w-24 border rounded px-2 py-1 text-right"
                   />
                 </td>
+                <td
+  className="p-2 text-right"
+  onClick={(e) => e.stopPropagation()}
+>
+  <input
+    type="number"
+    value={producto.precio_normal ?? ''}
+    onChange={(e) =>
+      handleEditar(producto.id, 'precio_normal', e.target.value)
+    }
+    onBlur={() =>
+      actualizarPrecioNormal(producto.id, producto.precio_normal)
+    }
+    className="w-24 border rounded px-2 py-1 text-right"
+  />
+</td>
               </tr>
             ))}
           </tbody>

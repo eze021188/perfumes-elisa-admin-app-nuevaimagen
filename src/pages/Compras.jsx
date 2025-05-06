@@ -34,13 +34,25 @@ export default function Compras() {
   }, [])
 
   async function fetchCompras() {
-    const { data: cabeceras = [] } = await supabase
+    const { data: cabeceras, error: errCab } = await supabase
       .from('compras')
       .select('*')
-      .order('created_at', { ascending: false })
-    const { data: items = [] } = await supabase
+      .order('created_at', { ascending: false });
+  
+    if (errCab) {
+      console.error('❌ Error al obtener compras:', errCab);
+      return;
+    }
+  
+    const { data: items, error: errItems } = await supabase
       .from('compra_items')
-      .select('*')
+      .select('*');
+  
+    if (errItems) {
+      console.error('❌ Error al obtener compra_items:', errItems);
+      return;
+    }
+  
     const combined = cabeceras.map(c => ({
       compra: c,
       items: items
@@ -51,9 +63,9 @@ export default function Compras() {
           cantidad: i.cantidad,
           precioUnitarioUSD: parseFloat(i.precio_unitario_usd)
         }))
-    }))
-    setSavedCompras(combined)
-  }
+    }));
+    setSavedCompras(combined);
+  }  
 
   // 2) Inputs
   const manejarCambio = e => {
@@ -210,13 +222,39 @@ const confirmarAfectInventory = async () => {
   }
 
   // 2) Obtener catálogo
-  const { data: catalogo = [], error: errCat } = await supabase
-    .from('productos')
-    .select('id, nombre, stock, precio_unitario_usd');
-  if (errCat) {
-    console.error('Error al traer catálogo:', errCat);
-    return alert('Error al cargar catálogo: ' + errCat.message);
-  }
+const { data: catalogo = [], error: errCat } = await supabase
+.from('productos')
+.select('id, nombre, stock, precio_unitario_usd');
+if (errCat) {
+console.error('Error al traer catálogo:', errCat);
+return alert('Error al cargar catálogo: ' + errCat.message);
+}
+
+// 2.1) Cálculo proporcional de costos
+const subtotal = items.reduce((acc, p) => acc + p.cantidad * p.precioUnitarioUSD, 0);
+const descuento = Number(compra.descuento_total_usd || 0);
+const envioUSA = Number(compra.gastos_envio_usa || 0);
+const gastoImportacion = Number(gastosImportacion);
+const otros = Number(otrosGastos);
+const tipoCambio = Number(tipoCambioImportacion);
+
+for (const p of items) {
+const proporcion = (p.cantidad * p.precioUnitarioUSD) / subtotal;
+
+const prorrateoDescuento = proporcion * descuento;
+const prorrateoEnvio = proporcion * envioUSA;
+const prorrateoImportacion = proporcion * gastoImportacion;
+const prorrateoOtros = proporcion * otros;
+
+const costoFinalUSD =
+  (p.precioUnitarioUSD * p.cantidad + prorrateoEnvio + prorrateoImportacion + prorrateoOtros - prorrateoDescuento) / p.cantidad;
+
+const costoFinalMXN = costoFinalUSD * tipoCambio;
+
+// Guardamos los nuevos campos dentro del producto
+p.costoFinalUSD = parseFloat(costoFinalUSD.toFixed(4));
+p.costoFinalMXN = parseFloat(costoFinalMXN.toFixed(2));
+}
 
   // 3) Recorrer items y actualizar/insertar + registrar movimiento
   for (const p of items) {
@@ -229,23 +267,28 @@ const confirmarAfectInventory = async () => {
         .from('productos')
         .update({
           stock: prod.stock + p.cantidad,
-          precio_unitario_usd: p.precioUnitarioUSD
+          precio_unitario_usd: p.precioUnitarioUSD,
+          costo_final_usd: p.costoFinalUSD,
+          costo_final_mxn: p.costoFinalMXN
         })
         .eq('id', prodId);
+    
       if (errUpd) {
         console.error('Error actualizando producto:', errUpd);
         return alert('Error al actualizar producto: ' + errUpd.message);
       }
     } else {
       const { data: newProd, error: errInsProd } = await supabase
-        .from('productos')
-        .insert({
-          nombre: p.nombreProducto,
-          stock: p.cantidad,
-          precio_unitario_usd: p.precioUnitarioUSD
-        })
-        .select('id')
-        .single();
+  .from('productos')
+  .insert({
+    nombre: p.nombreProducto,
+    stock: p.cantidad,
+    precio_unitario_usd: p.precioUnitarioUSD,
+    costo_final_usd: p.costoFinalUSD,
+    costo_final_mxn: p.costoFinalMXN
+  })
+  .select('id')
+  .single();
       if (errInsProd) {
         console.error('Error insertando producto:', errInsProd);
         return alert('Error al crear producto: ' + errInsProd.message);
