@@ -3,9 +3,9 @@ import React from 'react';
 
 const categories = [
   'All',
-  'Fragancia Masculina',
-  'Fragancia Femenina',
-  'Fragancia Unisex'
+  'Frag. Masculina',
+  'Frag. Femenina',
+  'Frag. Unisex'
 ];
 
 export default function FilterTabs({ filtro, setFiltro }) {
