@@ -56,7 +56,7 @@ export default function ProductosItems() {
         {productosFiltrados.map(producto => (
           <div
             key={producto.id}
-            className="grid grid-cols-1 md:grid-cols-[60px_1fr_120px_120px_80px] gap-4 md:items-center border rounded-lg p-2 shadow-sm hover:shadow transition text-xs"
+            className="flex flex-col md:grid md:grid-cols-[60px_1fr_120px_120px_80px] gap-2 md:gap-4 items-start md:items-center border rounded-lg p-2 shadow-sm hover:shadow transition text-xs"
           >
             {/* Imagen */}
             <div className="w-14 h-14 bg-gray-100 rounded overflow-hidden flex items-center justify-center">
