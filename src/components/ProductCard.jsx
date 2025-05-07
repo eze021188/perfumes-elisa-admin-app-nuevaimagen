@@ -13,23 +13,17 @@ export default function ProductCard({ producto, onClick }) {
         alt={producto.nombre}
         className="w-full h-full object-cover"
       />
-
-      {/* Badge de stock crítico o nuevo */}
       {producto.stock !== undefined && producto.stock <= (producto.stockMinimo ?? 0) && (
-        <span className="absolute top-2 right-2 w-3 h-3 bg-red-500 rounded-full" />
+        <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />
       )}
-
-      {/* Overlay con nombre y precios */}
-      <div className="absolute bottom-0 left-0 w-full bg-gray-800 bg-opacity-75 p-2">
-        <p className="text-white font-semibold truncate">
-          {producto.nombre}
-        </p>
-        <div className="flex items-baseline space-x-2">
-          <span className="text-white font-bold">
+      <div className="absolute bottom-0 left-0 w-full bg-gray-800 bg-opacity-75 p-1 text-xs">
+        <p className="text-white font-medium truncate">{producto.nombre}</p>
+        <div className="flex items-baseline space-x-1">
+          <span className="text-white font-semibold">
             ${producto.promocion.toFixed(2)}
           </span>
           {producto.precioOriginal != null && (
-            <span className="text-gray-400 line-through text-sm">
+            <span className="text-gray-400 line-through">
               ${producto.precioOriginal.toFixed(2)}
             </span>
           )}
