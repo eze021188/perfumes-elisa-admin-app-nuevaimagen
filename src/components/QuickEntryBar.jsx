@@ -10,8 +10,8 @@ export default function QuickEntryBar({
 }) {
   return (
     <div className="flex items-center space-x-2 p-4 bg-white shadow-sm rounded">
-      {/* 1. Input de búsqueda */}
-      <div className="flex items-center flex-1 border rounded overflow-hidden">
+      {/* 1. Input de búsqueda con ancho fijo */}
+      <div className="flex items-center flex-none w-40 border rounded overflow-hidden">
         <Search className="ml-2 w-5 h-5 text-gray-500" />
         <input
           type="text"
