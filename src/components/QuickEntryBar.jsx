@@ -1,11 +1,10 @@
 // src/components/QuickEntryBar.jsx
 import React from 'react';
-import { Search, Barcode, Zap } from 'lucide-react';
+import { Search, Zap } from 'lucide-react';
 
 export default function QuickEntryBar({
   busqueda,
   onChangeBusqueda,
-  onScanClick,
   onQuickSaleClick
 }) {
   return (
@@ -22,16 +21,7 @@ export default function QuickEntryBar({
         />
       </div>
 
-      {/* 2. Botón escáner */}
-      <button
-        onClick={onScanClick}
-        className="p-2 bg-gray-100 rounded hover:bg-gray-200"
-        aria-label="Escanear código de barras"
-      >
-        <Barcode className="w-6 h-6 text-gray-700" />
-      </button>
-
-      {/* 3. Botón venta rápida */}
+      {/* 2. Botón de venta rápida */}
       <button
         onClick={onQuickSaleClick}
         className="p-2 bg-yellow-100 rounded hover:bg-yellow-200"
