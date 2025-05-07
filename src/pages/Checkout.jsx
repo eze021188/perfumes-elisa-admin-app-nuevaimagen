@@ -102,9 +102,10 @@ export default function Checkout() {
             subtotal,
             forma_pago: paymentType,
             tipo_descuento: discountType,
-            valor_descuento: discountAmount
+            valor_descuento: discountAmount,
+            total: subtotal // 👈 se envía el total calculado después de descuentos
           }
-        ])
+        ])        
         .select()
         .single();
   
