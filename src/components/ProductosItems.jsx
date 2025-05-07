@@ -51,12 +51,12 @@ export default function ProductosItems() {
         />
       </div>
 
-      {/* Lista de productos con diseño en columnas alineadas */}
+      {/* Lista de productos */}
       <div className="space-y-2">
         {productosFiltrados.map(producto => (
           <div
             key={producto.id}
-            className="flex flex-row flex-wrap md:grid md:grid-cols-[60px_1fr_120px_120px_80px] gap-2 md:gap-4 items-start md:items-center border rounded-lg p-2 shadow-sm hover:shadow transition text-xs"
+            className="flex flex-row flex-wrap md:grid md:grid-cols-[60px_1fr_120px_120px_80px] gap-2 md:gap-4 items-start md:items-center border rounded-lg p-2 shadow-sm hover:shadow transition text-xs min-h-20"
           >
             {/* Imagen */}
             <div className="w-14 h-14 bg-gray-100 rounded overflow-hidden flex items-center justify-center">
@@ -71,7 +71,7 @@ export default function ProductosItems() {
               )}
             </div>
 
-            {/* Nombre + tipo */}
+            {/* Nombre + categoría */}
             <div className="whitespace-normal break-words">
               <div className="font-medium">{producto.nombre}</div>
               <div className="text-gray-500 text-[11px]">
