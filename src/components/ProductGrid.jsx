@@ -4,9 +4,13 @@ import ProductCard from './ProductCard';
 
 export default function ProductGrid({ productos, onAddToCart }) {
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 p-2">
-      {productos.map(p => (
-        <ProductCard key={p.id} producto={p} onClick={() => onAddToCart(p)} />
+    <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-1 p-1">
+      {productos.map((p) => (
+        <ProductCard
+          key={p.id}
+          producto={p}
+          onClick={() => onAddToCart(p)}
+        />
       ))}
     </div>
   );
