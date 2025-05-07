@@ -1,10 +1,12 @@
-// src/components/ProductosItems.jsx
 import { useEffect, useState } from 'react';
 import { supabase } from '../supabase';
+import ModalEditarProducto from './ModalEditarProducto';
 
 export default function ProductosItems() {
   const [productos, setProductos] = useState([]);
   const [busqueda, setBusqueda] = useState('');
+  const [modalActivo, setModalActivo] = useState(false);
+  const [productoEditando, setProductoEditando] = useState(null);
 
   useEffect(() => {
     cargarProductos();
@@ -35,13 +37,23 @@ export default function ProductosItems() {
     }
   };
 
+  const abrirModal = (producto) => {
+    setProductoEditando(producto);
+    setModalActivo(true);
+  };
+
+  const cerrarModal = () => {
+    setProductoEditando(null);
+    setModalActivo(false);
+    cargarProductos();
+  };
+
   const productosFiltrados = productos.filter(p =>
     p.nombre?.toLowerCase().includes(busqueda.toLowerCase())
   );
 
   return (
     <div>
-      {/* Campo de búsqueda */}
       <div className="mb-4">
         <input
           type="text"
@@ -52,7 +64,6 @@ export default function ProductosItems() {
         />
       </div>
 
-      {/* Lista de productos alineados por columnas */}
       <div className="space-y-2">
         {productosFiltrados.map(producto => (
           <div
@@ -72,7 +83,7 @@ export default function ProductosItems() {
               )}
             </div>
 
-            {/* Nombre + categoría */}
+            {/* Nombre y categoría */}
             <div className="whitespace-normal break-words max-w-full">
               <div className="font-medium">{producto.nombre}</div>
               <div className="text-gray-500 text-[11px]">
@@ -112,10 +123,10 @@ export default function ProductosItems() {
               />
             </div>
 
-            {/* Editar */}
+            {/* Botón Editar */}
             <div>
               <button
-                onClick={() => alert('Abrir modal para editar nombre e imagen')}
+                onClick={() => abrirModal(producto)}
                 className="text-blue-600 hover:underline"
               >
                 Editar
@@ -124,6 +135,14 @@ export default function ProductosItems() {
           </div>
         ))}
       </div>
+
+      {modalActivo && productoEditando && (
+        <ModalEditarProducto
+          producto={productoEditando}
+          onClose={cerrarModal}
+          onGuardado={cerrarModal}
+        />
+      )}
     </div>
   );
 }
