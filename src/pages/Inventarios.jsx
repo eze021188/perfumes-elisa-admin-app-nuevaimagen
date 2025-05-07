@@ -64,15 +64,22 @@ export default function Inventarios() {
                 </tr>
               </thead>
               <tbody>
-                {movimientos.map((m) => (
-                  <tr key={m.id} className="border-b">
-                    <td className="px-4 py-2">{new Date(m.fecha).toLocaleString()}</td>
-                    <td className="px-4 py-2">{m.tipo}</td>
-                    <td className="px-4 py-2 text-right">{m.cantidad}</td>
-                    <td className="px-4 py-2">{m.referencia}</td>
-                  </tr>
-                ))}
-              </tbody>
+  {movimientos.map((m) => {
+    const esDevolucion = m.motivo === 'devolucion_ventas';
+    const tipoTexto = esDevolucion ? 'DEVOLUCIÓN VENTA' : 'VENTA';
+    const cantidadTexto = m.tipo === 'SALIDA' ? `-${m.cantidad}` : `+${m.cantidad}`;
+    const colorTexto = esDevolucion ? 'text-green-600' : 'text-red-600';
+
+    return (
+      <tr key={m.id} className="border-b">
+        <td className="px-4 py-2">{new Date(m.fecha).toLocaleString()}</td>
+        <td className={`px-4 py-2 font-semibold ${colorTexto}`}>{tipoTexto}</td>
+        <td className={`px-4 py-2 text-right font-bold ${colorTexto}`}>{cantidadTexto}</td>
+        <td className="px-4 py-2">{m.referencia}</td>
+      </tr>
+    );
+  })}
+</tbody>
             </table>
           )}
         </div>

@@ -12,7 +12,6 @@ export default function Ventas() {
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
-  // Carga todas las ventas
   const cargarVentas = async () => {
     setLoading(true);
     const { data, error } = await supabase
@@ -31,109 +30,87 @@ export default function Ventas() {
     cargarVentas();
   }, []);
 
-  // Función de cancelación de venta
-  const cancelarVenta = async (venta) => {
-    if (!confirm(
-      '¿Estás seguro de cancelar esta venta? Se restaurará el stock y quedará registro de devolución.'
-    )) return;
+  const eliminarVenta = async (venta) => {
+    const confirmacion = confirm(`¿Estás seguro de eliminar la venta ${venta.codigo_venta}? Se restaurará el stock y se registrará la devolución.`);
+    if (!confirmacion) return;
 
-    // 1) Obtener detalle completo
-    const { data: detalles, error: errDet } = await supabase
-      .from('detalle_venta')
-      .select('producto_id, cantidad')
-      .eq('venta_id', venta.id);
-    if (errDet) {
-      console.error('Error al obtener detalle de venta:', errDet.message);
-      return;
-    }
+    try {
+      const { data: detalles, error: errorDetalles } = await supabase
+        .from('detalle_venta')
+        .select('*')
+        .eq('venta_id', venta.id);
 
-    // 2) Restaurar stock; el trigger insertará la devolución
-    for (const prod of detalles) {
-      const { data: productoActual, error: errProd } = await supabase
-        .from('productos')
-        .select('stock')
-        .eq('id', prod.producto_id)
-        .single();
-      if (errProd) {
-        console.error('Error al obtener producto:', errProd.message);
-        continue;
+      if (errorDetalles || !detalles) {
+        console.error('❌ Error obteniendo detalles:', errorDetalles);
+        return;
       }
 
-      const nuevoStock = (productoActual.stock || 0) + prod.cantidad;
+      // Agrupar productos por producto_id y sumar cantidades
+      const resumen = detalles.reduce((acc, item) => {
+        if (!acc[item.producto_id]) {
+          acc[item.producto_id] = 0;
+        }
+        acc[item.producto_id] += item.cantidad;
+        return acc;
+      }, {});
 
-      await supabase
-        .from('productos')
-        .update({ stock: nuevoStock })
-        .eq('id', prod.producto_id);
-    }
+      const operaciones = Object.entries(resumen).map(async ([productoId, cantidadTotal]) => {
+        const { data: producto, error: errorProducto } = await supabase
+          .from('productos')
+          .select('stock')
+          .eq('id', productoId)
+          .single();
 
-    // 3) Borrar detalle_venta para disparar trigger de devolución
-    const { error: errDelDet } = await supabase
-      .from('detalle_venta')
-      .delete()
-      .eq('venta_id', venta.id);
-    if (errDelDet) console.error('Error al borrar detalle_venta:', errDelDet.message);
+        if (!producto || errorProducto) {
+          console.error(`❌ Error consultando producto ${productoId}:`, errorProducto);
+          return;
+        }
 
-    // 4) Borrar cabecera de la venta
-    const { error: errVenta } = await supabase
-      .from('ventas')
-      .delete()
-      .eq('id', venta.id);
-    if (errVenta) {
-      alert('❌ Error al cancelar la venta');
-    } else {
-      alert('✅ Venta cancelada y stock restaurado');
-      setVentaSeleccionada(null);
-      cargarVentas();
+        const nuevoStock = producto.stock + cantidadTotal;
+
+        const { error: errorUpdate } = await supabase
+          .from('productos')
+          .update({ stock: nuevoStock })
+          .eq('id', productoId);
+        if (errorUpdate) console.error(`❌ Error actualizando stock:`, errorUpdate);
+
+        const { error: errorMovimiento } = await supabase
+          .from('movimientos_inventario')
+          .insert([
+            {
+              producto_id: productoId,
+              tipo: 'ENTRADA',
+              cantidad: cantidadTotal,
+              referencia: venta.codigo_venta,
+              motivo: 'devolucion_ventas'
+            }
+          ]);
+        if (errorMovimiento) console.error(`❌ Error registrando devolución:`, errorMovimiento);
+      });
+
+      await Promise.all(operaciones);
+
+      const { error: errorDelDetalle } = await supabase
+        .from('detalle_venta')
+        .delete()
+        .eq('venta_id', venta.id);
+      if (errorDelDetalle) console.error('❌ Error borrando detalle_venta:', errorDelDetalle);
+
+      const { error: errorDelVenta } = await supabase
+        .from('ventas')
+        .delete()
+        .eq('id', venta.id);
+      if (errorDelVenta) {
+        alert('❌ Error al eliminar la venta');
+      } else {
+        alert('✅ Venta eliminada correctamente');
+        setVentaSeleccionada(null);
+        cargarVentas();
+      }
+    } catch (err) {
+      console.error('❌ Error inesperado al eliminar venta:', err);
     }
   };
-
-  // Handler que dispara la cancelación
-  const eliminarVenta = (venta) => cancelarVenta(venta);
-
-  // Abrir PDF de la venta
-  const abrirPDF = (venta) => {
-    const doc = new jsPDF();
-    doc.setFontSize(16);
-    doc.text(`Ticket de venta - ${venta.codigo_venta}`, 10, 10);
-    doc.setFontSize(12);
-    doc.text(`Cliente: ${venta.cliente_nombre}`, 10, 20);
-    doc.text(`Fecha: ${new Date(venta.fecha).toLocaleString()}`, 10, 30);
-    doc.text(`Forma de pago: ${venta.forma_pago}`, 10, 40);
-
-    doc.autoTable({
-      startY: 50,
-      head: [['Producto', 'Cantidad', 'P. Unitario', 'Total']],
-      body: venta.productos.map((p) => [
-        p.nombre,
-        p.cantidad,
-        `$${p.precio.toFixed(2)}`,
-        `$${p.subtotal.toFixed(2)}`
-      ])
-    });
-
-    const finalY = doc.lastAutoTable?.finalY || 60;
-    doc.setFontSize(12);
-    doc.setFont(undefined, 'bold');
-    doc.text(`Subtotal: $${venta.subtotal.toFixed(2)}`, 10, finalY + 10);
-    doc.text(
-      `Descuento: ${
-        venta.tipo_descuento === 'porcentaje'
-          ? `-${venta.valor_descuento}%`
-          : `-$${venta.valor_descuento}`
-      }`,
-      10,
-      finalY + 20
-    );
-    doc.text(`Total: $${venta.total.toFixed(2)}`, 180, finalY + 30, { align: 'right' });
-
-    window.open(doc.output('bloburl'), '_blank');
-  };
-
-  const ventasFiltradas = ventas.filter((v) =>
-    v.cliente_nombre?.toLowerCase().includes(busqueda.toLowerCase()) ||
-    v.codigo_venta?.toLowerCase().includes(busqueda.toLowerCase())
-  );
 
   return (
     <div className="p-6">
@@ -156,8 +133,8 @@ export default function Ventas() {
 
       {loading ? (
         <p>Cargando ventas...</p>
-      ) : ventasFiltradas.length === 0 ? (
-        <p>No hay ventas encontradas.</p>
+      ) : ventas.length === 0 ? (
+        <p>No hay ventas registradas.</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="min-w-full border border-gray-300 text-sm">
@@ -171,35 +148,40 @@ export default function Ventas() {
               </tr>
             </thead>
             <tbody>
-              {ventasFiltradas.map((venta) => (
-                <tr
-                  key={venta.id}
-                  className="text-center hover:bg-gray-50 cursor-pointer"
-                  onClick={async () => {
-                    const { data: detalles, error } = await supabase
-                      .from('detalle_venta')
-                      .select('producto_id, cantidad, precio_unitario, total_parcial, productos(nombre)')
-                      .eq('venta_id', venta.id);
-                    if (error) {
-                      console.error('Error al obtener detalle de venta', error.message);
-                      return;
-                    }
-                    const productos = detalles.map((d) => ({
-                      nombre: d.productos?.nombre || 'Desconocido',
-                      cantidad: d.cantidad,
-                      precio: d.precio_unitario,
-                      subtotal: d.total_parcial
-                    }));
-                    setVentaSeleccionada({ ...venta, productos });
-                  }}
-                >
-                  <td className="p-2 border">{venta.codigo_venta}</td>
-                  <td className="p-2 border">{venta.cliente_nombre}</td>
-                  <td className="p-2 border">{new Date(venta.fecha).toLocaleString()}</td>
-                  <td className="p-2 border">{venta.forma_pago}</td>
-                  <td className="p-2 border font-semibold">${venta.total.toFixed(2)}</td>
-                </tr>
-              ))}
+              {ventas
+                .filter((v) =>
+                  v.cliente_nombre?.toLowerCase().includes(busqueda.toLowerCase()) ||
+                  v.codigo_venta?.toLowerCase().includes(busqueda.toLowerCase())
+                )
+                .map((venta) => (
+                  <tr
+                    key={venta.id}
+                    className="text-center hover:bg-gray-50 cursor-pointer"
+                    onClick={async () => {
+                      const { data: detalles, error } = await supabase
+                        .from('detalle_venta')
+                        .select('producto_id, cantidad, precio_unitario, total_parcial, productos(nombre)')
+                        .eq('venta_id', venta.id);
+                      if (error) {
+                        console.error('Error al obtener detalle de venta', error.message);
+                        return;
+                      }
+                      const productos = detalles.map((d) => ({
+                        nombre: d.productos?.nombre || 'Desconocido',
+                        cantidad: d.cantidad,
+                        precio: d.precio_unitario,
+                        subtotal: d.total_parcial
+                      }));
+                      setVentaSeleccionada({ ...venta, productos });
+                    }}
+                  >
+                    <td className="p-2 border">{venta.codigo_venta}</td>
+                    <td className="p-2 border">{venta.cliente_nombre}</td>
+                    <td className="p-2 border">{new Date(venta.fecha).toLocaleString()}</td>
+                    <td className="p-2 border">{venta.forma_pago}</td>
+                    <td className="p-2 border font-semibold">${venta.total.toFixed(2)}</td>
+                  </tr>
+                ))}
             </tbody>
           </table>
         </div>
@@ -251,12 +233,6 @@ export default function Ventas() {
             <p><strong>Total:</strong> ${ventaSeleccionada.total.toFixed(2)}</p>
 
             <div className="flex gap-2 mt-4 flex-wrap">
-              <button
-                onClick={() => abrirPDF(ventaSeleccionada)}
-                className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-              >
-                Ver PDF
-              </button>
               <button
                 onClick={() => eliminarVenta(ventaSeleccionada)}
                 className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"

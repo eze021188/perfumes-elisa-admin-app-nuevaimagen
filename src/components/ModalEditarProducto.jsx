@@ -7,22 +7,25 @@ export default function ModalEditarProducto({ producto, onClose, onGuardado }) {
   const [costoFinalUSD, setCostoFinalUSD] = useState(producto.costo_final_usd || '');
   const [costoFinalMXN, setCostoFinalMXN] = useState(producto.costo_final_mxn || '');
   const [precioUnitarioUSD, setPrecioUnitarioUSD] = useState(producto.precio_unitario_usd || '');
+  const [stock, setStock] = useState(producto.stock ?? '');
   const [imagenURL, setImagenURL] = useState(producto.imagen_url || '');
   const [guardando, setGuardando] = useState(false);
 
   const handleGuardar = async () => {
     setGuardando(true);
 
-    // Actualizamos directamente la URL de la imagen pegada
+    const cambios = {
+      nombre,
+      costo_final_usd: parseFloat(costoFinalUSD),
+      costo_final_mxn: parseFloat(costoFinalMXN),
+      precio_unitario_usd: parseFloat(precioUnitarioUSD),
+      stock: Number(stock),
+      imagen_url: imagenURL
+    };
+
     const { error } = await supabase
       .from('productos')
-      .update({
-        nombre,
-        costo_final_usd: parseFloat(costoFinalUSD),
-        costo_final_mxn: parseFloat(costoFinalMXN),
-        precio_unitario_usd: parseFloat(precioUnitarioUSD),
-        imagen_url: imagenURL
-      })
+      .update(cambios)
       .eq('id', producto.id);
 
     setGuardando(false);
@@ -47,7 +50,6 @@ export default function ModalEditarProducto({ producto, onClose, onGuardado }) {
         <h2 className="text-lg font-bold mb-4">Editar producto</h2>
 
         <div className="space-y-4">
-          {/* Nombre */}
           <div>
             <label className="block text-sm font-medium">Nombre</label>
             <input
@@ -58,11 +60,8 @@ export default function ModalEditarProducto({ producto, onClose, onGuardado }) {
             />
           </div>
 
-          {/* Costos */}
           <div>
-            <label className="block text-sm font-medium">
-              Costo final x unidad (USD)
-            </label>
+            <label className="block text-sm font-medium">Costo final x unidad (USD)</label>
             <input
               type="number"
               value={costoFinalUSD}
@@ -72,9 +71,7 @@ export default function ModalEditarProducto({ producto, onClose, onGuardado }) {
           </div>
 
           <div>
-            <label className="block text-sm font-medium">
-              Costo final x unidad (MXN)
-            </label>
+            <label className="block text-sm font-medium">Costo final x unidad (MXN)</label>
             <input
               type="number"
               value={costoFinalMXN}
@@ -84,9 +81,7 @@ export default function ModalEditarProducto({ producto, onClose, onGuardado }) {
           </div>
 
           <div>
-            <label className="block text-sm font-medium">
-              Precio por unidad (USD)
-            </label>
+            <label className="block text-sm font-medium">Precio por unidad (USD)</label>
             <input
               type="number"
               value={precioUnitarioUSD}
@@ -95,11 +90,18 @@ export default function ModalEditarProducto({ producto, onClose, onGuardado }) {
             />
           </div>
 
-          {/* URL de la imagen */}
           <div>
-            <label className="block text-sm font-medium">
-              URL de la imagen del producto
-            </label>
+            <label className="block text-sm font-medium">Stock disponible</label>
+            <input
+              type="number"
+              value={stock}
+              onChange={(e) => setStock(e.target.value)}
+              className="w-full border px-3 py-2 rounded"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium">URL de la imagen del producto</label>
             <input
               type="url"
               value={imagenURL}
@@ -117,7 +119,6 @@ export default function ModalEditarProducto({ producto, onClose, onGuardado }) {
           </div>
         </div>
 
-        {/* Botones */}
         <div className="flex justify-end gap-4 mt-6">
           <button
             onClick={onClose}
