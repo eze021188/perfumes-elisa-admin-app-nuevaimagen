@@ -1,392 +1,354 @@
 // src/pages/Checkout.jsx
-import React, { useEffect, useState } from 'react';
-import { supabase } from '../supabase';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState, useRef } from 'react'
+import { supabase } from '../supabase'
+import jsPDF from 'jspdf'
+import 'jspdf-autotable'
+import { useNavigate } from 'react-router-dom'
 
 export default function Checkout() {
-  const navigate = useNavigate();
-
-  // ——— Clientes ——————————————————————————————————————————————————————
-  const [clientes, setClientes] = useState([]);
-  const [clienteBusqueda, setClienteBusqueda] = useState('');
-  const [clienteSugerencias, setClienteSugerencias] = useState([]);
-  const [clienteIndexActivo, setClienteIndexActivo] = useState(-1);
-  const [clienteSeleccionado, setClienteSeleccionado] = useState(null);
-  const [mostrarNuevoCliente, setMostrarNuevoCliente] = useState(false);
+  const navigate = useNavigate()
+  const [clientes, setClientes] = useState([])
+  const [clienteBusqueda, setClienteBusqueda] = useState('')
+  const [clienteSugerencias, setClienteSugerencias] = useState([])
+  const [clienteIndexActivo, setClienteIndexActivo] = useState(-1)
+  const [clienteSeleccionado, setClienteSeleccionado] = useState(null)
+  const [mostrarNuevoCliente, setMostrarNuevoCliente] = useState(false)
   const [nuevoCliente, setNuevoCliente] = useState({
+    nombre: '',
     telefono: '',
     correo: '',
-    direccion: '',
-  });
+    direccion: ''
+  })
 
-  // ——— Productos y venta ——————————————————————————————————————————
-  const [productos, setProductos] = useState([]);
-  const [productoBusqueda, setProductoBusqueda] = useState('');
-  const [productoSugerencias, setProductoSugerencias] = useState([]);
-  const [productoIndexActivo, setProductoIndexActivo] = useState(-1);
-  const [productoSeleccionado, setProductoSeleccionado] = useState(null);
-  const [cantidad, setCantidad] = useState(1);
-  const [mensajeStock, setMensajeStock] = useState('');
-  const [productosVenta, setProductosVenta] = useState([]);
+  const [productos, setProductos] = useState([])
+  const [productoBusqueda, setProductoBusqueda] = useState('')
+  const [productoSugerencias, setProductoSugerencias] = useState([])
+  const [productoIndexActivo, setProductoIndexActivo] = useState(-1)
+  const [productoSeleccionado, setProductoSeleccionado] = useState(null)
+  const [cantidad, setCantidad] = useState(1)
+  const [mensajeStock, setMensajeStock] = useState('')
 
-  // ——— Pago y descuento ——————————————————————————————————————————
-  const [formaPago, setFormaPago] = useState('Efectivo');
-  const [tipoDescuento, setTipoDescuento] = useState('ninguno');
-  const [valorDescuento, setValorDescuento] = useState(0);
+  const [productosVenta, setProductosVenta] = useState([])
+  const [formaPago, setFormaPago] = useState('Efectivo')
+  const [tipoDescuento, setTipoDescuento] = useState('ninguno')
+  const [valorDescuento, setValorDescuento] = useState(0)
 
-  // ——— Finalización —————————————————————————————————————————————
-  const [ventaExitosa, setVentaExitosa] = useState(false);
-  const [codigoVenta, setCodigoVenta] = useState('');
+  const [ventaExitosa, setVentaExitosa] = useState(false)
+  const [codigoVenta, setCodigoVenta] = useState('')
+  const pdfRef = useRef(null)
 
-  // ——— Carga inicial —————————————————————————————————————————————
   useEffect(() => {
-    cargarClientes();
-    cargarProductos();
-  }, []);
+    cargarClientes()
+    cargarProductos()
+  }, [])
 
-  const cargarClientes = async () => {
-    const { data, error } = await supabase
+  async function cargarClientes() {
+    const { data, error } = await supabase.from('clientes').select('*')
+    if (!error) setClientes(data)
+  }
+
+  async function cargarProductos() {
+    const { data, error } = await supabase.from('productos').select('*')
+    if (!error) setProductos(data)
+  }
+
+  function onChangeClienteInput(e) {
+    const t = e.target.value
+    setClienteBusqueda(t)
+    setClienteSeleccionado(null)
+    const suger = clientes.filter(c =>
+      c.nombre.toLowerCase().includes(t.toLowerCase())
+    )
+    setClienteSugerencias(suger)
+    setClienteIndexActivo(-1)
+  }
+
+  function seleccionarCliente(c) {
+    setClienteSeleccionado(c)
+    setClienteBusqueda(c.nombre)
+    setClienteSugerencias([])
+  }
+
+  function agregarCliente() {
+    // valida campos
+    supabase
       .from('clientes')
-      .select('*')
-      .order('nombre', { ascending: true });
-    if (!error) setClientes(data);
-  };
+      .insert([nuevoCliente])
+      .then(({ data, error }) => {
+        if (!error) {
+          setClientes([...clientes, data[0]])
+          seleccionarCliente(data[0])
+          setMostrarNuevoCliente(false)
+        }
+      })
+  }
 
-  const cargarProductos = async () => {
-    const { data, error } = await supabase
-      .from('productos')
-      .select('*');
-    if (!error) setProductos(data);
-  };
+  function onChangeProductoInput(e) {
+    const t = e.target.value
+    setProductoBusqueda(t)
+    setProductoSeleccionado(null)
+    const suger = productos.filter(p =>
+      p.nombre.toLowerCase().includes(t.toLowerCase())
+    )
+    setProductoSugerencias(suger)
+    setProductoIndexActivo(-1)
+  }
 
-  // ——— Autocompletado Cliente —————————————————————————————————————
-  const handleClienteInput = (e) => {
-    const texto = e.target.value;
-    setClienteBusqueda(texto);
-    setClienteSeleccionado(null);
-    setMostrarNuevoCliente(false);
-    setNuevoCliente({ telefono: '', correo: '', direccion: '' });
+  function seleccionarProducto(p) {
+    setProductoSeleccionado(p)
+    setProductoBusqueda(p.nombre)
+    setMensajeStock(`Stock disponible: ${p.stock}`)
+    setProductoSugerencias([])
+  }
 
-    const sugerencias = clientes.filter(c =>
-      c.nombre.toLowerCase().includes(texto.toLowerCase())
-    );
-    setClienteSugerencias(sugerencias);
-    if (texto && sugerencias.length === 0) {
-      setMostrarNuevoCliente(true);
-    }
-    setClienteIndexActivo(-1);
-  };
+  function agregarProductoAVenta() {
+    // …validaciones…
+    setProductosVenta([
+      ...productosVenta,
+      {
+        ...productoSeleccionado,
+        cantidad,
+        total: productoSeleccionado.promocion * cantidad,
+        stock: productoSeleccionado.stock    // <— aquí agregas stock
+      }
+    ])
+    // …
+  }  
 
-  const seleccionarCliente = (c) => {
-    setClienteSeleccionado(c);
-    setClienteBusqueda(c.nombre);
-    setClienteSugerencias([]);
-    setMostrarNuevoCliente(false);
-    setClienteIndexActivo(-1);
-  };
+  const subtotal = productosVenta.reduce((s, p) => s + p.total, 0)
+  const descuentoCalculado =
+    tipoDescuento === 'monto'
+      ? Number(valorDescuento)
+      : tipoDescuento === 'porcentaje'
+      ? (subtotal * Number(valorDescuento)) / 100
+      : 0
+  const total = subtotal - descuentoCalculado
 
-  const agregarClienteNuevo = async () => {
-    if (!clienteBusqueda || !nuevoCliente.telefono || !nuevoCliente.correo) {
-      alert('Completa Nombre, Teléfono y Correo.');
-      return;
-    }
-    const clienteObj = {
-      nombre: clienteBusqueda,
-      telefono: nuevoCliente.telefono,
-      correo: nuevoCliente.correo,
-      direccion: nuevoCliente.direccion,
-    };
-    const { data, error } = await supabase
-      .from('clientes')
-      .insert([clienteObj])
-      .select()
-      .single();
-    if (error) {
-      console.error('Error al agregar cliente:', error.message);
-      alert('No se pudo agregar el cliente.');
-    } else {
-      setClientes(prev => [...prev, data]);
-      seleccionarCliente(data);
-      setNuevoCliente({ telefono: '', correo: '', direccion: '' });
-    }
-  };
+  async function generarCodigoVenta() {
+    const { data } = await supabase.from('ventas').select('codigo_venta')
+    const num = (data?.length || 0) + 1
+    return `VT${String(num).padStart(5, '0')}`
+  }
 
-  // ——— Autocompletado Producto —————————————————————————————————————
-  const handleProductoInput = (e) => {
-    const texto = e.target.value;
-    setProductoBusqueda(texto);
-    setProductoSeleccionado(null);
-    setMensajeStock('');
+  async function finalizarVenta() {
+    if (!clienteSeleccionado || productosVenta.length === 0) return
 
-    const sugerencias = productos.filter(p =>
-      p.nombre.toLowerCase().includes(texto.toLowerCase())
-    );
-    setProductoSugerencias(sugerencias);
-    setProductoIndexActivo(-1);
-  };
+    const codigo = await generarCodigoVenta()
+    setCodigoVenta(codigo)
 
-  const seleccionarProducto = (p) => {
-    setProductoSeleccionado(p);
-    setProductoBusqueda(p.nombre);
-    setProductoSugerencias([]);
-    setMensajeStock(`Stock disponible: ${p.stock}`);
-    setCantidad(1);
-    setProductoIndexActivo(-1);
-  };
-
-  const agregarProductoAVenta = () => {
-    if (!productoSeleccionado || cantidad <= 0) return;
-    if (cantidad > productoSeleccionado.stock) {
-      setMensajeStock('❌ No hay suficiente stock');
-      setTimeout(() => setMensajeStock(''), 3000);
-      return;
-    }
-    const total = productoSeleccionado.promocion * cantidad;
-    setProductosVenta(prev => [...prev, { ...productoSeleccionado, cantidad, total }]);
-    setProductoSeleccionado(null);
-    setProductoBusqueda('');
-    setCantidad(1);
-    setMensajeStock('');
-  };
-
-  // ——— Cálculos —————————————————————————————————————————————————————
-  const subtotal = productosVenta.reduce((s, p) => s + p.total, 0);
-  const descuentoCalculado = tipoDescuento === 'monto'
-    ? Number(valorDescuento)
-    : tipoDescuento === 'porcentaje'
-      ? subtotal * (Number(valorDescuento) / 100)
-      : 0;
-  const total = subtotal - descuentoCalculado;
-
-  // ——— Finalizar Venta + Movimientos ———————————————————————————————————
-  const generarCodigoVenta = async () => {
-    const { data } = await supabase.from('ventas').select('codigo_venta');
-    const nro = (data?.length || 0) + 1;
-    return `VT${nro.toString().padStart(5, '0')}`;
-  };
-
-  const finalizarVenta = async () => {
-    if (!clienteSeleccionado || productosVenta.length === 0) return;
-    const codigo = await generarCodigoVenta();
-    setCodigoVenta(codigo);
-
-    // 1) Inserta cabecera de venta
-    const { data: ventaInsertada, error: errVenta } = await supabase
+    // 1) cabecera
+    const { data: v, error: e1 } = await supabase
       .from('ventas')
-      .insert([{
-        codigo_venta: codigo,
-        cliente_id: clienteSeleccionado.id,
-        forma_pago: formaPago,
-        tipo_descuento: tipoDescuento,
-        valor_descuento: valorDescuento,
-        subtotal,
-        total,
-      }])
+      .insert([
+        {
+          codigo_venta: codigo,
+          cliente_id: clienteSeleccionado.id,
+          cliente_nombre: clienteSeleccionado.nombre,
+          forma_pago: formaPago,
+          tipo_descuento: tipoDescuento,
+          valor_descuento: valorDescuento,
+          subtotal,
+          total
+        }
+      ])
       .select()
-      .single();
-    if (errVenta) {
-      console.error('Error al guardar venta:', errVenta.message);
-      return;
+      .single()
+    if (e1) {
+      console.error(e1)
+      return
     }
+    const venta_id = v.id
 
-    // 2) Para cada producto: detalle, actualizar stock y movimiento SALIDA
+    // 2) detalle, stock, salida
     for (const p of productosVenta) {
-      // detalle_venta
-      await supabase.from('detalle_venta').insert([{
-        venta_id: ventaInsertada.id,
-        producto_id: p.id,
-        cantidad: p.cantidad,
-        precio_unitario: p.promocion,
-        total_parcial: p.total,
-      }]);
-
-      // actualizar stock en tabla productos
-      const nuevoStock = p.stock - p.cantidad;
+      await supabase.from('detalle_venta').insert([
+        {
+          venta_id,
+          producto_id: p.id,
+          cantidad: p.cantidad,
+          precio_unitario: p.promocion,
+          total_parcial: p.total
+        }
+      ])
       await supabase
         .from('productos')
-        .update({ stock: nuevoStock })
-        .eq('id', p.id);
-
-      // registrar movimiento SALIDA
-      await supabase.from('movimientos').insert([{
-        producto_id: p.id,
-        tipo: 'SALIDA',
-        cantidad: p.cantidad,
-        referencia: codigo,
-      }]);
+        .update({ stock: p.stock - p.cantidad })
+        .eq('id', p.id)
+      await supabase.from('movimientos_inventario').insert([
+        {
+          producto_id: p.id,
+          tipo: 'SALIDA',
+          cantidad: p.cantidad,
+          referencia: codigo
+        }
+      ])
     }
 
-    setVentaExitosa(true);
-  };
+    setVentaExitosa(true)
+  }
 
-  // ——— Generar PDF ———————————————————————————————————————————————————
-  const generarPDF = () => {
-    const doc = new jsPDF();
-    doc.setFontSize(16);
-    doc.text(`Ticket de venta - ${codigoVenta}`, 10, 10);
-    doc.setFontSize(12);
-    doc.text(`Cliente: ${clienteSeleccionado.nombre}`, 10, 20);
-    doc.text(`Fecha: ${new Date().toLocaleString()}`, 10, 30);
-    doc.text(`Forma de pago: ${formaPago}`, 10, 40);
-
+  function generarPDF() {
+    const doc = new jsPDF()
+    doc.setFontSize(16)
+    doc.text(`Ticket de venta - ${codigoVenta}`, 10, 10)
+    doc.setFontSize(12)
+    doc.text(`Cliente: ${clienteSeleccionado.nombre}`, 10, 20)
+    doc.text(`Fecha: ${new Date().toLocaleString()}`, 10, 30)
+    doc.text(`Pago: ${formaPago}`, 10, 40)
     doc.autoTable({
       startY: 50,
-      head: [['Producto', 'Cantidad', 'P.Unitario', 'Total']],
+      head: [['Producto', 'Cant.', 'P.U.', 'Total']],
       body: productosVenta.map(p => [
         p.nombre,
         p.cantidad,
         `$${p.promocion.toFixed(2)}`,
-        `$${p.total.toFixed(2)}`,
-      ]),
-    });
-
-    const finalY = doc.lastAutoTable?.finalY || 60;
-    doc.setFontSize(12);
-    doc.setFont(undefined, 'bold');
-    doc.text(`Subtotal: $${subtotal.toFixed(2)}`, 10, finalY + 10);
-    doc.text(`Descuento: -$${descuentoCalculado.toFixed(2)}`, 10, finalY + 20);
-    doc.text(`Total: $${total.toFixed(2)}`, 180, finalY + 30, { align: 'right' });
-    doc.line(10, finalY + 5, 200, finalY + 5);
-
-    doc.output('dataurlnewwindow');
-    return doc;
-  };
-
-  const compartirPDFComoImagen = () => {
-    generarPDF().save(`${codigoVenta}.pdf`);
-  };
+        `$${p.total.toFixed(2)}`
+      ])
+    })
+    const finalY = doc.lastAutoTable.finalY + 10
+    doc.text(`Subtotal: $${subtotal.toFixed(2)}`, 10, finalY)
+    doc.text(`Descuento: -$${descuentoCalculado.toFixed(2)}`, 10, finalY + 10)
+    doc.text(`Total: $${total.toFixed(2)}`, 180, finalY + 20, { align: 'right' })
+    doc.output('dataurlnewwindow')
+  }
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
       <button
         onClick={() => navigate('/')}
-        className="mb-4 px-4 py-2 bg-gray-200 rounded hover:bg-gray-300"
+        className="mb-4 px-4 py-2 bg-gray-200 rounded"
       >
         Volver al inicio
       </button>
-
       <h2 className="text-2xl font-bold mb-4">Checkout</h2>
 
-      {/* CLIENTE */}
+      {/* Cliente */}
       <div className="mb-4">
-        <label className="block font-semibold">Cliente</label>
+        <label className="font-semibold block">Cliente</label>
         <input
           type="text"
           className="border w-full p-2 rounded"
-          placeholder="Escribe el nombre del cliente"
           value={clienteBusqueda}
-          onChange={handleClienteInput}
+          onChange={onChangeClienteInput}
           onKeyDown={e => {
             if (e.key === 'ArrowDown') {
-              e.preventDefault();
               setClienteIndexActivo(i =>
-                i < clienteSugerencias.length - 1 ? i + 1 : i
-              );
+                Math.min(i + 1, clienteSugerencias.length - 1)
+              )
             }
             if (e.key === 'ArrowUp') {
-              e.preventDefault();
-              setClienteIndexActivo(i => (i > 0 ? i - 1 : 0));
+              setClienteIndexActivo(i => Math.max(i - 1, 0))
             }
             if (e.key === 'Enter' && clienteIndexActivo >= 0) {
-              seleccionarCliente(clienteSugerencias[clienteIndexActivo]);
+              seleccionarCliente(clienteSugerencias[clienteIndexActivo])
             }
           }}
         />
-        {clienteSugerencias.length > 0 && !clienteSeleccionado && (
-          <ul className="border bg-white mt-1 max-h-40 overflow-auto shadow">
-            {clienteSugerencias.map((c, idx) => (
+        {clienteBusqueda && !clienteSeleccionado && clienteSugerencias.length > 0 && (
+          <ul className="border bg-white max-h-40 overflow-auto">
+            {clienteSugerencias.map((c, i) => (
               <li
                 key={c.id}
-                onClick={() => seleccionarCliente(c)}
-                className={`p-2 cursor-pointer ${
-                  clienteIndexActivo === idx ? 'bg-blue-100' : 'hover:bg-gray-100'
+                className={`p-1 cursor-pointer ${
+                  clienteIndexActivo === i ? 'bg-blue-100' : ''
                 }`}
+                onClick={() => seleccionarCliente(c)}
               >
                 {c.nombre}
               </li>
             ))}
           </ul>
         )}
-        {mostrarNuevoCliente && (
-          <div className="border bg-gray-50 p-4 mt-2 rounded">
-            <h3 className="font-semibold mb-2">Agregar nuevo cliente</h3>
-            {/* El nombre ya viene del campo superior */}
-            <input
-              type="text"
-              name="telefono"
-              placeholder="Teléfono*"
-              className="border p-2 w-full mb-2 rounded"
-              value={nuevoCliente.telefono}
-              onChange={e =>
-                setNuevoCliente({ ...nuevoCliente, telefono: e.target.value })
-              }
-            />
-            <input
-              type="email"
-              name="correo"
-              placeholder="Correo*"
-              className="border p-2 w-full mb-2 rounded"
-              value={nuevoCliente.correo}
-              onChange={e =>
-                setNuevoCliente({ ...nuevoCliente, correo: e.target.value })
-              }
-            />
-            <input
-              type="text"
-              name="direccion"
-              placeholder="Dirección"
-              className="border p-2 w-full mb-2 rounded"
-              value={nuevoCliente.direccion}
-              onChange={e =>
-                setNuevoCliente({ ...nuevoCliente, direccion: e.target.value })
-              }
-            />
-            <button
-              onClick={agregarClienteNuevo}
-              className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
-            >
-              Agregar cliente nuevo
-            </button>
-          </div>
+        {clienteBusqueda && !clienteSeleccionado && clienteSugerencias.length === 0 && (
+          <p
+            className="text-blue-600 cursor-pointer"
+            onClick={() => setMostrarNuevoCliente(true)}
+          >
+            + Agregar nuevo cliente
+          </p>
         )}
       </div>
 
-      {/* PRODUCTO */}
+      {/* Nuevo cliente */}
+      {mostrarNuevoCliente && (
+        <div className="border p-4 mb-4 rounded bg-gray-50">
+          <h3 className="font-semibold mb-2">Nuevo Cliente</h3>
+          <input
+            className="border w-full p-2 mb-2 rounded"
+            placeholder="Nombre*"
+            value={nuevoCliente.nombre}
+            onChange={e => setNuevoCliente({
+              ...nuevoCliente,
+              nombre: e.target.value
+            })}
+          />
+          <input
+            className="border w-full p-2 mb-2 rounded"
+            placeholder="Teléfono*"
+            value={nuevoCliente.telefono}
+            onChange={e => setNuevoCliente({
+              ...nuevoCliente,
+              telefono: e.target.value
+            })}
+          />
+          <input
+            className="border w-full p-2 mb-2 rounded"
+            placeholder="Correo*"
+            value={nuevoCliente.correo}
+            onChange={e => setNuevoCliente({
+              ...nuevoCliente,
+              correo: e.target.value
+            })}
+          />
+          <input
+            className="border w-full p-2 mb-2 rounded"
+            placeholder="Dirección"
+            value={nuevoCliente.direccion}
+            onChange={e => setNuevoCliente({
+              ...nuevoCliente,
+              direccion: e.target.value
+            })}
+          />
+          <button
+            onClick={agregarCliente}
+            className="bg-blue-600 text-white px-4 py-2 rounded"
+          >
+            Agregar cliente nuevo
+          </button>
+        </div>
+      )}
+
+      {/* Producto */}
       <div className="mb-4">
-        <label className="block font-semibold">Producto</label>
+        <label className="font-semibold block">Producto</label>
         <input
           type="text"
           className="border w-full p-2 rounded"
-          placeholder="Escribe el nombre del producto"
           value={productoBusqueda}
-          onChange={handleProductoInput}
+          onChange={onChangeProductoInput}
           onKeyDown={e => {
             if (e.key === 'ArrowDown') {
-              e.preventDefault();
               setProductoIndexActivo(i =>
-                i < productoSugerencias.length - 1 ? i + 1 : i
-              );
+                Math.min(i + 1, productoSugerencias.length - 1)
+              )
             }
             if (e.key === 'ArrowUp') {
-              e.preventDefault();
-              setProductoIndexActivo(i => (i > 0 ? i - 1 : 0));
+              setProductoIndexActivo(i => Math.max(i - 1, 0))
             }
             if (e.key === 'Enter' && productoIndexActivo >= 0) {
-              seleccionarProducto(productoSugerencias[productoIndexActivo]);
+              seleccionarProducto(productoSugerencias[productoIndexActivo])
             }
           }}
         />
-        {productoSugerencias.length > 0 && !productoSeleccionado && (
-          <ul className="border bg-white mt-1 max-h-40 overflow-auto shadow">
-            {productoSugerencias.map((p, idx) => (
+        {productoBusqueda && !productoSeleccionado && productoSugerencias.length > 0 && (
+          <ul className="border bg-white max-h-40 overflow-auto">
+            {productoSugerencias.map((p, i) => (
               <li
                 key={p.id}
-                onClick={() => seleccionarProducto(p)}
-                className={`p-2 cursor-pointer ${
-                  productoIndexActivo === idx ? 'bg-blue-100' : 'hover:bg-gray-100'
+                className={`p-1 cursor-pointer ${
+                  productoIndexActivo === i ? 'bg-blue-100' : ''
                 }`}
+                onClick={() => seleccionarProducto(p)}
               >
                 {p.nombre}
               </li>
@@ -394,20 +356,19 @@ export default function Checkout() {
           </ul>
         )}
         {mensajeStock && (
-          <p className="text-red-600 text-sm mt-1">{mensajeStock}</p>
+          <p className="text-sm text-red-600 mt-1">{mensajeStock}</p>
         )}
         {productoSeleccionado && (
-          <div className="flex items-center gap-2 mt-2">
+          <div className="flex gap-2 mt-2">
             <input
               type="number"
               className="border p-2 w-24 rounded"
               value={cantidad}
-              min={1}
-              onChange={e => setCantidad(Number(e.target.value))}
+              onChange={e => setCantidad(+e.target.value)}
             />
             <button
               onClick={agregarProductoAVenta}
-              className="bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700"
+              className="bg-green-600 text-white px-3 py-1 rounded"
             >
               Añadir
             </button>
@@ -415,24 +376,24 @@ export default function Checkout() {
         )}
       </div>
 
-      {/* LISTA DE PRODUCTOS AGREGADOS */}
+      {/* Lista de productos añadidos */}
       <div className="mb-4">
         <h3 className="font-semibold">Productos añadidos</h3>
-        {productosVenta.map((p, idx) => (
+        {productosVenta.map((p, i) => (
           <div
-            key={idx}
-            className="border p-2 my-1 rounded bg-gray-50 flex justify-between"
+            key={i}
+            className="flex justify-between p-2 bg-gray-50 mb-1 rounded"
           >
-            <span>{p.nombre} (x{p.cantidad})</span>
+            <span>{p.nombre} x{p.cantidad}</span>
             <span>${p.total.toFixed(2)}</span>
           </div>
         ))}
       </div>
 
-      {/* FORMA DE PAGO Y DESCUENTO */}
-      <div className="mb-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+      {/* Pago y descuento */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
         <div>
-          <label className="block font-semibold">Forma de pago</label>
+          <label className="font-semibold block">Forma de pago</label>
           <select
             className="border w-full p-2 rounded"
             value={formaPago}
@@ -445,7 +406,7 @@ export default function Checkout() {
           </select>
         </div>
         <div>
-          <label className="block font-semibold">Descuento</label>
+          <label className="font-semibold block">Descuento</label>
           <select
             className="border w-full p-2 rounded"
             value={tipoDescuento}
@@ -455,46 +416,44 @@ export default function Checkout() {
             <option value="monto">Monto fijo</option>
             <option value="porcentaje">Porcentaje</option>
           </select>
-          {(tipoDescuento === 'monto' || tipoDescuento === 'porcentaje') && (
+          {(tipoDescuento !== 'ninguno') && (
             <input
               type="number"
-              className="border w-full mt-2 p-2 rounded"
+              className="border w-full p-2 mt-2 rounded"
               placeholder="Valor"
               value={valorDescuento}
-              min={0}
               onChange={e => setValorDescuento(e.target.value)}
             />
           )}
         </div>
       </div>
 
-      {/* TOTALES */}
-      <div className="mb-4">
+      {/* Totales */}
+      <div className="mb-6">
         <p>Subtotal: <strong>${subtotal.toFixed(2)}</strong></p>
         <p>Descuento: <strong>-${descuentoCalculado.toFixed(2)}</strong></p>
         <p>Total: <strong>${total.toFixed(2)}</strong></p>
       </div>
 
-      {/* FINALIZAR VENTA */}
       <button
         onClick={finalizarVenta}
-        className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700"
+        className="bg-blue-600 text-white px-6 py-2 rounded"
       >
         Finalizar venta
       </button>
 
-      {/* MENSAJE DE ÉXITO Y RECIBO */}
       {ventaExitosa && (
-        <div className="mt-6 p-4 bg-green-100 border border-green-400 rounded">
-          <p className="text-green-700 font-semibold">✅ Venta exitosa</p>
+        <div className="mt-6 p-4 bg-green-100 rounded border border-green-400">
+          <p className="text-green-700 font-semibold">
+            ✅ Venta registrada: {codigoVenta}
+          </p>
           <button
-            onClick={compartirPDFComoImagen}
-            className="mt-2 bg-white border border-green-700 px-4 py-1 rounded hover:bg-green-200"
-          >
+            onClick={generarPDF}
+            className="mt-2 px-4 py-1 border rounded">
             Ver recibo
           </button>
         </div>
       )}
     </div>
-  );
+  )
 }

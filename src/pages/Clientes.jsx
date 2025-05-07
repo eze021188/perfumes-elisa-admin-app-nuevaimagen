@@ -1,251 +1,207 @@
 // src/pages/Clientes.jsx
-import React, { useState, useEffect } from 'react';
-import { useClientes } from '../contexts/ClientesContext';
-import { supabase } from '../supabase';
-import AutocompleteInput from '../components/AutocompleteInput';
-import ModalCliente from '../components/ModalCliente';
+
+import React, { useState } from 'react'
+import { supabase } from '../supabase'
+import { useNavigate } from 'react-router-dom'
+import { useClientes } from '../contexts/ClientesContext'
+import ModalCliente from '../components/ModalCliente'
 
 export default function Clientes() {
-  const {
-    clientes,
-    loading,
-    obtenerClientes,
-    agregarCliente,
-    actualizarCliente,
-    eliminarCliente,
-  } = useClientes();
+  const navigate = useNavigate()
+  const { clientes, loading } = useClientes()
 
-  const [searchText, setSearchText] = useState('');
-  const [filteredClientes, setFilteredClientes] = useState([]);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editData, setEditData] = useState(null);
-  const [selectedIds, setSelectedIds] = useState([]);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [perPage, setPerPage] = useState(25);
-  const [comprasCliente, setComprasCliente] = useState([]);
-  const [clienteSeleccionado, setClienteSeleccionado] = useState(null);
+  const [busqueda, setBusqueda] = useState('')
+  const [selectedIds, setSelectedIds] = useState([])
 
-  useEffect(() => {
-    obtenerClientes();
-  }, []);
+  const [clienteActual, setClienteActual] = useState(null)
+  const [ventasCliente, setVentasCliente] = useState([])
 
-  useEffect(() => {
-    const lower = searchText.toLowerCase();
-    const filtered = clientes.filter(c => c.nombre.toLowerCase().includes(lower));
-    setFilteredClientes(filtered);
-    setCurrentPage(1);
-  }, [searchText, clientes]);
+  const [ventaSeleccionada, setVentaSeleccionada] = useState(null)
 
-  const openNew = () => {
-    setEditData(null);
-    setModalOpen(true);
-  };
+  const [pagina, setPagina] = useState(1)
+  const [porPagina, setPorPagina] = useState(25)
 
-  const openEdit = cliente => {
-    setEditData(cliente);
-    setModalOpen(true);
-  };
+  // Filtrado + paginación
+  const filtrados = clientes.filter(c =>
+    c.nombre.toLowerCase().includes(busqueda.toLowerCase())
+  )
+  const inicio = (pagina - 1) * porPagina
+  const clientesPag = filtrados.slice(inicio, inicio + porPagina)
 
-  const handleSave = async data => {
-    if (!data.nombre || !data.telefono || !data.correo) {
-      alert('Por favor completa nombre, teléfono y correo electrónico.');
-      return;
-    }
-    if (editData) {
-      await actualizarCliente(editData.id, data);
-    } else {
-      await agregarCliente(data);
-    }
-    setModalOpen(false);
-  };
+  // Carga historial de ventas de un cliente
+  const handleVerCompras = async cliente => {
+    setClienteActual(cliente)
+    setVentaSeleccionada(null)
 
-  const handleDeleteSelected = async () => {
-    if (selectedIds.length === 0) return;
-    if (window.confirm(`¿Eliminar ${selectedIds.length} cliente(s)?`)) {
-      for (const id of selectedIds) {
-        await eliminarCliente(id);
-      }
-      setSelectedIds([]);
-    }
-  };
-
-  const toggleSelect = (id) => {
-    setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
-  };
-
-  const toggleSelectAll = () => {
-    const currentItems = paginatedClientes.map(c => c.id);
-    const allSelected = currentItems.every(id => selectedIds.includes(id));
-    if (allSelected) {
-      setSelectedIds(prev => prev.filter(id => !currentItems.includes(id)));
-    } else {
-      setSelectedIds(prev => [...new Set([...prev, ...currentItems])]);
-    }
-  };
-
-  const totalPages = Math.ceil(filteredClientes.length / perPage);
-  const paginatedClientes = filteredClientes.slice((currentPage - 1) * perPage, currentPage * perPage);
-
-  const verComprasCliente = async (cliente) => {
-    setClienteSeleccionado(cliente);
-  
     const { data, error } = await supabase
       .from('ventas')
-      .select('id, codigo_transaccion, fecha, total')
+      .select('*')
       .eq('cliente_id', cliente.id)
-      .order('fecha', { ascending: false });
-  
-    if (error) {
-      console.error('Error al obtener ventas del cliente:', error);
-      setComprasCliente([]);
-    } else {
-      setComprasCliente(data);
-    }
-  };    
+      .order('created_at', { ascending: false })
+
+    if (error) console.error('Error fetching ventas:', error.message)
+    else setVentasCliente(data)
+
+    setPagina(1)
+  }
+
+  // Eliminación masiva de clientes (placeholder)
+  const handleEliminarSeleccionados = () => {
+    // TODO: implementar
+  }
+
+  if (loading) return <p>Cargando clientes…</p>
 
   return (
-    <div className="p-6">
-      <div className="flex flex-wrap items-center gap-4 mb-4">
+    <div className="p-6 max-w-5xl mx-auto">
+      {/* Cabecera y controles */}
+      <div className="flex items-center mb-4">
         <button
-          onClick={() => setCurrentPage(1)}
-          className="px-4 py-2 bg-gray-800 text-white rounded"
+          onClick={() => navigate('/')}
+          className="bg-gray-700 text-white px-3 py-1 rounded mr-2"
         >
           Volver al inicio
         </button>
         <button
-          onClick={openNew}
-          className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+          onClick={() => navigate('/clientes/nuevo')}
+          className="bg-blue-600 text-white px-3 py-1 rounded mr-4"
         >
           Agregar cliente
         </button>
-        <div className="flex-1 min-w-0">
-          <AutocompleteInput
-            className="w-full"
-            suggestions={(clientes || []).map(c => ({ label: c.nombre, value: c.id }))}
-            value={searchText}
-            onChange={setSearchText}
-            onSelect={item => setSearchText(item.label)}
-            placeholder="Buscar cliente..."
-          />
-        </div>
+        <input
+          type="text"
+          placeholder="Buscar cliente..."
+          value={busqueda}
+          onChange={e => setBusqueda(e.target.value)}
+          className="border p-2 rounded flex-1 mr-4"
+        />
         <button
-          disabled={selectedIds.length === 0}
-          onClick={handleDeleteSelected}
-          className={`px-4 py-2 rounded text-white ${selectedIds.length === 0 ? 'bg-red-300 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700'}`}
+          disabled={!selectedIds.length}
+          onClick={handleEliminarSeleccionados}
+          className="bg-red-500 text-white px-3 py-1 rounded disabled:opacity-50"
         >
-          Eliminar {selectedIds.length} seleccionados
+          Eliminar {selectedIds.length}
         </button>
       </div>
 
-      <div className="flex items-center justify-between mb-2">
+      {/* Selector de páginas */}
+      <div className="mb-2">
         <select
-          value={perPage}
-          onChange={e => setPerPage(Number(e.target.value))}
-          className="px-2 py-1 border rounded"
+          value={porPagina}
+          onChange={e => setPorPagina(Number(e.target.value))}
+          className="border p-1 rounded"
         >
-          {[25, 50, 100, 200].map(n => (
-            <option key={n} value={n}>{n} por página</option>
+          {[10, 25, 50, 100].map(n => (
+            <option key={n} value={n}>
+              {n} por página
+            </option>
           ))}
         </select>
       </div>
 
-      {loading ? (
-        <div className="text-center py-4 text-gray-500">Cargando clientes...</div>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="min-w-full bg-white">
-            <thead className="bg-gray-100">
-              <tr>
-                <th className="px-4 py-2">
-                  <input type="checkbox" onChange={toggleSelectAll} checked={paginatedClientes.every(c => selectedIds.includes(c.id))} />
-                </th>
-                <th className="px-4 py-2 text-left">Nombre</th>
-                <th className="px-4 py-2 text-left">Teléfono</th>
-                <th className="px-4 py-2 text-left">Correo</th>
-                <th className="px-4 py-2 text-left">Dirección</th>
-                <th className="px-4 py-2">Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {paginatedClientes.map(cliente => (
-                <tr key={cliente.id} className="border-b">
-                  <td className="px-4 py-2">
-                    <input type="checkbox" checked={selectedIds.includes(cliente.id)} onChange={() => toggleSelect(cliente.id)} />
-                  </td>
-                  <td className="px-4 py-2">{cliente.nombre}</td>
-                  <td className="px-4 py-2">{cliente.telefono}</td>
-                  <td className="px-4 py-2">{cliente.correo}</td>
-                  <td className="px-4 py-2">{cliente.direccion || '-'}</td>
-                  <td className="px-4 py-2 text-center space-x-2">
-                    <button
-                      onClick={() => openEdit(cliente)}
-                      className="px-2 py-1 bg-yellow-400 text-white rounded hover:bg-yellow-500"
-                    >
-                      Editar
-                    </button>
-                    <button
-                      onClick={() => verComprasCliente(cliente)}
-                      className="px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
-                    >
-                      Ver compras
-                    </button>
-                  </td>
+      {/* Tabla de clientes */}
+      <table className="min-w-full bg-white shadow rounded mb-6">
+        <thead>
+          <tr className="bg-gray-100">
+            <th className="p-2"><input type="checkbox" /></th>
+            <th className="p-2">Nombre</th>
+            <th className="p-2">Teléfono</th>
+            <th className="p-2">Correo</th>
+            <th className="p-2">Dirección</th>
+            <th className="p-2">Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {clientesPag.map(c => (
+            <tr key={c.id} className="border-t">
+              <td className="p-2 text-center">
+                <input
+                  type="checkbox"
+                  checked={selectedIds.includes(c.id)}
+                  onChange={() => {
+                    const next = selectedIds.includes(c.id)
+                      ? selectedIds.filter(id => id !== c.id)
+                      : [...selectedIds, c.id]
+                    setSelectedIds(next)
+                  }}
+                />
+              </td>
+              <td className="p-2">{c.nombre}</td>
+              <td className="p-2">{c.telefono}</td>
+              <td className="p-2">{c.correo}</td>
+              <td className="p-2">{c.direccion}</td>
+              <td className="p-2 space-x-2">
+                <button
+                  onClick={() => navigate(`/clientes/${c.id}/editar`)}
+                  className="bg-yellow-400 text-white px-2 py-1 rounded"
+                >
+                  Editar
+                </button>
+                <button
+                  onClick={() => handleVerCompras(c)}
+                  className="bg-blue-600 text-white px-2 py-1 rounded"
+                >
+                  Ver compras
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      {/* Historial de ventas */}
+      {clienteActual && (
+        <div className="mb-6">
+          <h2 className="font-semibold mb-2">
+            Ventas de {clienteActual.nombre}
+          </h2>
+          {ventasCliente.length === 0 ? (
+            <p>Este cliente no tiene ventas.</p>
+          ) : (
+            <table className="min-w-full bg-white shadow rounded mb-4">
+              <thead>
+                <tr className="bg-gray-100">
+                  <th className="p-2">Código</th>
+                  <th className="p-2">Fecha</th>
+                  <th className="p-2">Forma de pago</th>
+                  <th className="p-2 text-right">Total</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {ventasCliente.map(v => (
+                  <tr
+                    key={v.id}
+                    className="border-t cursor-pointer hover:bg-gray-50"
+                    onClick={() => setVentaSeleccionada(v)}
+                  >
+                    <td className="p-2">{v.codigo}</td>
+                    <td className="p-2">
+                      {new Date(v.created_at).toLocaleString()}
+                    </td>
+                    <td className="p-2">{v.forma_pago}</td>
+                    <td className="p-2 text-right">${v.total.toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       )}
 
-      {/* Lista de compras del cliente */}
-      {clienteSeleccionado && (
-        <div className="mt-6">
-          <h2 className="text-lg font-bold mb-2">
-  Compras de {clienteSeleccionado.nombre}:
-</h2>
-{comprasCliente.length === 0 ? (
-  <p className="text-gray-500">Este cliente no tiene ventas registradas.</p>
-) : (
-  <ul className="list-disc list-inside space-y-1">
-    {comprasCliente.map(venta => (
-      <li key={venta.id}>
-        Venta: <strong>{venta.codigo_transaccion}</strong> — Fecha: {new Date(venta.fecha).toLocaleDateString()} — Total: ${venta.total}
-      </li>
-    ))}
-  </ul>
-)}
-
-        </div>
+      {/* Modal de detalle de venta */}
+      {ventaSeleccionada && (
+        <ModalCliente
+          venta={ventaSeleccionada}
+          clientName={clienteActual.nombre}
+          isOpen={!!ventaSeleccionada}
+          onClose={() => setVentaSeleccionada(null)}
+          onDelete={async v => {
+            await supabase.from('ventas').delete().eq('id', v.id)
+            setVentaSeleccionada(null)
+            handleVerCompras(clienteActual)
+          }}
+        />
       )}
-
-      <div className="flex justify-between items-center mt-4">
-        <p className="text-sm text-gray-600">
-          Página {currentPage} de {totalPages}
-        </p>
-        <div className="space-x-2">
-          <button
-            disabled={currentPage === 1}
-            onClick={() => setCurrentPage(p => p - 1)}
-            className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50"
-          >
-            Anterior
-          </button>
-          <button
-            disabled={currentPage === totalPages}
-            onClick={() => setCurrentPage(p => p + 1)}
-            className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50"
-          >
-            Siguiente
-          </button>
-        </div>
-      </div>
-
-      <ModalCliente
-        isOpen={modalOpen}
-        initialData={editData || undefined}
-        onSave={handleSave}
-        onClose={() => setModalOpen(false)}
-      />
     </div>
-  );
+  )
 }

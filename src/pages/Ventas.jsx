@@ -33,17 +33,26 @@ export default function Ventas() {
 
   // Función de cancelación de venta
   const cancelarVenta = async (venta) => {
-    // 1) Confirmación
-    if (!confirm('¿Estás seguro de cancelar esta venta? Se restaurará el stock y quedará registro de devolución.'))
-      return;
+    if (!confirm(
+      '¿Estás seguro de cancelar esta venta? Se restaurará el stock y quedará registro de devolución.'
+    )) return;
 
-    // 2) Actualizar stock e insertar movimientos de devolución
-    for (const prod of venta.productos) {
-      // Traigo id y stock actual
+    // 1) Obtener detalle completo
+    const { data: detalles, error: errDet } = await supabase
+      .from('detalle_venta')
+      .select('producto_id, cantidad')
+      .eq('venta_id', venta.id);
+    if (errDet) {
+      console.error('Error al obtener detalle de venta:', errDet.message);
+      return;
+    }
+
+    // 2) Restaurar stock; el trigger insertará la devolución
+    for (const prod of detalles) {
       const { data: productoActual, error: errProd } = await supabase
         .from('productos')
-        .select('id, stock')
-        .eq('nombre', prod.nombre)
+        .select('stock')
+        .eq('id', prod.producto_id)
         .single();
       if (errProd) {
         console.error('Error al obtener producto:', errProd.message);
@@ -52,35 +61,24 @@ export default function Ventas() {
 
       const nuevoStock = (productoActual.stock || 0) + prod.cantidad;
 
-      // 2.1) Actualizo stock
       await supabase
         .from('productos')
         .update({ stock: nuevoStock })
-        .eq('id', productoActual.id);
-
-      // 2.2) Inserto movimiento de entrada por cancelación
-      await supabase
-        .from('movimientos_inventario')
-        .insert([{
-          producto_id: productoActual.id,
-          tipo: 'DEVOLUCIÓN VENTA',
-          cantidad: prod.cantidad,
-          referencia: venta.codigo_venta
-        }]);
+        .eq('id', prod.producto_id);
     }
 
-    // 3) Elimino los detalles de esa venta
-    await supabase
+    // 3) Borrar detalle_venta para disparar trigger de devolución
+    const { error: errDelDet } = await supabase
       .from('detalle_venta')
       .delete()
       .eq('venta_id', venta.id);
+    if (errDelDet) console.error('Error al borrar detalle_venta:', errDelDet.message);
 
-    // 4) Elimino la cabecera de la venta
+    // 4) Borrar cabecera de la venta
     const { error: errVenta } = await supabase
       .from('ventas')
       .delete()
       .eq('id', venta.id);
-
     if (errVenta) {
       alert('❌ Error al cancelar la venta');
     } else {
@@ -106,7 +104,7 @@ export default function Ventas() {
     doc.autoTable({
       startY: 50,
       head: [['Producto', 'Cantidad', 'P. Unitario', 'Total']],
-      body: venta.productos.map(p => [
+      body: venta.productos.map((p) => [
         p.nombre,
         p.cantidad,
         `$${p.precio.toFixed(2)}`,
@@ -132,8 +130,7 @@ export default function Ventas() {
     window.open(doc.output('bloburl'), '_blank');
   };
 
-  // Filtro de búsqueda
-  const ventasFiltradas = ventas.filter(v =>
+  const ventasFiltradas = ventas.filter((v) =>
     v.cliente_nombre?.toLowerCase().includes(busqueda.toLowerCase()) ||
     v.codigo_venta?.toLowerCase().includes(busqueda.toLowerCase())
   );
@@ -153,7 +150,7 @@ export default function Ventas() {
         type="text"
         placeholder="Buscar por cliente o código"
         value={busqueda}
-        onChange={e => setBusqueda(e.target.value)}
+        onChange={(e) => setBusqueda(e.target.value)}
         className="mb-4 p-2 border rounded w-full md:w-1/2"
       />
 
@@ -174,7 +171,7 @@ export default function Ventas() {
               </tr>
             </thead>
             <tbody>
-              {ventasFiltradas.map(venta => (
+              {ventasFiltradas.map((venta) => (
                 <tr
                   key={venta.id}
                   className="text-center hover:bg-gray-50 cursor-pointer"
@@ -187,11 +184,11 @@ export default function Ventas() {
                       console.error('Error al obtener detalle de venta', error.message);
                       return;
                     }
-                    const productos = detalles.map(d => ({
+                    const productos = detalles.map((d) => ({
                       nombre: d.productos?.nombre || 'Desconocido',
                       cantidad: d.cantidad,
                       precio: d.precio_unitario,
-                      subtotal: d.total_parcial,
+                      subtotal: d.total_parcial
                     }));
                     setVentaSeleccionada({ ...venta, productos });
                   }}
