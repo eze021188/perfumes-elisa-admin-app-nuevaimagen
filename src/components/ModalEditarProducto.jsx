@@ -7,41 +7,13 @@ export default function ModalEditarProducto({ producto, onClose, onGuardado }) {
   const [costoFinalUSD, setCostoFinalUSD] = useState(producto.costo_final_usd || '');
   const [costoFinalMXN, setCostoFinalMXN] = useState(producto.costo_final_mxn || '');
   const [precioUnitarioUSD, setPrecioUnitarioUSD] = useState(producto.precio_unitario_usd || '');
-  const [imagenArchivo, setImagenArchivo] = useState(null);
+  const [imagenURL, setImagenURL] = useState(producto.imagen_url || '');
   const [guardando, setGuardando] = useState(false);
-
-  const handleImagen = (e) => {
-    const archivo = e.target.files[0];
-    if (archivo) setImagenArchivo(archivo);
-  };
-
-  const subirImagen = async () => {
-    const nombreArchivo = `${producto.id}-${Date.now()}`;
-    const { error } = await supabase.storage
-      .from('productos')
-      .upload(nombreArchivo, imagenArchivo, { upsert: true });
-
-    if (error) {
-      console.error('Error al subir imagen:', error.message);
-      return null;
-    }
-
-    const { data } = supabase.storage
-      .from('productos')
-      .getPublicUrl(nombreArchivo);
-
-    return data.publicUrl;
-  };
 
   const handleGuardar = async () => {
     setGuardando(true);
 
-    let imagenURL = producto.imagen_url;
-    if (imagenArchivo) {
-      const subida = await subirImagen();
-      if (subida) imagenURL = subida;
-    }
-
+    // Actualizamos directamente la URL de la imagen pegada
     const { error } = await supabase
       .from('productos')
       .update({
@@ -75,6 +47,7 @@ export default function ModalEditarProducto({ producto, onClose, onGuardado }) {
         <h2 className="text-lg font-bold mb-4">Editar producto</h2>
 
         <div className="space-y-4">
+          {/* Nombre */}
           <div>
             <label className="block text-sm font-medium">Nombre</label>
             <input
@@ -85,8 +58,11 @@ export default function ModalEditarProducto({ producto, onClose, onGuardado }) {
             />
           </div>
 
+          {/* Costos */}
           <div>
-            <label className="block text-sm font-medium">Costo final x unidad (USD)</label>
+            <label className="block text-sm font-medium">
+              Costo final x unidad (USD)
+            </label>
             <input
               type="number"
               value={costoFinalUSD}
@@ -96,7 +72,9 @@ export default function ModalEditarProducto({ producto, onClose, onGuardado }) {
           </div>
 
           <div>
-            <label className="block text-sm font-medium">Costo final x unidad (MXN)</label>
+            <label className="block text-sm font-medium">
+              Costo final x unidad (MXN)
+            </label>
             <input
               type="number"
               value={costoFinalMXN}
@@ -106,7 +84,9 @@ export default function ModalEditarProducto({ producto, onClose, onGuardado }) {
           </div>
 
           <div>
-            <label className="block text-sm font-medium">Precio por unidad (USD)</label>
+            <label className="block text-sm font-medium">
+              Precio por unidad (USD)
+            </label>
             <input
               type="number"
               value={precioUnitarioUSD}
@@ -115,24 +95,29 @@ export default function ModalEditarProducto({ producto, onClose, onGuardado }) {
             />
           </div>
 
+          {/* URL de la imagen */}
           <div>
-            <label className="block text-sm font-medium">Imagen del producto</label>
+            <label className="block text-sm font-medium">
+              URL de la imagen del producto
+            </label>
             <input
-              type="file"
-              accept="image/*"
-              onChange={handleImagen}
+              type="url"
+              value={imagenURL}
+              onChange={(e) => setImagenURL(e.target.value)}
+              placeholder="https://..."
               className="w-full border px-3 py-2 rounded"
             />
-            {producto.imagen_url && (
+            {imagenURL && (
               <img
-                src={producto.imagen_url}
-                alt="Producto"
-                className="w-20 h-20 object-cover mt-2 rounded border"
+                src={imagenURL}
+                alt="Vista previa"
+                className="w-24 h-24 object-cover mt-2 rounded border"
               />
             )}
           </div>
         </div>
 
+        {/* Botones */}
         <div className="flex justify-end gap-4 mt-6">
           <button
             onClick={onClose}
