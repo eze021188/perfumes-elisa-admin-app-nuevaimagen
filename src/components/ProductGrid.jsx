@@ -2,7 +2,7 @@
 import React from 'react';
 import ProductCard from './ProductCard';
 
-export default function ProductGrid({ productos, onAddToCart }) {
+export default function ProductGrid({ productos, onAddToCart, showStock = false }) {
   return (
     <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-6 gap-1 p-1">
       {productos.map((p) => (
@@ -10,6 +10,7 @@ export default function ProductGrid({ productos, onAddToCart }) {
           key={p.id}
           producto={p}
           onClick={() => onAddToCart(p)}
+          showStock={showStock}
         />
       ))}
     </div>

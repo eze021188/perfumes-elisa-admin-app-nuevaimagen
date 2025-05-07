@@ -1,39 +1,44 @@
-import React, { useState } from 'react'
-import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom'
-import { ClientesProvider } from './contexts/ClientesContext'
-import { ProductosProvider } from './contexts/ProductosContext'
-import { ComprasProvider } from './contexts/ComprasContext'
+// src/App.jsx
+import React, { useState } from 'react';
+import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom';
+import { Toaster } from 'react-hot-toast';
+import { ClientesProvider } from './contexts/ClientesContext';
+import { ProductosProvider } from './contexts/ProductosContext';
+import { ComprasProvider } from './contexts/ComprasContext';
 
 import DebugVentas from './pages/DebugVentas';
-import Home from './pages/Home'
-import Checkout from './pages/Checkout'
-import Productos from './pages/Productos'
-import Clientes from './pages/Clientes'
-import Compras from './pages/Compras'
-import Ventas from './pages/Ventas'
-import Reportes from './pages/Reportes'
-import UsersPermissions from './pages/UsersPermissions'
+import Home from './pages/Home';
+import Checkout from './pages/Checkout';
+import Productos from './pages/Productos';
+import Clientes from './pages/Clientes';
+import Compras from './pages/Compras';
+import Ventas from './pages/Ventas';
+import Reportes from './pages/Reportes';
+import UsersPermissions from './pages/UsersPermissions';
 import TestPDF from './pages/TestPDF';
 
 export default function App() {
-  const [sidebarOpen, setSidebarOpen] = useState(false)
-  const toggleSidebar = () => setSidebarOpen(o => !o)
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const toggleSidebar = () => setSidebarOpen(o => !o);
 
   return (
     <ClientesProvider>
       <ProductosProvider>
         <ComprasProvider>
+          {/* Toast notifications */}
+          <Toaster position="top-right" reverseOrder={false} />
+
           <BrowserRouter>
             <div className="min-h-screen flex bg-pink-50 relative">
 
               {/* Sidebar */}
               <nav
-                className={`
-                  fixed inset-y-0 left-0 w-64 bg-black text-white p-6 z-50
+                className={
+                  `fixed inset-y-0 left-0 w-64 bg-black text-white p-6 z-50
                   transform transition-transform duration-200 ease-in-out
                   ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-                  md:translate-x-0 md:static md:inset-auto
-                `}
+                  md:translate-x-0 md:static md:inset-auto`
+                }
               >
                 <h1 className="text-2xl font-bold mb-6">Perfumes Elisa</h1>
                 <ul className="space-y-4">
@@ -67,12 +72,12 @@ export default function App() {
 
               {/* Toggle móvil */}
               <button
-                className={`
-                  fixed top-4 left-4 z-60 bg-black text-white rounded-md
+                className={
+                  `fixed top-4 left-4 z-60 bg-black text-white rounded-md
                   w-14 h-12 flex items-center justify-center
                   md:hidden transform transition-transform duration-200
-                  ${sidebarOpen ? 'translate-x-64' : 'translate-x-0'}
-                `}
+                  ${sidebarOpen ? 'translate-x-64' : 'translate-x-0'}`
+                }
                 onClick={toggleSidebar}
                 aria-label="Toggle menu"
               >
@@ -110,5 +115,5 @@ export default function App() {
         </ComprasProvider>
       </ProductosProvider>
     </ClientesProvider>
-  )
+  );
 }

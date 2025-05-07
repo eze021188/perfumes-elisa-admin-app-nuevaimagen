@@ -2,6 +2,9 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../supabase';
 import { useNavigate } from 'react-router-dom';
+import jsPDF from 'jspdf';
+import toast from 'react-hot-toast';
+import 'jspdf-autotable';
 import QuickEntryBar from '../components/QuickEntryBar';
 import QuickSaleModal from '../components/QuickSaleModal';
 import ClientSelector from '../components/ClientSelector';
@@ -19,12 +22,15 @@ export default function Checkout() {
   const [busqueda, setBusqueda] = useState('');
   const [productosVenta, setProductosVenta] = useState([]);
 
+  // Estado de selección de cliente y procesamiento
+  const [clienteSeleccionado, setClienteSeleccionado] = useState(null);
+  const [processing, setProcessing] = useState(false);
+
   // Estados de modales
   const [showQuickSale, setShowQuickSale] = useState(false);
   const [showNewClient, setShowNewClient] = useState(false);
-  const [clienteSeleccionado, setClienteSeleccionado] = useState(null);
 
-  // Carga inicial
+  // Carga inicial de datos
   useEffect(() => {
     async function loadData() {
       const { data: cli } = await supabase.from('clientes').select('*');
@@ -35,79 +41,106 @@ export default function Checkout() {
     loadData();
   }, []);
 
-  // Filtrado
+  // Filtrado de productos
   const productosFiltrados = productos.filter(p =>
     (filtro === 'All' || p.categoria === filtro) &&
     p.nombre.toLowerCase().includes(busqueda.toLowerCase())
   );
 
-  // Handlers
+  // Cálculos de resumen
+  const totalItems = productosVenta.reduce((sum, p) => sum + p.cantidad, 0);
+  const subtotal   = productosVenta.reduce((sum, p) => sum + p.total, 0);
+
+  // Handlers varios
+  const onChangeBusqueda    = e => setBusqueda(e.target.value);
   const handleQuickSaleClick = () => setShowQuickSale(true);
-  const handleAddQuickSale = item => onAddToCart(item);
-  const onChangeBusqueda = e => setBusqueda(e.target.value);
-  const handleSelectClient = c => setClienteSeleccionado(c);
-  const handleCreateClient = () => setShowNewClient(true);
-  const handleClientAdded = c => {
-    setClientes([...clientes, c]);
+  const handleAddQuickSale   = item => onAddToCart(item);
+  const handleSelectClient   = c => setClienteSeleccionado(c);
+  const handleCreateClient   = () => setShowNewClient(true);
+  const handleClientAdded    = c => {
+    setClientes(prev => [...prev, c]);
     setClienteSeleccionado(c);
   };
 
-  // Carrito
+  // Añadir al carrito (incrementa cantidad si ya existe o muestra error si se supera stock)
   const onAddToCart = producto => {
-    const existe = productosVenta.find(p => p.id === producto.id);
-    if (existe) {
-      setProductosVenta(
-        productosVenta.map(p =>
+    setProductosVenta(prev => {
+      const existe = prev.find(p => p.id === producto.id);
+      const cantidadActual = existe ? existe.cantidad : 0;
+      if (cantidadActual + 1 > producto.stock) {
+        toast.error('Stock insuficiente');
+        return prev;
+      }
+      if (existe) {
+        return prev.map(p =>
           p.id === producto.id
             ? { ...p, cantidad: p.cantidad + 1, total: (p.cantidad + 1) * p.promocion }
             : p
-        )
-      );
-    } else {
-      setProductosVenta([...productosVenta, { ...producto, cantidad: 1, total: producto.promocion }]);
-    }
+        );
+      }
+      return [...prev, { ...producto, cantidad: 1, total: producto.promocion }];
+    });
   };
 
-  // Finalizar
+  // Generar PDF del ticket
+  function generarPDF(codigo) {
+    const doc = new jsPDF();
+    doc.setFontSize(16);
+    doc.text(`Ticket de venta - ${codigo}`, 10, 12);
+    doc.setFontSize(12);
+    if (clienteSeleccionado) doc.text(`Cliente: ${clienteSeleccionado.nombre}`, 10, 22);
+    doc.text(`Fecha: ${new Date().toLocaleString()}`, 10, 30);
+
+    const rows = productosVenta.map(p => [
+      p.nombre,
+      p.cantidad.toString(),
+      `$${p.promocion.toFixed(2)}`,
+      `$${p.total.toFixed(2)}`
+    ]);
+    doc.autoTable({ startY: 40, head: [['Producto', 'Cant.', 'P.U.', 'Total']], body: rows });
+
+    const finalY = doc.lastAutoTable.finalY + 10;
+    doc.text(`Subtotal: $${subtotal.toFixed(2)}`, 10, finalY);
+    doc.text(`Total:    $${subtotal.toFixed(2)}`, 10, finalY + 8);
+
+    doc.output('dataurlnewwindow');
+  }
+
+  // Finalizar venta y actualizar base de datos
   const finalizarVenta = async () => {
     if (!clienteSeleccionado || productosVenta.length === 0) return;
-    const { data } = await supabase.from('ventas').select('codigo_venta');
-    const num = (data?.length || 0) + 1;
-    const codigo = `VT${String(num).padStart(5, '0')}`;
-    const subtotal = productosVenta.reduce((s, p) => s + p.total, 0);
-    const { data: v, error: e1 } = await supabase
-      .from('ventas')
-      .insert([{ codigo_venta: codigo, cliente_id: clienteSeleccionado.id, subtotal }])
-      .select()
-      .single();
-    if (e1) return console.error(e1);
-    const venta_id = v.id;
-    for (const p of productosVenta) {
-      await supabase.from('detalle_venta').insert([{
-        venta_id,
-        producto_id: p.id,
-        cantidad: p.cantidad,
-        precio_unitario: p.promocion,
-        total_parcial: p.total
-      }]);
-      await supabase.from('productos').update({ stock: p.stock - p.cantidad }).eq('id', p.id);
-      await supabase.from('movimientos_inventario').insert([{
-        producto_id: p.id,
-        tipo: 'SALIDA',
-        cantidad: p.cantidad,
-        referencia: codigo
-      }]);
+    setProcessing(true);
+    try {
+      const { data } = await supabase.from('ventas').select('codigo_venta');
+      const num    = (data?.length || 0) + 1;
+      const codigo = `VT${String(num).padStart(5, '0')}`;
+
+      const { data: venta, error: errCab } = await supabase
+        .from('ventas')
+        .insert([{ codigo_venta: codigo, cliente_id: clienteSeleccionado.id, subtotal }])
+        .select()
+        .single();
+      if (errCab) throw errCab;
+
+      for (const p of productosVenta) {
+        await supabase.from('detalle_venta').insert([{ venta_id: venta.id, producto_id: p.id, cantidad: p.cantidad, precio_unitario: p.promocion, total_parcial: p.total }]);
+        await supabase.from('productos').update({ stock: p.stock - p.cantidad }).eq('id', p.id);
+        await supabase.from('movimientos_inventario').insert([{ producto_id: p.id, tipo: 'SALIDA', cantidad: p.cantidad, referencia: codigo }]);
+      }
+
+      setProductosVenta([]);
+      generarPDF(codigo);
+    } catch (err) {
+      console.error(err);
+      toast.error('Error al procesar la venta. Intenta de nuevo.');
+    } finally {
+      setProcessing(false);
     }
-    setProductosVenta([]);
-    alert(`Venta ${codigo} registrada.`);
   };
 
   return (
     <div className="pt-4 pb-4 px-4 md:px-12">
-      <button
-        onClick={() => navigate('/')}
-        className="mb-4 px-4 py-2 bg-gray-200 rounded hover:bg-gray-300"
-      >
+      <button onClick={() => navigate('/')} className="mb-4 px-4 py-2 bg-gray-200 rounded hover:bg-gray-300">
         Volver al inicio
       </button>
 
@@ -118,31 +151,31 @@ export default function Checkout() {
         onSelect={handleSelectClient}
         onCreateNew={handleCreateClient}
       />
-      <NewClientModal
-        isOpen={showNewClient}
-        onClose={() => setShowNewClient(false)}
-        onClientAdded={handleClientAdded}
-      />
+      <NewClientModal isOpen={showNewClient} onClose={() => setShowNewClient(false)} onClientAdded={handleClientAdded} />
 
       {/* Quick Entry */}
-      <QuickEntryBar
-        busqueda={busqueda}
-        onChangeBusqueda={onChangeBusqueda}
-        onQuickSaleClick={handleQuickSaleClick}
-      />
-      <QuickSaleModal
-        isOpen={showQuickSale}
-        onClose={() => setShowQuickSale(false)}
-        onAdd={handleAddQuickSale}
-      />
+      <QuickEntryBar busqueda={busqueda} onChangeBusqueda={onChangeBusqueda} onQuickSaleClick={handleQuickSaleClick} />
+      <QuickSaleModal isOpen={showQuickSale} onClose={() => setShowQuickSale(false)} onAdd={handleAddQuickSale} />
 
       {/* Filtrado y grid */}
       <FilterTabs filtro={filtro} setFiltro={setFiltro} />
-      <ProductGrid productos={productosFiltrados} onAddToCart={onAddToCart} />
+      <ProductGrid productos={productosFiltrados} onAddToCart={onAddToCart} showStock />
 
-      {/* Banner fijo al pie con resumen */}
-      <div className="fixed bottom-0 left-0 right-0 bg-gray-300 text-gray-800 p-3 text-center">
-        {productosVenta.length} item{productosVenta.length !== 1 ? 's' : ''} = ${productosVenta.reduce((s, p) => s + p.total, 0).toFixed(2)}
+      {/* Banner fijo al pie con resumen y acción */}
+      <div
+        className={`fixed bottom-0 left-0 right-0 p-3 text-center rounded-t-lg transition-colors duration-200 ${
+          totalItems === 0
+            ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
+            : 'bg-green-600 text-white cursor-pointer'
+        }`}
+        onClick={() => {
+          if (totalItems > 0 && !processing) finalizarVenta();
+        }}
+      >
+        {processing
+          ? 'Procesando...'
+          : `${totalItems} item${totalItems !== 1 ? 's' : ''} = $${subtotal.toFixed(2)}`
+        }
       </div>
     </div>
   );
