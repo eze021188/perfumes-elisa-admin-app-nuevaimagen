@@ -1,3 +1,4 @@
+// src/components/ProductosItems.jsx
 import { useEffect, useState } from 'react';
 import { supabase } from '../supabase';
 
@@ -51,12 +52,12 @@ export default function ProductosItems() {
         />
       </div>
 
-      {/* Lista de productos */}
+      {/* Lista de productos alineados por columnas */}
       <div className="space-y-2">
         {productosFiltrados.map(producto => (
           <div
             key={producto.id}
-            className="flex flex-row flex-wrap md:grid md:grid-cols-[60px_1fr_120px_120px_80px] gap-2 md:gap-4 items-start md:items-center border rounded-lg p-2 shadow-sm hover:shadow transition text-xs min-h-20"
+            className="grid grid-cols-[60px_1fr_auto_auto_auto] gap-2 items-center border rounded-lg p-2 shadow-sm hover:shadow transition text-xs"
           >
             {/* Imagen */}
             <div className="w-14 h-14 bg-gray-100 rounded overflow-hidden flex items-center justify-center">
@@ -72,7 +73,7 @@ export default function ProductosItems() {
             </div>
 
             {/* Nombre + categoría */}
-            <div className="whitespace-normal break-words">
+            <div className="whitespace-normal break-words max-w-full">
               <div className="font-medium">{producto.nombre}</div>
               <div className="text-gray-500 text-[11px]">
                 {producto.categoria || 'Sin categoría'}
@@ -80,8 +81,8 @@ export default function ProductosItems() {
             </div>
 
             {/* Promoción */}
-            <div>
-              <label className="block text-gray-600 mb-1">Promoción</label>
+            <div className="flex flex-col items-start">
+              <label className="text-gray-600 mb-1">Promoción</label>
               <input
                 type="number"
                 value={producto.promocion ?? ''}
@@ -91,13 +92,13 @@ export default function ProductosItems() {
                 onBlur={e =>
                   actualizarCampo(producto.id, 'promocion', e.target.value)
                 }
-                className="w-16 border px-2 py-1 rounded text-right"
+                className="w-20 border px-2 py-1 rounded text-right"
               />
             </div>
 
             {/* Precio normal */}
-            <div>
-              <label className="block text-gray-600 mb-1">Precio normal</label>
+            <div className="flex flex-col items-start">
+              <label className="text-gray-600 mb-1">Precio normal</label>
               <input
                 type="number"
                 value={producto.precio_normal ?? ''}
@@ -107,7 +108,7 @@ export default function ProductosItems() {
                 onBlur={e =>
                   actualizarCampo(producto.id, 'precio_normal', e.target.value)
                 }
-                className="w-16 border px-2 py-1 rounded text-right"
+                className="w-20 border px-2 py-1 rounded text-right"
               />
             </div>
 
