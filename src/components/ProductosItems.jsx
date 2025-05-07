@@ -91,7 +91,7 @@ export default function ProductosItems() {
                 onBlur={e =>
                   actualizarCampo(producto.id, 'promocion', e.target.value)
                 }
-                className="w-full md:w-28 border px-2 py-1 rounded text-right"
+                className="w-20 border px-2 py-1 rounded text-right"
               />
             </div>
 
@@ -107,7 +107,7 @@ export default function ProductosItems() {
                 onBlur={e =>
                   actualizarCampo(producto.id, 'precio_normal', e.target.value)
                 }
-                className="w-full md:w-28 border px-2 py-1 rounded text-right"
+                className="w-20 border px-2 py-1 rounded text-right"
               />
             </div>
 
