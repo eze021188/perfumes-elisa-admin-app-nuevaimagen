@@ -2,6 +2,7 @@
 import React, { useRef } from 'react'
 import html2canvas from 'html2canvas'
 import { jsPDF } from 'jspdf'
+import logo from '../assets/Logo.png' // Importa tu logo con el nombre exacto del archivo
 
 /**
  * Componente que genera un PDF de ticket de venta
@@ -21,7 +22,7 @@ export default function TicketPDF({ venta }) {
     // Captura el ticket como imagen
     const canvas = await html2canvas(ticketRef.current)
     const imgData = canvas.toDataURL('image/png')
-    // Crea el PDF
+    // Crea el PDF con las mismas dimensiones
     const pdf = new jsPDF({ unit: 'px', format: [canvas.width, canvas.height] })
     pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height)
     pdf.save(`Ticket_Venta_${venta.id}.pdf`)
@@ -29,7 +30,16 @@ export default function TicketPDF({ venta }) {
 
   return (
     <div className="p-4 bg-white rounded shadow" ref={ticketRef}>
-      <h2 className="text-xl font-semibold mb-2">Ticket de Venta</h2>
+      {/* Logo de la empresa */}
+      <div className="flex justify-center mb-4">
+        <img
+          src={logo}
+          alt="Logo de la empresa"
+          className="w-24 h-auto"
+          crossOrigin="anonymous" // Para asegurar la captura en html2canvas
+        />
+      </div>
+      <h2 className="text-xl font-semibold mb-2 text-center">Ticket de Venta</h2>
       <p className="text-sm text-gray-600 mb-4">Código: <strong>{venta.id}</strong></p>
       <p className="text-sm text-gray-600">Cliente: <strong>{venta.cliente.nombre}</strong></p>
       <p className="text-sm text-gray-600 mb-4">Fecha: <strong>{new Date(venta.fecha).toLocaleString()}</strong></p>
@@ -56,7 +66,7 @@ export default function TicketPDF({ venta }) {
       </div>
       <button
         onClick={generatePDF}
-        className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700"
+        className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 w-full"
       >
         Descargar PDF
       </button>
