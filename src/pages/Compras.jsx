@@ -1,5 +1,4 @@
 // src/pages/Compras.jsx
-
 import React, { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
 
@@ -22,55 +21,31 @@ export default function Compras() {
   const [editingIdx, setEditingIdx] = useState(null)
   const [editItems, setEditItems] = useState([])
   const [invConfig, setInvConfig] = useState({
-  
-  
     gastosImportacion: '',
     tipoCambioImportacion: '',
     otrosGastos: '',
     targetIdx: null
-  });
-  const [nombresSugeridos, setNombresSugeridos] = useState([]);
+  })
+  const [nombresSugeridos, setNombresSugeridos] = useState([])
 
-  // 1) Carga inicial de compras + items
+  // 1) Carga inicial de compras e ítems
+  useEffect(() => { fetchCompras() }, [])
   useEffect(() => {
-    fetchCompras()
-  }, [])
-  useEffect(() => {
-    const cargarNombresProductos = async () => {
-      const { data, error } = await supabase.from('productos').select('nombre');
-  
+    ;(async () => {
+      const { data, error } = await supabase.from('productos').select('nombre')
       if (!error && data) {
-        const nombresUnicos = Array.from(new Set(data.map(p => p.nombre)));
-        setNombresSugeridos(nombresUnicos);
-      } else {
-        console.error('Error al obtener productos:', error);
+        setNombresSugeridos(Array.from(new Set(data.map(p => p.nombre))))
       }
-    };
-  
-    cargarNombresProductos();
-  }, []);
-  
+    })()
+  }, [])
 
   async function fetchCompras() {
-    const { data: cabeceras, error: errCab } = await supabase
-      .from('compras')
-      .select('*')
-      .order('created_at', { ascending: false });
-  
-    if (errCab) {
-      console.error('❌ Error al obtener compras:', errCab);
-      return;
-    }
-  
-    const { data: items, error: errItems } = await supabase
-      .from('compra_items')
-      .select('*');
-  
-    if (errItems) {
-      console.error('❌ Error al obtener compra_items:', errItems);
-      return;
-    }
-  
+    const { data: cabeceras = [], error: errCab } = await supabase
+      .from('compras').select('*').order('created_at', { ascending: false })
+    if (errCab) return console.error('Error al obtener compras:', errCab)
+    const { data: items = [], error: errItems } = await supabase
+      .from('compra_items').select('*')
+    if (errItems) return console.error('Error al obtener ítems de compra:', errItems)
     const combined = cabeceras.map(c => ({
       compra: c,
       items: items
@@ -81,18 +56,17 @@ export default function Compras() {
           cantidad: i.cantidad,
           precioUnitarioUSD: parseFloat(i.precio_unitario_usd)
         }))
-    }));
-    setSavedCompras(combined);
-    console.log("Compras cargadas:", combined);
-  }  
+    }))
+    setSavedCompras(combined)
+  }
 
-  // 2) Inputs
+  // 2) Manejo de inputs
   const manejarCambio = e => {
     const { name, value } = e.target
     setFormulario(prev => ({ ...prev, [name]: value }))
   }
 
-  // 3) Agregar/eliminar producto en el formulario
+  // 3) Agregar/eliminar ítem en el formulario
   const agregarProducto = () => {
     const { nombreProducto, cantidad, precioUnitarioUSD } = formulario
     if (!nombreProducto || !cantidad || !precioUnitarioUSD) return
@@ -110,8 +84,10 @@ export default function Compras() {
     items.reduce((sum, p) => sum + p.cantidad * p.precioUnitarioUSD, 0)
   const calcularTotal = (items, descuento) =>
     calcularSubtotal(items) - (descuento || 0)
+  const contarArticulos = items =>
+    items.reduce((sum, p) => sum + p.cantidad, 0)
 
-  // 5) Guardar compra + items
+  // 5) Guardar compra + sus ítems
   const guardarCompra = async () => {
     const cabecera = {
       numero_pedido: formulario.numeroPedido,
@@ -123,10 +99,7 @@ export default function Compras() {
       inventario_afectado: false
     }
     const { data: compra, error: errCab } = await supabase
-      .from('compras')
-      .insert(cabecera)
-      .select('*')
-      .single()
+      .from('compras').insert(cabecera).select('*').single()
     if (errCab) return alert('Error al guardar compra: ' + errCab.message)
 
     const payload = productosAgregados.map(p => ({
@@ -136,9 +109,7 @@ export default function Compras() {
       precio_unitario_usd: p.precioUnitarioUSD
     }))
     const { data: insItems, error: errItems } = await supabase
-      .from('compra_items')
-      .insert(payload)
-      .select('*')
+      .from('compra_items').insert(payload).select('*')
     if (errItems) return alert('Error al guardar ítems: ' + errItems.message)
 
     const normItems = insItems.map(i => ({
@@ -186,22 +157,19 @@ export default function Compras() {
     cancelarEdicion()
   }
 
-  // 7) Eliminar compra + revertir inventario si afectada
+  // 7) Eliminar compra + revertir inventario si ya afectado
   const eliminarCompra = async idx => {
     const { compra, items } = savedCompras[idx]
     try {
       if (compra.inventario_afectado) {
         const { data: catalogo = [] } = await supabase
-          .from('productos')
-          .select('id, nombre, stock')
+          .from('productos').select('id, nombre, stock')
         for (const p of items) {
           const prod = catalogo.find(x => x.nombre === p.nombreProducto)
           if (!prod) continue
           const nuevoStock = prod.stock - p.cantidad
-          if (nuevoStock > 0) {
+          if (nuevoStock >= 0) {
             await supabase.from('productos').update({ stock: nuevoStock }).eq('id', prod.id)
-          } else {
-            await supabase.from('productos').delete().eq('id', prod.id)
           }
         }
       }
@@ -215,149 +183,97 @@ export default function Compras() {
     }
   }
 
-  // 8) Afectar inventario: actualizar stock, precio y registrar en movimientos
-const confirmarAfectInventory = async () => {
-  console.log('⚙️ confirmarAfectInventory invocado con invConfig:', invConfig);
+  // 8) Afectar inventario
+  const confirmarAfectInventory = async () => {
+    const { gastosImportacion, tipoCambioImportacion, otrosGastos, targetIdx } = invConfig
+    if (targetIdx === null) return alert('Selecciona la compra a afectar')
+    if (!gastosImportacion || !tipoCambioImportacion || !otrosGastos)
+      return alert('Completa los campos de gastos')
 
-  const { gastosImportacion, tipoCambioImportacion, otrosGastos, targetIdx } = invConfig;
-  if (targetIdx === null) return alert('Selecciona la compra a afectar');
-  if (!gastosImportacion || !tipoCambioImportacion || !otrosGastos)
-    return alert('Completa los campos de gastos');
+    const { compra, items } = savedCompras[targetIdx]
+    // 8.1) Actualizar cabecera
+    const { error: errCab } = await supabase
+      .from('compras')
+      .update({
+        gastos_importacion: Number(gastosImportacion),
+        tipo_cambio_importacion: Number(tipoCambioImportacion),
+        otros_gastos: Number(otrosGastos),
+        inventario_afectado: true
+      })
+      .eq('id', compra.id)
+    if (errCab) return alert('Error al actualizar compra: ' + errCab.message)
 
-  // 1) Marcar la cabecera como afectada
-  const { compra, items } = savedCompras[targetIdx];
-  const { error: errCab } = await supabase
-    .from('compras')
-    .update({
-      gastos_importacion: Number(gastosImportacion),
-      tipo_cambio_importacion: Number(tipoCambioImportacion),
-      otros_gastos: Number(otrosGastos),
-      inventario_afectado: true
-    })
-    .eq('id', compra.id);
-  if (errCab) {
-    console.error('Error actualizando compra:', errCab);
-    return alert('Error al actualizar cabecera: ' + errCab.message);
-  }
+    // 8.2) Traer catálogo
+    const { data: catalogo = [], error: errCat } = await supabase
+      .from('productos').select('id, nombre, stock')
+    if (errCat) return alert('Error al cargar catálogo: ' + errCat.message)
 
-  // 2) Obtener catálogo
-const { data: catalogo = [], error: errCat } = await supabase
-.from('productos')
-.select('id, nombre, stock, precio_unitario_usd');
-if (errCat) {
-console.error('Error al traer catálogo:', errCat);
-return alert('Error al cargar catálogo: ' + errCat.message);
-}
+    // 8.3) Calcular costos y actualizar/insertar
+    for (const p of items) {
+      let prod = catalogo.find(x => x.nombre === p.nombreProducto)
 
-// 2.1) Cálculo proporcional de costos
-const subtotal = items.reduce((acc, p) => acc + p.cantidad * p.precioUnitarioUSD, 0);
-const descuento = Number(compra.descuento_total_usd || 0);
-const envioUSA = Number(compra.gastos_envio_usa || 0);
-const gastoImportacion = Number(gastosImportacion);
-const otros = Number(otrosGastos);
-const tipoCambio = Number(tipoCambioImportacion);
-
-for (const p of items) {
-const proporcion = (p.cantidad * p.precioUnitarioUSD) / subtotal;
-
-const prorrateoDescuento = proporcion * descuento;
-const prorrateoEnvio = proporcion * envioUSA;
-const prorrateoImportacion = proporcion * gastoImportacion;
-const prorrateoOtros = proporcion * otros;
-
-const costoFinalUSD =
-  (p.precioUnitarioUSD * p.cantidad + prorrateoEnvio + prorrateoImportacion + prorrateoOtros - prorrateoDescuento) / p.cantidad;
-
-const costoFinalMXN = costoFinalUSD * tipoCambio;
-
-// Guardamos los nuevos campos dentro del producto
-p.costoFinalUSD = parseFloat(costoFinalUSD.toFixed(4));
-p.costoFinalMXN = parseFloat(costoFinalMXN.toFixed(2));
-}
-
-  // 3) Recorrer items y actualizar/insertar + registrar movimiento
-  for (const p of items) {
-    let prodId;
-    const prod = catalogo.find(x => x.nombre === p.nombreProducto);
-
-    if (prod) {
-      prodId = prod.id;
-      const { error: errUpd } = await supabase
-        .from('productos')
-        .update({
-          stock: prod.stock + p.cantidad,
-          precio_unitario_usd: p.precioUnitarioUSD,
-          costo_final_usd: p.costoFinalUSD,
-          costo_final_mxn: p.costoFinalMXN
-        })
-        .eq('id', prodId);
-    
-      if (errUpd) {
-        console.error('Error actualizando producto:', errUpd);
-        return alert('Error al actualizar producto: ' + errUpd.message);
+      if (prod) {
+        // actualizar stock
+        await supabase
+          .from('productos')
+          .update({ stock: prod.stock + p.cantidad })
+          .eq('id', prod.id)
+      } else {
+        // crear nuevo producto
+        const { data: newProd, error: errInsProd } = await supabase
+          .from('productos')
+          .insert({
+            nombre: p.nombreProducto,
+            stock: p.cantidad
+          })
+          .select('id')
+          .single()
+        if (errInsProd) {
+          console.error('Error insertando producto:', errInsProd)
+          return alert('Error al crear producto: ' + errInsProd.message)
+        }
+        prod = newProd
       }
-    } else {
-      const { data: newProd, error: errInsProd } = await supabase
-  .from('productos')
-  .insert({
-    nombre: p.nombreProducto,
-    stock: p.cantidad,
-    precio_unitario_usd: p.precioUnitarioUSD,
-    costo_final_usd: p.costoFinalUSD,
-    costo_final_mxn: p.costoFinalMXN
-  })
-  .select('id')
-  .single();
-      if (errInsProd) {
-        console.error('Error insertando producto:', errInsProd);
-        return alert('Error al crear producto: ' + errInsProd.message);
-      }
-      prodId = newProd.id;
-    }
 
-    // 4) Insertar movimiento
-    const { data: movData, error: errMov } = await supabase
-      .from('movimientos_inventario')
-      .insert({
+      // registrar movimiento de entrada
+      await supabase.from('movimientos_inventario').insert({
         tipo: 'ENTRADA',
-        producto_id: prodId,
+        producto_id: prod.id,
         cantidad: p.cantidad,
         referencia: compra.numero_pedido,
         fecha: new Date().toISOString()
-      });
-    if (errMov) {
-      console.error('Error insertando movimiento:', errMov);
-      return alert('Error al registrar movimiento de inventario: ' + errMov.message);
+      })
     }
-  }
 
-  // 5) Refrescar y limpiar
-  fetchCompras();
-  setInvConfig({ gastosImportacion: '', tipoCambioImportacion: '', otrosGastos: '', targetIdx: null });
-  alert(`Inventario afectado para pedido ${compra.numero_pedido}`);
-};
+    // 8.4) Refrescar
+    fetchCompras()
+    setInvConfig({ gastosImportacion: '', tipoCambioImportacion: '', otrosGastos: '', targetIdx: null })
+    alert(`Inventario afectado para pedido ${compra.numero_pedido}`)
+  }
 
   return (
     <div className="max-w-4xl mx-auto p-6 bg-white rounded shadow">
+      {/* botones de control */}
       <div className="mb-4 flex gap-2">
-  <button
-    onClick={() => window.location.href = '/'}
-    className="bg-gray-700 hover:bg-gray-800 text-white px-4 py-2 rounded"
-  >
-    Volver al inicio
-  </button>
-  <button
-    onClick={() => setMostrarFormulario(!mostrarFormulario)}
-    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"
-  >
-    {mostrarFormulario ? 'Cancelar' : 'Registrar Compra'}
-  </button>
-</div>
+        <button
+          onClick={() => (window.location.href = '/')}
+          className="bg-gray-700 hover:bg-gray-800 text-white px-4 py-2 rounded"
+        >
+          Volver al inicio
+        </button>
+        <button
+          onClick={() => setMostrarFormulario(!mostrarFormulario)}
+          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"
+        >
+          {mostrarFormulario ? 'Cancelar' : 'Registrar Compra'}
+        </button>
+      </div>
 
+      {/* formulario de nueva compra */}
       {mostrarFormulario && (
-        <div className="mb-6">
-          {/* Cabecera */}
-          <div className="grid grid-cols-3 gap-4 mb-4">
+        <div className="mb-6 space-y-4">
+          {/* cabecera */}
+          <div className="grid grid-cols-3 gap-4">
             <input
               name="numeroPedido"
               placeholder="Número pedido"
@@ -380,9 +296,8 @@ p.costoFinalMXN = parseFloat(costoFinalMXN.toFixed(2));
               className="border p-2 rounded"
             />
           </div>
-
-          {/* Gastos/Descuento */}
-          <div className="grid grid-cols-3 gap-4 mb-4">
+          {/* gastos y descuento */}
+          <div className="grid grid-cols-3 gap-4">
             <input
               name="descuentoTotalUSD"
               type="number"
@@ -408,39 +323,34 @@ p.costoFinalMXN = parseFloat(costoFinalMXN.toFixed(2));
               className="border p-2 rounded"
             />
           </div>
-
-          {/* Agregar producto */}
-          <div className="flex gap-2 mb-4">
-          <div className="relative flex-1">
-  <input
-    name="nombreProducto"
-    placeholder="Producto"
-    value={formulario.nombreProducto}
-    onChange={manejarCambio}
-    className="border p-2 rounded w-full"
-    autoComplete="off"
-  />
-  {formulario.nombreProducto.length > 0 && (
-    <ul className="absolute z-10 bg-white border border-gray-300 w-full rounded mt-1 max-h-40 overflow-y-auto">
-      {nombresSugeridos
-        .filter(nombre =>
-          nombre.toLowerCase().includes(formulario.nombreProducto.toLowerCase())
-        )
-        .slice(0, 8)
-        .map((nombre, i) => (
-          <li
-            key={i}
-            className="p-2 hover:bg-blue-100 cursor-pointer"
-            onClick={() =>
-              setFormulario(prev => ({ ...prev, nombreProducto: nombre }))
-            }
-          >
-            {nombre}
-          </li>
-        ))}
-    </ul>
-  )}
-</div>
+          {/* agregar producto */}
+          <div className="flex gap-2 items-end">
+            <div className="relative flex-1">
+              <input
+                name="nombreProducto"
+                placeholder="Producto"
+                value={formulario.nombreProducto}
+                onChange={manejarCambio}
+                className="border p-2 rounded w-full"
+                autoComplete="off"
+              />
+              {formulario.nombreProducto && (
+                <ul className="absolute z-10 bg-white border border-gray-300 w-full rounded mt-1 max-h-40 overflow-y-auto">
+                  {nombresSugeridos
+                    .filter(n => n.toLowerCase().includes(formulario.nombreProducto.toLowerCase()))
+                    .slice(0, 8)
+                    .map((n, i) => (
+                      <li
+                        key={i}
+                        className="p-2 hover:bg-blue-100 cursor-pointer"
+                        onClick={() => setFormulario(prev => ({ ...prev, nombreProducto: n }))}
+                      >
+                        {n}
+                      </li>
+                    ))}
+                </ul>
+              )}
+            </div>
             <input
               name="cantidad"
               type="number"
@@ -461,8 +371,7 @@ p.costoFinalMXN = parseFloat(costoFinalMXN.toFixed(2));
               Agregar
             </button>
           </div>
-
-          {/* Tabla productos agregados */}
+          {/* tabla de productos agregados */}
           {productosAgregados.length > 0 && (
             <>
               <table className="w-full border-collapse mb-4 text-center">
@@ -498,7 +407,7 @@ p.costoFinalMXN = parseFloat(costoFinalMXN.toFixed(2));
         </div>
       )}
 
-      {/* Lista de compras registradas */}
+      {/* listado de compras */}
       {savedCompras.map(({ compra, items }, idx) => (
         <div key={compra.id} className="mb-4 border rounded">
           <div
@@ -511,27 +420,10 @@ p.costoFinalMXN = parseFloat(costoFinalMXN.toFixed(2));
             </div>
             <div className="text-xl">{expandedIdx === idx ? '−' : '+'}</div>
           </div>
+
           {expandedIdx === idx && (
             <div className="p-4">
-              <div className="mb-4">
-                <p>Subtotal: ${calcularSubtotal(items).toFixed(2)}</p>
-                <p>Descuento: ${compra.descuento_total_usd.toFixed(2)}</p>
-                <p className="font-bold">Total: ${calcularTotal(items, compra.descuento_total_usd).toFixed(2)}</p>
-              </div>
-              <div className="mb-4 space-x-2">
-                {editingIdx === idx ? (
-                  <>
-                    <button onClick={guardarEdicion} className="bg-green-500 text-white px-3 py-1 rounded">Guardar</button>
-                    <button onClick={cancelarEdicion} className="bg-gray-500 text-white px-3 py-1 rounded">Cancelar</button>
-                  </>
-                ) : (
-                  <>
-                    <button onClick={() => iniciarEdicion(idx)} className="bg-yellow-500 text-white px-3 py-1 rounded">Editar</button>
-                    <button onClick={() => eliminarCompra(idx)} className="bg-red-600 text-white px-3 py-1 rounded">Eliminar</button>
-                    <button onClick={() => setInvConfig(prev => ({ ...prev, targetIdx: idx }))} className="bg-purple-600 text-white px-3 py-1 rounded">Afectar inventario</button>
-                  </>
-                )}
-              </div>
+              {/* tabla de ítems */}
               <table className="w-full border-collapse mb-4 text-center">
                 <thead className="bg-gray-200">
                   <tr>
@@ -574,10 +466,40 @@ p.costoFinalMXN = parseFloat(costoFinalMXN.toFixed(2));
                   ))}
                 </tbody>
               </table>
+
+              {/* resumen y total artículos */}
+              <div className="flex justify-between items-center mb-4">
+                <div>
+                  <strong>Total artículos:</strong> {contarArticulos(items)}
+                </div>
+                <div className="text-right">
+                  <p>Subtotal: ${calcularSubtotal(items).toFixed(2)}</p>
+                  <p>Descuento: ${compra.descuento_total_usd.toFixed(2)}</p>
+                  <p className="font-bold">Total: ${calcularTotal(items, compra.descuento_total_usd).toFixed(2)}</p>
+                </div>
+              </div>
+
+              {/* acciones de edición, eliminación, afectar inventario */}
+              <div className="mb-4 space-x-2">
+                {editingIdx === idx ? (
+                  <>
+                    <button onClick={guardarEdicion} className="bg-green-500 text-white px-3 py-1 rounded">Guardar</button>
+                    <button onClick={cancelarEdicion} className="bg-gray-500 text-white px-3 py-1 rounded">Cancelar</button>
+                  </>
+                ) : (
+                  <>
+                    <button onClick={() => iniciarEdicion(idx)} className="bg-yellow-500 text-white px-3 py-1 rounded">Editar</button>
+                    <button onClick={() => eliminarCompra(idx)} className="bg-red-600 text-white px-3 py-1 rounded">Eliminar</button>
+                    <button onClick={() => setInvConfig(prev => ({ ...prev, targetIdx: idx }))} className="bg-purple-600 text-white px-3 py-1 rounded">Afectar inventario</button>
+                  </>
+                )}
+              </div>
+
+              {/* formulario de afectación de inventario */}
               {invConfig.targetIdx === idx && (
                 <div className="grid grid-cols-1 gap-2 mb-4">
                   <input
-                    placeholder="Gasto importación"
+                    placeholder="Gastos importación"
                     value={invConfig.gastosImportacion}
                     onChange={e => setInvConfig(prev => ({ ...prev, gastosImportacion: e.target.value }))}
                     className="border p-2 rounded"

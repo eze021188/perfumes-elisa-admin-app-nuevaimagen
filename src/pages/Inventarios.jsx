@@ -66,7 +66,7 @@ export default function Inventarios() {
               <tbody>
   {movimientos.map((m) => {
     const esDevolucion = m.motivo === 'devolucion_ventas';
-    const tipoTexto = esDevolucion ? 'DEVOLUCIÓN VENTA' : 'VENTA';
+    const tipoTexto = esDevolucion ? 'Entrada devolución' : 'VENTA';
     const cantidadTexto = m.tipo === 'SALIDA' ? `-${m.cantidad}` : `+${m.cantidad}`;
     const colorTexto = esDevolucion ? 'text-green-600' : 'text-red-600';
 

@@ -14,8 +14,11 @@ export default function ProductosStock() {
 
   const cargarProductos = async () => {
     const { data, error } = await supabase.from('productos').select('*');
-    if (error) console.error('Error al cargar productos:', error.message);
-    else setProductos(data);
+    if (error) {
+      console.error('Error al cargar productos:', error.message);
+    } else {
+      setProductos(data);
+    }
   };
 
   const verMovimientos = async (producto) => {
@@ -32,22 +35,22 @@ export default function ProductosStock() {
     }
 
     const formateados = data.map((m) => {
-      const cantidadMostrada =
-        m.tipo === 'SALIDA' ? -m.cantidad : m.cantidad;
-    
+      const cantidadMostrada = Math.abs(m.cantidad);
+      let descripcion = `${m.tipo}: ${cantidadMostrada}`;
+
+      if (m.tipo === 'SALIDA') {
+        descripcion = `Salida venta: -${cantidadMostrada}`;
+      } else if (m.tipo === 'ENTRADA') {
+        descripcion = `Entrada compra: ${cantidadMostrada}`;
+      } else if (m.tipo === 'DEVOLUCIÓN VENTA') {
+        descripcion = `Entrada devolución: ${cantidadMostrada}`;
+      }
+
       return {
         ...m,
-        descripcion:
-          m.tipo === 'SALIDA'
-            ? `Venta: ${cantidadMostrada}`
-            : m.tipo === 'ENTRADA'
-            ? `Compra: ${cantidadMostrada}`
-            : m.tipo === 'DEVOLUCION_VENTA'
-            ? `Devolución venta: ${cantidadMostrada}`
-            : `${m.tipo}: ${cantidadMostrada}`,
+        descripcion,
       };
     });
-    
 
     setMovimientos(formateados);
     setModalActivo(true);
