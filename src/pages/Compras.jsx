@@ -288,6 +288,9 @@ export default function Compras() {
               onChange={manejarCambio}
               className="border p-2 rounded"
             />
+          </div>
+          {/* fecha de compra */}
+          <div className="grid grid-cols-3 gap-4">
             <input
               name="fechaCompra"
               type="datetime-local"
