@@ -1,54 +1,92 @@
 // src/components/NewClientModal.jsx
-import React, { useState, useEffect, useRef } from 'react';
-import { X } from 'lucide-react';
-import { supabase } from '../supabase';
+import React, { useState, useEffect, useRef } from 'react'
+import { X } from 'lucide-react'
+import { supabase } from '../supabase'
 
-export default function NewClientModal({ isOpen, onClose, onClientAdded }) {
-  const [cliente, setCliente] = useState({
+export default function NewClientModal({
+  isOpen,
+  onClose,
+  onClientAdded,
+  cliente // si es edición, viene el objeto; si no, es null
+}) {
+  const inputRef = useRef(null)
+
+  const [form, setForm] = useState({
     nombre: '',
     telefono: '',
     correo: '',
     direccion: ''
-  });
-  const [errors, setErrors] = useState({ nombre: '', telefono: '', correo: '' });
-  const [loading, setLoading] = useState(false);
-  const inputRef = useRef(null);
+  })
+  const [errors, setErrors] = useState({
+    nombre: '',
+    telefono: '',
+    correo: ''
+  })
+  const [loading, setLoading] = useState(false)
 
-  // Enfocar el primer input al abrir el modal
+  // Cuando abra el modal, si viene un cliente, precargo el form
   useEffect(() => {
-    if (isOpen && inputRef.current) {
-      inputRef.current.focus();
+    if (isOpen) {
+      if (cliente) {
+        setForm({
+          nombre: cliente.nombre || '',
+          telefono: cliente.telefono || '',
+          correo: cliente.correo || '',
+          direccion: cliente.direccion || ''
+        })
+      } else {
+        setForm({ nombre: '', telefono: '', correo: '', direccion: '' })
+      }
+      setErrors({ nombre: '', telefono: '', correo: '' })
+      // foco al nombre
+      setTimeout(() => inputRef.current?.focus(), 0)
     }
-  }, [isOpen]);
+  }, [isOpen, cliente])
 
-  if (!isOpen) return null;
+  if (!isOpen) return null
 
-  // Validaciones de campos
   function validate() {
-    const errs = { nombre: '', telefono: '', correo: '' };
-    if (!cliente.nombre.trim()) errs.nombre = 'Requerido';
-    if (!cliente.telefono.trim()) errs.telefono = 'Requerido';
-    if (!cliente.correo.trim() || !cliente.correo.includes('@')) errs.correo = 'Email inválido';
-    setErrors(errs);
-    return !errs.nombre && !errs.telefono && !errs.correo;
+    const errs = { nombre: '', telefono: '', correo: '' }
+    if (!form.nombre.trim()) errs.nombre = 'Requerido'
+    if (!form.telefono.trim()) errs.telefono = 'Requerido'
+    if (!form.correo.trim() || !form.correo.includes('@')) errs.correo = 'Email inválido'
+    setErrors(errs)
+    return !errs.nombre && !errs.telefono && !errs.correo
   }
 
-  // Guardar cliente en Supabase
   async function handleSave() {
-    if (!validate()) return;
-    setLoading(true);
+    if (!validate()) return
+    setLoading(true)
+
     try {
-      const { data, error } = await supabase.from('clientes').insert([cliente]).single();
-      if (error) throw error;
-      onClientAdded(data);
-      onClose();
-      setCliente({ nombre: '', telefono: '', correo: '', direccion: '' });
-      setErrors({ nombre: '', telefono: '', correo: '' });
+      if (cliente) {
+        // edición
+        await supabase
+          .from('clientes')
+          .update({
+            nombre: form.nombre,
+            telefono: form.telefono,
+            correo: form.correo,
+            direccion: form.direccion
+          })
+          .eq('id', cliente.id)
+        // notifico al padre con los datos actualizados
+        onClientAdded({ id: cliente.id, ...form })
+      } else {
+        // creación
+        const { data, error } = await supabase
+          .from('clientes')
+          .insert([form])
+          .single()
+        if (error) throw error
+        onClientAdded(data)
+      }
+      onClose()
     } catch (err) {
-      console.error(err);
-      setErrors(prev => ({ ...prev, nombre: 'Error al guardar' }));
+      console.error(err)
+      setErrors(prev => ({ ...prev, nombre: 'Error al guardar' }))
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
   }
 
@@ -62,7 +100,10 @@ export default function NewClientModal({ isOpen, onClose, onClientAdded }) {
         >
           <X />
         </button>
-        <h2 className="text-lg font-semibold mb-4">Nuevo Cliente</h2>
+
+        <h2 className="text-lg font-semibold mb-4">
+          {cliente ? 'Editar Cliente' : 'Nuevo Cliente'}
+        </h2>
 
         {/* Nombre */}
         <label htmlFor="nc-nombre" className="block text-sm mb-1">Nombre*</label>
@@ -70,8 +111,8 @@ export default function NewClientModal({ isOpen, onClose, onClientAdded }) {
           id="nc-nombre"
           ref={inputRef}
           className={`w-full p-2 border rounded mb-1 ${errors.nombre ? 'border-red-500' : ''}`}
-          value={cliente.nombre}
-          onChange={e => setCliente({ ...cliente, nombre: e.target.value })}
+          value={form.nombre}
+          onChange={e => setForm({ ...form, nombre: e.target.value })}
           aria-invalid={!!errors.nombre}
           disabled={loading}
         />
@@ -83,8 +124,8 @@ export default function NewClientModal({ isOpen, onClose, onClientAdded }) {
           id="nc-telefono"
           type="tel"
           className={`w-full p-2 border rounded mb-1 ${errors.telefono ? 'border-red-500' : ''}`}
-          value={cliente.telefono}
-          onChange={e => setCliente({ ...cliente, telefono: e.target.value })}
+          value={form.telefono}
+          onChange={e => setForm({ ...form, telefono: e.target.value })}
           aria-invalid={!!errors.telefono}
           disabled={loading}
         />
@@ -96,8 +137,8 @@ export default function NewClientModal({ isOpen, onClose, onClientAdded }) {
           id="nc-correo"
           type="email"
           className={`w-full p-2 border rounded mb-1 ${errors.correo ? 'border-red-500' : ''}`}
-          value={cliente.correo}
-          onChange={e => setCliente({ ...cliente, correo: e.target.value })}
+          value={form.correo}
+          onChange={e => setForm({ ...form, correo: e.target.value })}
           aria-invalid={!!errors.correo}
           disabled={loading}
         />
@@ -108,19 +149,19 @@ export default function NewClientModal({ isOpen, onClose, onClientAdded }) {
         <input
           id="nc-direccion"
           className="w-full p-2 border rounded mb-4"
-          value={cliente.direccion}
-          onChange={e => setCliente({ ...cliente, direccion: e.target.value })}
+          value={form.direccion}
+          onChange={e => setForm({ ...form, direccion: e.target.value })}
           disabled={loading}
         />
 
         <button
           onClick={handleSave}
-          disabled={loading || !!errors.nombre || !!errors.telefono || !!errors.correo}
+          disabled={loading}
           className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {loading ? 'Guardando…' : 'Guardar Cliente'}
+          {loading ? 'Guardando…' : (cliente ? 'Guardar Cambios' : 'Guardar Cliente')}
         </button>
       </div>
     </div>
-  );
+  )
 }

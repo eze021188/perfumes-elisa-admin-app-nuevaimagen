@@ -4,19 +4,20 @@ import React, { useState } from 'react'
 import { supabase } from '../supabase'
 import { useNavigate } from 'react-router-dom'
 import { useClientes } from '../contexts/ClientesContext'
-import ModalCliente from '../components/ModalCliente'
+import NewClientModal from '../components/NewClientModal'
 
 export default function Clientes() {
   const navigate = useNavigate()
-  const { clientes, loading } = useClientes()
+  const { clientes, loading, actualizarCliente, eliminarCliente } = useClientes()
 
   const [busqueda, setBusqueda] = useState('')
   const [selectedIds, setSelectedIds] = useState([])
 
-  const [clienteActual, setClienteActual] = useState(null)
+  const [clienteActual, setClienteActual] = useState(null)       // para historial de ventas
   const [ventasCliente, setVentasCliente] = useState([])
 
-  const [ventaSeleccionada, setVentaSeleccionada] = useState(null)
+  const [modalOpen, setModalOpen] = useState(false)              // para crear/editar
+  const [editingClient, setEditingClient] = useState(null)       // null = nuevo, else cliente a editar
 
   const [pagina, setPagina] = useState(1)
   const [porPagina, setPorPagina] = useState(25)
@@ -28,26 +29,40 @@ export default function Clientes() {
   const inicio = (pagina - 1) * porPagina
   const clientesPag = filtrados.slice(inicio, inicio + porPagina)
 
-  // Carga historial de ventas de un cliente
-  const handleVerCompras = async cliente => {
-    setClienteActual(cliente)
-    setVentaSeleccionada(null)
-
+  // Historial de ventas
+  const handleVerCompras = async c => {
+    setClienteActual(c)
+    setVentasCliente([])
     const { data, error } = await supabase
       .from('ventas')
       .select('*')
-      .eq('cliente_id', cliente.id)
+      .eq('cliente_id', c.id)
       .order('created_at', { ascending: false })
-
-    if (error) console.error('Error fetching ventas:', error.message)
+    if (error) console.error(error.message)
     else setVentasCliente(data)
-
     setPagina(1)
   }
 
-  // Eliminación masiva de clientes (placeholder)
-  const handleEliminarSeleccionados = () => {
-    // TODO: implementar
+  // Abrir modal en “nuevo”
+  const abrirNuevo = () => {
+    setEditingClient(null)
+    setModalOpen(true)
+  }
+
+  // Abrir modal en “editar”
+  const abrirEditar = c => {
+    setEditingClient(c)
+    setModalOpen(true)
+  }
+
+  // Handler cuando se guarda (nuevo o editado)
+  const onClientSaved = async clienteData => {
+    if (editingClient) {
+      // era edición
+      await actualizarCliente(editingClient.id, clienteData)
+    }
+    // para creación, NewClientModal llamará internamente a agregarCliente()
+    setModalOpen(false)
   }
 
   if (loading) return <p>Cargando clientes…</p>
@@ -55,16 +70,16 @@ export default function Clientes() {
   return (
     <div className="p-6 max-w-5xl mx-auto">
       {/* Cabecera y controles */}
-      <div className="flex items-center mb-4">
+      <div className="flex flex-wrap items-center mb-4 gap-2">
         <button
           onClick={() => navigate('/')}
-          className="bg-gray-700 text-white px-3 py-1 rounded mr-2"
+          className="bg-gray-700 text-white px-3 py-1 rounded"
         >
           Volver al inicio
         </button>
         <button
-          onClick={() => navigate('/clientes/nuevo')}
-          className="bg-blue-600 text-white px-3 py-1 rounded mr-4"
+          onClick={abrirNuevo}
+          className="bg-blue-600 text-white px-3 py-1 rounded"
         >
           Agregar cliente
         </button>
@@ -73,11 +88,14 @@ export default function Clientes() {
           placeholder="Buscar cliente..."
           value={busqueda}
           onChange={e => setBusqueda(e.target.value)}
-          className="border p-2 rounded flex-1 mr-4"
+          className="border p-2 rounded flex-1 min-w-[200px]"
         />
         <button
           disabled={!selectedIds.length}
-          onClick={handleEliminarSeleccionados}
+          onClick={() => {
+            selectedIds.forEach(id => eliminarCliente(id))
+            setSelectedIds([])
+          }}
           className="bg-red-500 text-white px-3 py-1 rounded disabled:opacity-50"
         >
           Eliminar {selectedIds.length}
@@ -103,11 +121,26 @@ export default function Clientes() {
       <table className="min-w-full bg-white shadow rounded mb-6">
         <thead>
           <tr className="bg-gray-100">
-            <th className="p-2"><input type="checkbox" /></th>
+            <th className="p-2">
+              <input
+                type="checkbox"
+                checked={
+                  clientesPag.length > 0 &&
+                  selectedIds.length === clientesPag.length
+                }
+                onChange={e => {
+                  if (e.target.checked) {
+                    setSelectedIds(clientesPag.map(c => c.id))
+                  } else {
+                    setSelectedIds([])
+                  }
+                }}
+              />
+            </th>
             <th className="p-2">Nombre</th>
             <th className="p-2">Teléfono</th>
-            <th className="p-2">Correo</th>
-            <th className="p-2">Dirección</th>
+            <th className="p-2 hidden md:table-cell">Correo</th>
+            <th className="p-2 hidden md:table-cell">Dirección</th>
             <th className="p-2">Acciones</th>
           </tr>
         </thead>
@@ -119,20 +152,21 @@ export default function Clientes() {
                   type="checkbox"
                   checked={selectedIds.includes(c.id)}
                   onChange={() => {
-                    const next = selectedIds.includes(c.id)
-                      ? selectedIds.filter(id => id !== c.id)
-                      : [...selectedIds, c.id]
-                    setSelectedIds(next)
+                    setSelectedIds(prev =>
+                      prev.includes(c.id)
+                        ? prev.filter(x => x !== c.id)
+                        : [...prev, c.id]
+                    )
                   }}
                 />
               </td>
               <td className="p-2">{c.nombre}</td>
               <td className="p-2">{c.telefono}</td>
-              <td className="p-2">{c.correo}</td>
-              <td className="p-2">{c.direccion}</td>
+              <td className="p-2 hidden md:table-cell">{c.correo}</td>
+              <td className="p-2 hidden md:table-cell">{c.direccion}</td>
               <td className="p-2 space-x-2">
                 <button
-                  onClick={() => navigate(`/clientes/${c.id}/editar`)}
+                  onClick={() => abrirEditar(c)}
                   className="bg-yellow-400 text-white px-2 py-1 rounded"
                 >
                   Editar
@@ -163,7 +197,7 @@ export default function Clientes() {
                 <tr className="bg-gray-100">
                   <th className="p-2">Código</th>
                   <th className="p-2">Fecha</th>
-                  <th className="p-2">Forma de pago</th>
+                  <th className="p-2">Pago</th>
                   <th className="p-2 text-right">Total</th>
                 </tr>
               </thead>
@@ -172,11 +206,10 @@ export default function Clientes() {
                   <tr
                     key={v.id}
                     className="border-t cursor-pointer hover:bg-gray-50"
-                    onClick={() => setVentaSeleccionada(v)}
                   >
-                    <td className="p-2">{v.codigo}</td>
+                    <td className="p-2">{v.codigo_venta || v.codigo}</td>
                     <td className="p-2">
-                      {new Date(v.created_at).toLocaleString()}
+                      {new Date(v.created_at || v.fecha).toLocaleString()}
                     </td>
                     <td className="p-2">{v.forma_pago}</td>
                     <td className="p-2 text-right">${v.total.toFixed(2)}</td>
@@ -188,20 +221,13 @@ export default function Clientes() {
         </div>
       )}
 
-      {/* Modal de detalle de venta */}
-      {ventaSeleccionada && (
-        <ModalCliente
-          venta={ventaSeleccionada}
-          clientName={clienteActual.nombre}
-          isOpen={!!ventaSeleccionada}
-          onClose={() => setVentaSeleccionada(null)}
-          onDelete={async v => {
-            await supabase.from('ventas').delete().eq('id', v.id)
-            setVentaSeleccionada(null)
-            handleVerCompras(clienteActual)
-          }}
-        />
-      )}
+      {/* Modal para crear/editar cliente */}
+      <NewClientModal
+        isOpen={modalOpen}
+        onClose={() => setModalOpen(false)}
+        onClientAdded={onClientSaved}
+        cliente={editingClient}
+      />
     </div>
-  )
+)
 }
