@@ -151,7 +151,7 @@ export default function ProductosItems() {
             disabled={seleccionados.size === 0}
             className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
           >
-            Eliminar {seleccionados.size} seleccionados
+            Eliminar {seleccionados.size}
           </button>
           <button
             onClick={handleActualizar}
