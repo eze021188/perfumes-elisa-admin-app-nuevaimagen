@@ -2,7 +2,6 @@
 import React, { useRef } from 'react'
 import html2canvas from 'html2canvas'
 import { jsPDF } from 'jspdf'
-import logo from '../assets/Logo.png' // Importa tu logo con el nombre exacto del archivo
 
 /**
  * Componente que genera un PDF de ticket de venta
@@ -19,8 +18,10 @@ export default function TicketPDF({ venta }) {
 
   const generatePDF = async () => {
     if (!ticketRef.current) return
-    // Captura el ticket como imagen
-    const canvas = await html2canvas(ticketRef.current)
+    // Espera un tick para asegurar que las imágenes hayan cargado en el canvas
+    await new Promise(resolve => setTimeout(resolve, 100))
+    // Captura el ticket como imagen permitiendo CORS
+    const canvas = await html2canvas(ticketRef.current, { useCORS: true, allowTaint: false })
     const imgData = canvas.toDataURL('image/png')
     // Crea el PDF con las mismas dimensiones
     const pdf = new jsPDF({ unit: 'px', format: [canvas.width, canvas.height] })
@@ -30,13 +31,13 @@ export default function TicketPDF({ venta }) {
 
   return (
     <div className="p-4 bg-white rounded shadow" ref={ticketRef}>
-      {/* Logo de la empresa */}
+      {/* Logo de la empresa desde public/ */}
       <div className="flex justify-center mb-4">
         <img
-          src={logo}
+          src="/Logo.png"        
           alt="Logo de la empresa"
           className="w-24 h-auto"
-          crossOrigin="anonymous" // Para asegurar la captura en html2canvas
+          crossOrigin="anonymous"
         />
       </div>
       <h2 className="text-xl font-semibold mb-2 text-center">Ticket de Venta</h2>
