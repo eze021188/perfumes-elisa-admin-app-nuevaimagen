@@ -31,17 +31,23 @@ export default function ProductosStock() {
       return;
     }
 
-    const formateados = data.map((m) => ({
-      ...m,
-      descripcion:
-        m.tipo === 'SALIDA'
-          ? `Venta: ${m.cantidad}`
-          : m.tipo === 'ENTRADA'
-          ? `Compra: ${m.cantidad}`
-          : m.tipo === 'DEVOLUCION_VENTA'
-          ? `Devolución: ${m.cantidad}`
-          : `${m.tipo}: ${m.cantidad}`,
-    }));
+    const formateados = data.map((m) => {
+      const cantidadMostrada =
+        m.tipo === 'SALIDA' ? -m.cantidad : m.cantidad;
+    
+      return {
+        ...m,
+        descripcion:
+          m.tipo === 'SALIDA'
+            ? `Venta: ${cantidadMostrada}`
+            : m.tipo === 'ENTRADA'
+            ? `Compra: ${cantidadMostrada}`
+            : m.tipo === 'DEVOLUCION_VENTA'
+            ? `Devolución venta: ${cantidadMostrada}`
+            : `${m.tipo}: ${cantidadMostrada}`,
+      };
+    });
+    
 
     setMovimientos(formateados);
     setModalActivo(true);
