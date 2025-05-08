@@ -273,7 +273,7 @@ export default function Compras() {
       {mostrarFormulario && (
         <div className="mb-6 space-y-4">
           {/* cabecera */}
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <input
               name="numeroPedido"
               placeholder="Número pedido"
@@ -285,6 +285,13 @@ export default function Compras() {
               name="proveedor"
               placeholder="Proveedor"
               value={formulario.proveedor}
+              onChange={manejarCambio}
+              className="border p-2 rounded"
+            />
+            <input
+              name="fechaCompra"
+              type="datetime-local"
+              value={formulario.fechaCompra}
               onChange={manejarCambio}
               className="border p-2 rounded"
             />
