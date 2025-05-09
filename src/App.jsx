@@ -17,6 +17,9 @@ import Reportes from './pages/Reportes';
 import UsersPermissions from './pages/UsersPermissions';
 import TestPDF from './pages/TestPDF';
 
+// >>> Importa la nueva página SaldoClientes <<<
+import SaldosClientes from './pages/SaldosClientes'; // Asegúrate de que la ruta al archivo sea correcta
+
 export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const toggleSidebar = () => setSidebarOpen(o => !o);
@@ -50,6 +53,8 @@ export default function App() {
                     ['/clientes', 'Clientes'],
                     ['/compras', 'Compras'],
                     ['/ventas', 'Ventas'],
+                    // >>> Añade la nueva entrada para Saldos Clientes aquí <<<
+                    ['/saldos-clientes', 'Saldos Clientes'], // Esto crea el enlace en la barra lateral
                     ['/reportes', 'Reportes'],
                     ['/usuarios', 'Usuarios y permisos']
                   ].map(([to, label]) => (
@@ -62,12 +67,39 @@ export default function App() {
                             isActive ? 'bg-gray-700 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white'
                           }`
                         }
-                        onClick={() => setSidebarOpen(false)}
+                        onClick={() => setSidebarOpen(false)} // Cierra el sidebar móvil al hacer clic
                       >
                         {label}
                       </NavLink>
                     </li>
                   ))}
+                  {/* Enlaces de Debug (opcional, quitar para producción) */}
+                   <li>
+                      <NavLink
+                        to="/test-pdf"
+                        className={({ isActive }) =>
+                          `block px-4 py-2 rounded transition duration-150 ease-in-out ${
+                            isActive ? 'bg-gray-700 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                          }`
+                        }
+                         onClick={() => setSidebarOpen(false)}
+                      >
+                        Test PDF
+                      </NavLink>
+                   </li>
+                   <li>
+                      <NavLink
+                        to="/debug-ventas"
+                         className={({ isActive }) =>
+                          `block px-4 py-2 rounded transition duration-150 ease-in-out ${
+                            isActive ? 'bg-gray-700 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                          }`
+                        }
+                         onClick={() => setSidebarOpen(false)}
+                      >
+                        Debug Ventas
+                      </NavLink>
+                   </li>
                 </ul>
               </nav>
 
@@ -95,7 +127,7 @@ export default function App() {
 
               {/* Contenido principal - Añadido w-0 y bg-gray-100 */}
               {/* flex-1, overflow-auto, pt-12 md:pt-0 (padding para toggle movil), md:ml-64 (margen para sidebar) */}
-              <main className="flex-1 overflow-auto pt-12 md:pt-0 md:ml-64 bg-gray-100 w-0"> {/* <--- Añadido w-0 */}
+              <main className="flex-1 overflow-auto pt-12 md:pt-0 md:ml-64 bg-gray-100 w-0">
                  <Routes>
                   <Route path="/" element={<Home />} />
                   <Route path="/checkout" element={<Checkout />} />
@@ -105,10 +137,15 @@ export default function App() {
                   <Route path="/ventas" element={<Ventas />} />
                   <Route path="/reportes" element={<Reportes />} />
                   <Route path="/usuarios" element={<UsersPermissions />} />
+                  {/* Las rutas de debug pueden ir antes del comodín o al final */}
                   <Route path="/test-pdf" element={<TestPDF />} />
                   <Route path="/debug-ventas" element={<DebugVentas />} />
 
+                  {/* >>> Define la nueva ruta para Saldos Clientes aquí <<< */}
+                  <Route path="/saldos-clientes" element={<SaldosClientes />} /> // Esto renderiza el componente cuando la URL coincide
+
                   {/* Ruta comodín para evitar errores 404 */}
+                  {/* Importante: Coloca rutas específicas ANTES de la ruta comodín (*) */}
                   <Route path="*" element={<Home />} />
                 </Routes>
               </main>

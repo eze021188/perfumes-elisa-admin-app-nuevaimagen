@@ -82,7 +82,7 @@ export default function Ventas() {
         .eq('id', venta.id);
       if (errVenta) throw new Error('No se pudo eliminar la venta principal.');
 
-      toast.success(`✅ Venta ${venta.codigo_venta} cancelada correctamente.`);
+      toast.success(` Venta ${venta.codigo_venta} cancelada correctamente.`);
       setVentaSeleccionada(null);
       cargarVentas();
     } catch (err) {
