@@ -29,7 +29,8 @@ export default function App() {
           <Toaster position="top-right" reverseOrder={false} />
 
           <BrowserRouter>
-            <div className="min-h-screen flex bg-pink-50 relative">
+            {/* Contenedor principal: flex para layout horizontal, sin fondo aquí */}
+            <div className="min-h-screen flex relative">
 
               {/* Sidebar */}
               <nav
@@ -37,7 +38,7 @@ export default function App() {
                   `fixed inset-y-0 left-0 w-64 bg-black text-white p-6 z-50
                   transform transition-transform duration-200 ease-in-out
                   ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-                  md:translate-x-0 md:static md:inset-auto`
+                  md:translate-x-0 md:static md:inset-auto flex-shrink-0`
                 }
               >
                 <h1 className="text-2xl font-bold mb-6">Perfumes Elisa</h1>
@@ -57,8 +58,8 @@ export default function App() {
                         to={to}
                         end={to === '/'}
                         className={({ isActive }) =>
-                          `block px-4 py-2 rounded ${
-                            isActive ? 'bg-gray-700' : 'hover:bg-gray-800'
+                          `block px-4 py-2 rounded transition duration-150 ease-in-out ${
+                            isActive ? 'bg-gray-700 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white'
                           }`
                         }
                         onClick={() => setSidebarOpen(false)}
@@ -73,9 +74,9 @@ export default function App() {
               {/* Toggle móvil */}
               <button
                 className={
-                  `fixed top-4 left-4 z-60 bg-black text-white rounded-md
-                  w-14 h-12 flex items-center justify-center
-                  md:hidden transform transition-transform duration-200
+                  `fixed top-4 left-4 z-60 bg-gray-800 text-white rounded-md
+                  w-10 h-10 flex items-center justify-center text-xl
+                  md:hidden transition-transform duration-200 shadow-lg
                   ${sidebarOpen ? 'translate-x-64' : 'translate-x-0'}`
                 }
                 onClick={toggleSidebar}
@@ -92,9 +93,10 @@ export default function App() {
                 />
               )}
 
-              {/* Contenido principal */}
-              <main className="flex-1 mt-12 py-6 px-4 md:mt-0 md:ml-64 md:pl-4">
-                <Routes>
+              {/* Contenido principal - Añadido w-0 y bg-gray-100 */}
+              {/* flex-1, overflow-auto, pt-12 md:pt-0 (padding para toggle movil), md:ml-64 (margen para sidebar) */}
+              <main className="flex-1 overflow-auto pt-12 md:pt-0 md:ml-64 bg-gray-100 w-0"> {/* <--- Añadido w-0 */}
+                 <Routes>
                   <Route path="/" element={<Home />} />
                   <Route path="/checkout" element={<Checkout />} />
                   <Route path="/productos" element={<Productos />} />
@@ -103,7 +105,7 @@ export default function App() {
                   <Route path="/ventas" element={<Ventas />} />
                   <Route path="/reportes" element={<Reportes />} />
                   <Route path="/usuarios" element={<UsersPermissions />} />
-                  <Route path="/test-pdf" element={<TestPDF />} />  
+                  <Route path="/test-pdf" element={<TestPDF />} />
                   <Route path="/debug-ventas" element={<DebugVentas />} />
 
                   {/* Ruta comodín para evitar errores 404 */}

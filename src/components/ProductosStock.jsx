@@ -1,6 +1,7 @@
+// src/pages/ProductosStock.jsx
 import { useEffect, useState } from 'react';
 import { supabase } from '../supabase';
-import toast from 'react-hot-toast'; // Assuming you have react-hot-toast installed
+import toast from 'react-hot-toast'; // Asegúrate de tener react-hot-toast instalado
 
 export default function ProductosStock() {
   const [productos, setProductos] = useState([]);
@@ -8,24 +9,29 @@ export default function ProductosStock() {
   const [movimientos, setMovimientos] = useState([]);
   const [modalActivo, setModalActivo] = useState(false);
   const [productoActual, setProductoActual] = useState(null);
+  const [loading, setLoading] = useState(true); // Estado de carga añadido
 
   useEffect(() => {
     cargarProductos();
   }, []);
 
   const cargarProductos = async () => {
-    const { data, error } = await supabase.from('productos').select('*');
+    setLoading(true); // Establecer loading a true antes de cargar
+    // Se añadió ordenamiento por nombre
+    const { data, error } = await supabase.from('productos').select('*').order('nombre', { ascending: true });
     if (error) {
       console.error('Error al cargar productos:', error.message);
-      toast.error('Error al cargar productos.'); // Show a toast message
+      toast.error('Error al cargar productos.'); // Mostrar un mensaje toast
+      setProductos([]); // Asegurarse de que productos sea un array vacío en caso de error
     } else {
-      setProductos(data || []); // Ensure data is an array, even if null
+      setProductos(data || []); // Asegurarse de que data sea un array, incluso si es null
     }
+    setLoading(false); // Establecer loading a false después de cargar
   };
 
   const verMovimientos = async (producto) => {
     setProductoActual(producto);
-    // Clear previous movements when opening the modal for a new product
+    // Limpiar movimientos previos al abrir el modal para un nuevo producto
     setMovimientos([]);
 
     const { data, error } = await supabase
@@ -36,36 +42,37 @@ export default function ProductosStock() {
 
     if (error) {
       console.error('Error al cargar movimientos:', error.message);
-      toast.error('Error al cargar movimientos.'); // Show a toast message
+      toast.error('Error al cargar movimientos.'); // Mostrar un mensaje toast
+      setMovimientos([]); // Asegurarse de que movimientos sea un array vacío en caso de error
       return;
     }
 
-    const formateados = (data || []).map((m) => { // Ensure data is an array
-      const cantidadMostrada = Math.abs(m.cantidad || 0); // Ensure quantity is a number
-      let descripcion = `${m.tipo || 'Desconocido'}: ${cantidadMostrada}`; // Handle null type
-
+    const formateados = (data || []).map((m) => {
+      const cantidadMostrada = Math.abs(m.cantidad || 0);
+      let descripcion = 'Unknown movement';
+    
       if (m.tipo === 'SALIDA') {
-        descripcion = `Salida venta: -${cantidadMostrada}`;
+        descripcion = `Sales Out: -${cantidadMostrada}`;
       } else if (m.tipo === 'ENTRADA') {
-        // This is the generic entry, could be from adjustments or other unspecified sources
-        descripcion = `Entrada compra: ${cantidadMostrada}`; // Changed to be more generic
+        if (m.referencia?.toLowerCase().includes('cancelación') || m.referencia?.toLowerCase().includes('cancellation')) {
+          descripcion = `Sales Return: ${cantidadMostrada}`;
+        } else {
+          descripcion = `Purchases In: ${cantidadMostrada}`;
+        }
       } else if (m.tipo === 'DEVOLUCIÓN VENTA') {
-        descripcion = `Entrada devolución: ${cantidadMostrada}`;
-      } else if (m.tipo === 'ENTRADA_COMPRA') { // Condition for purchases
-        descripcion = `Entrada Compra: ${cantidadMostrada}`; // Specific message for purchases
-      } else if (m.tipo === 'REVERSION_COMPRA') { // Condition for purchase reversal (if implemented)
-         descripcion = `Salida reversión compra: -${cantidadMostrada}`;
+        descripcion = `Return In: ${cantidadMostrada}`;
       }
-
-
+    
+      const movimientoFecha = m.fecha ? new Date(m.fecha) : null;
+    
       return {
         ...m,
-        // Ensure the date is a valid Date object for toLocaleString
-        fecha: m.fecha ? new Date(m.fecha) : new Date(), // Use current date if date is null/invalid
-        descripcion: descripcion, // Use the generated description
-        referencia: m.referencia || '-', // Show '-' if reference is null
+        fecha: movimientoFecha instanceof Date && !isNaN(movimientoFecha.getTime()) ? movimientoFecha : 'Invalid Date',
+        descripcion,
+        referencia: m.referencia || '-',
       };
     });
+    
 
     setMovimientos(formateados);
     setModalActivo(true);
@@ -76,7 +83,8 @@ export default function ProductosStock() {
   );
 
   return (
-    <div>
+    <div className="container mx-auto p-4"> {/* Contenedor añadido y padding */}
+      <h2 className="text-2xl font-bold mb-4">Gestión de Stock</h2> {/* Título añadido */}
       {/* Buscador */}
       <div className="mb-4">
         <input
@@ -84,77 +92,86 @@ export default function ProductosStock() {
           placeholder="Buscar producto..."
           value={busqueda}
           onChange={(e) => setBusqueda(e.target.value)}
-          className="border border-gray-300 px-3 py-2 rounded w-full md:w-1/3"
+          className="border border-gray-300 px-3 py-2 rounded w-full md:w-1/3 focus:outline-none focus:ring-blue-500 focus:border-blue-500" // Estilos de enfoque añadidos
         />
       </div>
 
       {/* Lista de productos con stock */}
-      <div className="space-y-2">
-        {productosFiltrados.map((producto) => (
-          <div
-            key={producto.id} // Ensure each element has a unique key
-            className="grid grid-cols-[60px_1fr_100px_100px] gap-4 items-center border rounded-lg p-2 shadow-sm hover:shadow transition text-xs"
-          >
-            {/* Imagen */}
-            <div className="w-14 h-14 bg-gray-100 rounded overflow-hidden flex items-center justify-center">
-              {producto.imagen_url ? (
-                <img
-                  src={producto.imagen_url}
-                  alt={producto.nombre || 'Producto sin nombre'} // Alt text descriptivo
-                  className="object-cover w-full h-full"
-                  onError={(e) => { e.target.onerror = null; e.target.src="https://placehold.co/56x56/e5e7eb/4b5563?text=Sin+Imagen" }} // Placeholder in case of loading error
-                />
-              ) : (
-                <span className="text-gray-400 text-[10px] text-center">Sin imagen</span>
-              )}
-            </div>
-
-            {/* Nombre */}
-            <div className="whitespace-normal break-words">
-              <div className="font-medium">{producto.nombre || 'Producto sin nombre'}</div> {/* Handle null name */}
-              <div className="text-gray-500 text-[11px]">
-                Stock: {producto.stock ?? 0} {/* Show 0 if stock is null */}
+      {loading ? (
+        <div className="text-center text-gray-500">Cargando productos...</div>
+      ) : (
+        <div className="space-y-2">
+          {productosFiltrados.map((producto) => (
+            <div
+              key={producto.id} // Asegurarse de que cada elemento tenga una clave única
+              // Columnas de la cuadrícula ajustadas, padding, sombra, cursor, tamaño de texto
+              className="grid grid-cols-[60px_1fr_minmax(80px,100px)_minmax(80px,100px)] gap-4 items-center border rounded-lg p-3 shadow-sm hover:shadow-md transition cursor-pointer text-sm"
+              onClick={() => verMovimientos(producto)} // Hacer clicable todo el elemento
+            >
+              {/* Imagen */}
+              {/* Se añadió flex-shrink-0 */}
+              <div className="w-14 h-14 bg-gray-100 rounded overflow-hidden flex items-center justify-center flex-shrink-0">
+                {producto.imagen_url ? (
+                  <img
+                    src={producto.imagen_url}
+                    alt={`Imagen de ${producto.nombre || 'producto'}`} // Texto alt descriptivo mejorado
+                    className="object-cover w-full h-full"
+                    // Marcador de posición en caso de error de carga
+                    onError={(e) => { e.target.onerror = null; e.target.src="https://placehold.co/56x56/e5e7eb/4b5563?text=Sin+Imagen" }}
+                  />
+                ) : (
+                  // Padding añadido - Comentario movido a línea separada
+                  <span className="text-gray-400 text-[10px] text-center px-1">Sin imagen</span>
+                )}
               </div>
-            </div>
 
-            {/* Botón de movimientos */}
-            <div className="col-span-2 text-right">
-              <button
-                onClick={() => verMovimientos(producto)}
-                className="text-blue-600 hover:underline text-sm"
-              >
-                Ver movimientos
-              </button>
+              {/* Nombre y Stock */}
+              <div className="whitespace-normal break-words overflow-hidden"> {/* Overflow-hidden añadido */}
+                <div className="font-medium text-gray-800">{producto.nombre || 'Producto sin nombre'}</div> {/* Manejar nombre null */}
+                <div className="text-gray-500 text-xs">
+                  Stock: {producto.stock ?? 0} {/* Mostrar 0 si stock es null */}
+                </div>
+              </div>
+
+              {/* Botón de movimientos (Oculto, ya que todo el div es clicable) */}
+              {/* Mantener para el diseño, oculto en pantallas pequeñas */}
+               <div className="hidden md:flex col-span-2 justify-end items-center">
+                   {/* El manejador de clics está en el div padre */}
+               </div>
             </div>
-          </div>
-        ))}
-        {/* Message if no filtered products */}
-        {productosFiltrados.length === 0 && (
-            <div className="text-center text-gray-500 mt-4">
-                No se encontraron productos.
-            </div>
-        )}
-      </div>
+          ))}
+          {/* Mensaje si no hay productos filtrados */}
+          {!loading && productosFiltrados.length === 0 && (
+              <div className="text-center text-gray-500 mt-4">
+                  No se encontraron productos.
+              </div>
+          )}
+        </div>
+      )}
+
 
       {/* Modal de movimientos */}
       {modalActivo && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" // Added padding for mobile
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" // Padding añadido para móvil
           onClick={() => setModalActivo(false)}
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="bg-white w-full max-w-md md:max-w-lg lg:max-w-xl rounded-lg p-6 shadow-lg max-h-[90vh] overflow-y-auto" // Adjusted responsive width and added scroll
+            // Ancho responsivo ajustado y desplazamiento añadido
+            className="bg-white w-full max-w-md md:max-w-lg lg:max-w-xl rounded-lg p-6 shadow-lg max-h-[90vh] overflow-y-auto relative" // Posicionamiento relativo añadido
           >
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold">
-                Movimientos de: {productoActual?.nombre || 'Producto desconocido'} {/* Handle null name */}
+            {/* Encabezado hecho sticky */}
+            <div className="flex justify-between items-center mb-4 sticky top-0 bg-white pb-2">
+              <h3 className="text-lg font-semibold text-gray-800">
+                Movimientos de: {productoActual?.nombre || 'Producto desconocido'} {/* Manejar nombre null */}
               </h3>
+              {/* Estilo del botón de cerrar, margen izquierdo añadido */}
               <button
                 onClick={() => setModalActivo(false)}
-                className="text-gray-600 hover:text-gray-800 text-2xl font-bold" // Close button style
+                className="text-gray-600 hover:text-gray-800 text-2xl font-bold leading-none ml-4"
               >
-                ×
+                &times;
               </button>
             </div>
 
@@ -163,7 +180,7 @@ export default function ProductosStock() {
                     No hay movimientos registrados para este producto.
                 </div>
             ) : (
-                <div className="overflow-x-auto text-sm"> {/* Container for horizontal scroll */}
+                <div className="overflow-x-auto text-sm"> {/* Contenedor para desplazamiento horizontal */}
                   <table className="min-w-full border-collapse">
                     <thead className="bg-gray-100">
                       <tr>
@@ -173,20 +190,24 @@ export default function ProductosStock() {
                       </tr>
                     </thead>
                     <tbody>
-                      {movimientos.map((m) => (
-                        <tr key={m.id} className="border-t">
-                          <td className="p-2 whitespace-nowrap">{m.fecha instanceof Date && !isNaN(m.fecha) ? m.fecha.toLocaleString() : 'Fecha inválida'}</td>
-                          <td className="p-2">{m.descripcion}</td>
-                          <td className="p-2">{m.referencia || '-'}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
+                      {movimientos.map((m, index) => (
+                        // Usar una combinación de id e índice como clave si el id no fuera único (aunque debería serlo en una BD)
+                        <tr key={m.id || `mov-${index}`} className="border-t">
+                           {/* Formatear la fecha de forma segura */}
+                           <td className="p-2 whitespace-nowrap">
+                             {m.fecha instanceof Date && !isNaN(m.fecha.getTime()) ? m.fecha.toLocaleString() : 'Fecha inválida'}
+                           </td>
+                           <td className="p-2">{m.descripcion}</td>
+                           <td className="p-2">{m.referencia || '-'}</td>
+                         </tr>
+                       ))}
+                     </tbody>
+                   </table>
+                 </div>
+             )}
+           </div>
+         </div>
+       )}
+     </div>
+   );
+ }

@@ -1,9 +1,16 @@
 #root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
+  /* Eliminadas las reglas que limitaban el ancho y centraban la aplicación */
+  /* max-width: 1280px; */
+  /* margin: 0 auto; */
+  /* padding: 2rem; */
+  /* text-align: center; */
+
+  /* Puedes mantener o ajustar esto si es necesario para estilos globales del root */
+  line-height: 1.5; /* Ejemplo: mantener una propiedad global útil */
+  font-weight: 400; /* Ejemplo: mantener otra propiedad global */
 }
+
+/* El resto de tus estilos (logo, card, etc.) pueden permanecer si aún los usas */
 
 .logo {
   height: 6em;
