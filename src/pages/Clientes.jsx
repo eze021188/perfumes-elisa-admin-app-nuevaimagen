@@ -313,49 +313,94 @@ const handleCancelSale = async () => {
       </div>
 
       {/* Tabla de clientes */}
-      <div className="bg-white shadow-lg rounded-lg overflow-hidden mb-6">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-200">
-            <tr>
-              <th className="p-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                <input type="checkbox"
-                  checked={clientesPag.length > 0 && selectedIds.length > 0 && selectedIds.length === clientesPag.length}
-                  onChange={e => setSelectedIds(e.target.checked ? clientesPag.map(c => c.id) : [])}
-                  className="form-checkbox h-4 w-4 text-blue-600 rounded"
-                />
-              </th>
-              <th className="p-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Nombre</th>
-              <th className="p-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Teléfono</th>
-              <th className="p-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider hidden md:table-cell">Correo</th>
-              <th className="p-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider hidden md:table-cell">Dirección</th>
-              <th className="p-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {clientesPag.map(c => (
-              <tr key={c.id} className="border-t hover:bg-gray-50 transition duration-150 ease-in-out">
-                <td className="p-3 text-center whitespace-nowrap">
-                  <input type="checkbox"
-                    checked={selectedIds.includes(c.id)}
-                    onChange={() => setSelectedIds(prev =>
-                      prev.includes(c.id) ? prev.filter(x => x !== c.id) : [...prev, c.id]
-                    )}
-                    className="form-checkbox h-4 w-4 text-blue-600 rounded"
-                  />
-                </td>
-                <td className="p-3 whitespace-nowrap text-sm font-medium text-gray-900">{c.nombre || 'Sin nombre'}</td>
-                <td className="p-3 whitespace-nowrap text-sm text-gray-500">{c.telefono || 'Sin teléfono'}</td>
-                <td className="p-3 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">{c.correo || 'Sin correo'}</td>
-                <td className="p-3 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">{c.direccion || 'Sin dirección'}</td>
-                <td className="p-3 whitespace-nowrap text-center text-sm font-medium space-x-2">
-                  <button onClick={() => abrirEditar(c)} className="px-4 py-2 bg-yellow-500 text-white rounded-md shadow-sm hover:bg-yellow-600 transition duration-200 text-xs">Editar</button>
-                  <button onClick={() => handleVerCompras(c)} className="px-4 py-2 bg-blue-600 text-white rounded-md shadow-sm hover:bg-blue-700 transition duration-200 text-xs">Ver ventas</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+<div className="bg-white shadow-lg rounded-lg overflow-hidden mb-6">
+  <table className="min-w-full divide-y divide-gray-200">
+    <thead className="bg-gray-200">
+      <tr>
+        <th className="p-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+          <input
+            type="checkbox"
+            checked={
+              clientesPag.length > 0 &&
+              selectedIds.length > 0 &&
+              selectedIds.length === clientesPag.length
+            }
+            onChange={e =>
+              setSelectedIds(
+                e.target.checked ? clientesPag.map(c => c.id) : []
+              )
+            }
+            className="form-checkbox h-4 w-4 text-blue-600 rounded"
+          />
+        </th>
+        <th className="p-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+          Nombre
+        </th>
+        <th className="p-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+          Teléfono
+        </th>
+        <th className="p-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider hidden md:table-cell">
+          Correo
+        </th>
+        <th className="p-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider hidden md:table-cell">
+          Dirección
+        </th>
+        <th className="p-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">
+          Acciones
+        </th>
+      </tr>
+    </thead>
+    <tbody>
+      {clientesPag.map(c => (
+        <tr
+          key={c.id}
+          onClick={() => handleVerCompras(c)}
+          className="border-t hover:bg-gray-50 transition duration-150 ease-in-out cursor-pointer"
+        >
+          <td className="p-3 text-center whitespace-nowrap">
+            <input
+              type="checkbox"
+              checked={selectedIds.includes(c.id)}
+              onChange={e => {
+                e.stopPropagation();
+                setSelectedIds(prev =>
+                  prev.includes(c.id)
+                    ? prev.filter(x => x !== c.id)
+                    : [...prev, c.id]
+                );
+              }}
+              className="form-checkbox h-4 w-4 text-blue-600 rounded"
+            />
+          </td>
+          <td className="p-3 whitespace-nowrap text-sm font-medium text-gray-900">
+            {c.nombre || 'Sin nombre'}
+          </td>
+          <td className="p-3 whitespace-nowrap text-sm text-gray-500">
+            {c.telefono || 'Sin teléfono'}
+          </td>
+          <td className="p-3 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">
+            {c.correo || 'Sin correo'}
+          </td>
+          <td className="p-3 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">
+            {c.direccion || 'Sin dirección'}
+          </td>
+          <td className="p-3 whitespace-nowrap text-center text-sm font-medium">
+            <button
+              onClick={e => {
+                e.stopPropagation();
+                abrirEditar(c);
+              }}
+              className="px-4 py-2 bg-yellow-500 text-white rounded-md shadow-sm hover:bg-yellow-600 transition duration-200 text-xs"
+            >
+              Editar
+            </button>
+          </td>
+        </tr>
+      ))}
+    </tbody>
+  </table>
+</div>
+
 
       {/* === REINSERTANDO: Historial de ventas === */}
       {clienteActual && (
