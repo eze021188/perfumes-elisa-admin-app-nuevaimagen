@@ -2,6 +2,9 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
 import toast from 'react-hot-toast';
+import jsPDF from 'jspdf'; // Asegúrate de que jsPDF esté importado si lo usas directamente aquí para la generación
+import 'jspdf-autotable'; // Asegúrate de que jspdf-autotable esté importado
+
 
 export default function ModalEstadoCuenta({ isOpen, onClose, cliente, onGeneratePDF }) {
   const [movimientos, setMovimientos] = useState([]);
@@ -57,6 +60,8 @@ export default function ModalEstadoCuenta({ isOpen, onClose, cliente, onGenerate
   if (!isOpen || !cliente) return null; // No renderizar si no está abierto o no hay cliente
 
    // Calcular el saldo actual sumando todos los montos (si los movimientos ya están cargados)
+   // Aunque ya tenemos saldo_acumulado en el último movimiento, calcularlo aquí resume
+   // Esencialmente es lo mismo que movimientos[movimientos.length - 1]?.saldo_acumulado || 0
   const saldoActual = movimientos.reduce((sum, mov) => sum + mov.monto, 0);
 
 
@@ -67,7 +72,7 @@ export default function ModalEstadoCuenta({ isOpen, onClose, cliente, onGenerate
           return;
       }
       // Llama a la función generarPDFEstadoCuenta pasada desde la página principal
-      // Le pasamos el cliente y los movimientos detallados (ya con saldo_acumulado si lo calculaste arriba)
+      // Le pasamos el cliente y los movimientos detallados (ya con saldo_acumulado)
       onGeneratePDF(cliente, movimientos);
   };
 
@@ -110,16 +115,17 @@ export default function ModalEstadoCuenta({ isOpen, onClose, cliente, onGenerate
               <tbody className="bg-white divide-y divide-gray-200 text-sm">
                 {movimientos.map((mov) => (
                   <tr key={mov.id}>
+                    {/* === INICIO: Formato corregido para evitar Whitespace Text Nodes === */}
                     <td className="px-4 py-2 whitespace-nowrap">{new Date(mov.created_at).toLocaleDateString()}</td>
                     <td className="px-4 py-2 whitespace-nowrap">{mov.tipo_movimiento}</td>
-                    <td className="px-4 py-2 truncate max-w-[200px]">{mov.referencia_venta_id ? `Venta ${mov.referencia_venta_id.substring(0, 8)}...` : (mov.descripcion || '-')}</td> {/* Mostrar ref o desc */}
+                    <td className="px-4 py-2 truncate max-w-[200px]">{mov.referencia_venta_id ? `Venta ID: ${mov.referencia_venta_id.substring(0, 8)}...` : (mov.descripcion || '-')}</td>
                     <td className={`px-4 py-2 whitespace-nowrap text-right ${mov.monto > 0 ? 'text-red-700' : 'text-green-700'}`}>
-                       {mov.monto.toFixed(2)} {/* Muestra si es positivo o negativo */}
+                       {mov.monto.toFixed(2)}
                     </td>
                     <td className="px-4 py-2 whitespace-nowrap text-right font-medium">
-                        {/* Muestra el saldo acumulado calculado */}
                         {mov.saldo_acumulado.toFixed(2)}
                     </td>
+                    {/* === FIN: Formato corregido === */}
                   </tr>
                 ))}
               </tbody>

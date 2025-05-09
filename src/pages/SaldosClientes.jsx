@@ -1,92 +1,160 @@
 // src/pages/SaldosClientes.jsx
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { supabase } from '../supabase';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import jsPDF from 'jspdf';
-import 'jspdf-autotable'; // Necesario para las tablas en el PDF
+import 'jspdf-autotable';
 
-// >>> Importa los componentes de modales <<<
-import ModalAbono from '../components/ModalAbono'; // Asegúrate de que la ruta sea correcta
-import ModalSaldoFavor from '../components/ModalSaldoFavor'; // Asegúrate de que la ruta sea correcta
-import ModalEstadoCuenta from '../components/ModalEstadoCuenta'; // Asegúrate de que la ruta sea correcta
+// Importa los componentes de modales
+import ModalAbono from '../components/ModalAbono';
+import ModalSaldoFavor from '../components/ModalSaldoFavor';
+import ModalEstadoCuenta from '../components/ModalEstadoCuenta';
 
 
 export default function SaldosClientes() {
   const navigate = useNavigate();
 
-  const [clientesConSaldo, setClientesConSaldo] = useState([]);
+  const [allClientsWithCalculatedBalance, setAllClientsWithCalculatedBalance] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  // Estado para el filtro activo ('owing', 'credit', 'all')
+  // Por defecto mostramos solo los que deben (owing)
+  const [activeFilter, setActiveFilter] = useState('owing');
+
+  // Estado para la búsqueda por nombre
+  const [searchText, setSearchText] = useState('');
 
   // Estados para modales/popups
   const [showAbonoModal, setShowAbonoModal] = useState(false);
   const [showSaldoFavorModal, setShowSaldoFavorModal] = useState(false);
   const [showEstadoCuentaModal, setShowEstadoCuentaModal] = useState(false);
-  const [clienteSeleccionado, setClienteSeleccionado] = useState(null); // Cliente para abonos/estado de cuenta
+  const [clienteSeleccionado, setClienteSeleccionado] = useState(null);
 
   // Efecto para cargar los datos al iniciar
   useEffect(() => {
-    fetchClientesWithSaldo();
-  }, []); // Se ejecuta solo una vez al montar
+    fetchAllClientsAndCalculateBalances();
+  }, []);
 
-  // Función para cargar clientes con saldo pendiente (saldo > 0)
-  const fetchClientesWithSaldo = async () => {
+  // Función para obtener TODOS los clientes y calcular sus saldos
+  const fetchAllClientsAndCalculateBalances = async () => {
     setLoading(true);
     setError(null);
     try {
-      // >>> Consulta para obtener clientes y la suma de sus movimientos <<<
-      // Esta consulta obtiene todos los movimientos y luego calculamos el saldo en el frontend.
-      // Es una forma simple, pero para muchos movimientos y clientes,
-      // una función de base de datos o un View materializado podría ser más eficiente.
+      // 1. Obtener todos los clientes
+      const { data: clientesData, error: clientesError } = await supabase
+        .from('clientes')
+        .select('id, nombre');
+
+      if (clientesError) throw clientesError;
+
+      // 2. Obtener todos los movimientos de cuenta
       const { data: movimientosData, error: movimientosError } = await supabase
         .from('movimientos_cuenta_clientes')
-        .select(`
-          cliente_id,
-          clientes ( nombre, id ), // Join implícito para obtener nombre y ID del cliente
-          monto
-        `); // No filtramos aquí, procesamos en el frontend
+        .select('cliente_id, monto');
 
       if (movimientosError) throw movimientosError;
 
-      // Procesar los datos para calcular el saldo por cliente
-      const saldos = {};
-      movimientosData.forEach(mov => {
-        const clienteId = mov.cliente_id;
-        // Asegúrate de que el objeto 'clientes' existe (siempre debería existir si la FK es correcta)
-        if (mov.clientes === null) {
-             console.warn(`Movimiento ${mov.id} sin cliente asociado!`);
-             return; // Saltar este movimiento si no tiene cliente (debería evitarse con FK)
-        }
-        const clienteNombre = mov.clientes.nombre;
-        const monto = mov.monto;
+      // 3. Calcular saldos fusionando datos de clientes y movimientos
+      const clientBalancesMap = {};
 
-        if (!saldos[clienteId]) {
-          saldos[clienteId] = {
-            id: clienteId,
-            nombre: clienteNombre,
-            saldo: 0,
-          };
-        }
-        saldos[clienteId].saldo += monto;
+      // Inicializar todos los clientes con saldo 0
+      clientesData.forEach(cliente => {
+        clientBalancesMap[cliente.id] = {
+          id: cliente.id,
+          nombre: cliente.nombre,
+          saldo: 0,
+        };
       });
 
-      // Convertir el objeto a un array y filtrar los que tienen saldo > 0
-      // Opcional: ordenar por nombre o saldo
-      const clientesConSaldoArray = Object.values(saldos)
-         .filter(c => c.saldo > 0)
-         .sort((a, b) => a.nombre.localeCompare(b.nombre)); // Ordenar por nombre alfabéticamente
+      // Sumar los montos de los movimientos a los saldos correspondientes
+      movimientosData.forEach(mov => {
+        if (clientBalancesMap[mov.cliente_id]) {
+          clientBalancesMap[mov.cliente_id].saldo += mov.monto;
+        } else {
+            console.warn(`Movimiento encontrado para cliente ID ${mov.cliente_id} que no existe en la tabla clientes!`);
+        }
+      });
 
-      setClientesConSaldo(clientesConSaldoArray);
+      // Convertir el mapa a un array y ordenar
+      const clientsWithBalanceArray = Object.values(clientBalancesMap)
+         .sort((a, b) => a.nombre.localeCompare(b.nombre));
+
+      setAllClientsWithCalculatedBalance(clientsWithBalanceArray); // Guarda TODOS los clientes con su saldo
 
     } catch (err) {
-      console.error('Error cargando saldos:', err.message);
-      setError('Error al cargar los saldos de los clientes.');
-      toast.error('Error al cargar los saldos.');
+      console.error('Error cargando datos de clientes y saldos:', err.message);
+      setError('Error al cargar los datos de los clientes y sus saldos.');
+      toast.error('Error al cargar datos.');
     } finally {
       setLoading(false);
     }
   };
+
+  // --- Helper para formatear número con separador de miles y decimales ---
+  const formatNumberWithCommas = (amount) => {
+       return Math.abs(amount).toLocaleString('en-US', { // Usamos Math.abs porque el signo lo añadimos manualmente
+           minimumFractionDigits: 2,
+           maximumFractionDigits: 2,
+       });
+   };
+
+   // --- Helper para formatear el Saldo según las reglas ---
+   const formatSaldoDisplay = (saldo) => {
+       const formattedAmount = formatNumberWithCommas(saldo);
+
+       if (saldo > 0) {
+           // Por Cobrar (positivo), mostrar -$ + valor absoluto, color rojo
+           return `-${formattedAmount}`;
+       } else if (saldo < 0) {
+           // Saldo a Favor (negativo), mostrar $ + valor absoluto, color verde
+           return `$${formattedAmount}`;
+       } else {
+           // Saldo Cero, mostrar $0.00, color gris/neutro
+           return '$0.00';
+       }
+   };
+
+
+  // --- Cálculos de totales (usando useMemo) ---
+  const totalPorCobrar = useMemo(() => {
+    return allClientsWithCalculatedBalance
+      .filter(c => c.saldo > 0)
+      .reduce((sum, c) => sum + c.saldo, 0);
+  }, [allClientsWithCalculatedBalance]);
+
+  const totalSaldoFavor = useMemo(() => {
+    return allClientsWithCalculatedBalance
+      .filter(c => c.saldo < 0)
+      .reduce((sum, c) => sum + c.saldo, 0);
+  }, [allClientsWithCalculatedBalance]);
+
+
+  // --- Aplicar búsqueda y filtro de saldo (usando useMemo) ---
+  const filteredAndSearchedClients = useMemo(() => {
+    let result = allClientsWithCalculatedBalance;
+    const lowerSearchText = searchText.toLowerCase();
+
+    // 1. Aplicar búsqueda primero, si hay texto
+    if (searchText) {
+        result = result.filter(c =>
+            c.nombre.toLowerCase().includes(lowerSearchText)
+        );
+    }
+
+    // 2. Aplicar filtro de saldo al resultado de la búsqueda (o a la lista completa si no hay búsqueda)
+    if (activeFilter === 'owing') {
+      result = result.filter(c => c.saldo > 0);
+    } else if (activeFilter === 'credit') {
+      result = result.filter(c => c.saldo < 0);
+    }
+    // Si activeFilter es 'all', no filtramos por saldo en este paso
+
+    return result; // Retorna la lista final filtrada y buscada
+
+  }, [allClientsWithCalculatedBalance, activeFilter, searchText]); // Depende de los datos completos, filtro y texto de búsqueda
+
 
   // --- Funciones para abrir modales ---
   const openAbonoModal = (cliente) => {
@@ -107,14 +175,13 @@ export default function SaldosClientes() {
 
 
   // --- Funciones para registrar movimientos (serán pasadas a los modales) ---
-  // Estas funciones actualizan la base de datos y luego recargan la lista de saldos
-
+  // Después de un registro exitoso, volvemos a cargar TODOS los clientes y saldos
   const handleRecordAbono = async (clienteId, montoAbono, descripcion = 'Pago cliente') => {
       if (montoAbono <= 0) {
           toast.error("El monto del abono debe ser positivo.");
-          return { success: false }; // Indicar fallo
+          return { success: false };
       }
-      const montoMovimiento = -montoAbono; // Monto negativo
+      const montoMovimiento = -montoAbono;
 
       try {
           const { error } = await supabase
@@ -129,11 +196,11 @@ export default function SaldosClientes() {
 
           if (error) {
               console.error('Error al registrar abono:', error.message);
-              toast.error(`Error al registrar el abono: ${error.message}`); // Mostrar error específico si es útil
+              toast.error(`Error al registrar el abono: ${error.message}`);
               return { success: false, error: error.message };
           } else {
               toast.success('Abono registrado con éxito.');
-              fetchClientesWithSaldo(); // Vuelve a cargar los saldos para actualizar la lista en la página principal
+              fetchAllClientsAndCalculateBalances(); // <<< Recarga TODOS los datos
               return { success: true };
           }
       } catch (err) {
@@ -148,7 +215,7 @@ export default function SaldosClientes() {
           toast.error("El monto del crédito debe ser positivo.");
           return { success: false };
       }
-      const montoMovimiento = -montoCredito; // Monto negativo (a favor del cliente)
+      const montoMovimiento = -montoCredito;
 
       try {
           const { error } = await supabase
@@ -163,11 +230,11 @@ export default function SaldosClientes() {
 
           if (error) {
               console.error('Error al añadir crédito:', error.message);
-              toast.error(`Error al añadir saldo a favor: ${error.message}`); // Mostrar error específico
+              toast.error(`Error al añadir saldo a favor: ${error.message}`);
                return { success: false, error: error.message };
           } else {
               toast.success('Saldo a favor añadido con éxito.');
-              fetchClientesWithSaldo(); // Vuelve a cargar los saldos para actualizar la lista
+              fetchAllClientsAndCalculateBalances(); // <<< Recarga TODOS los datos
               return { success: true };
           }
       } catch (err) {
@@ -178,7 +245,6 @@ export default function SaldosClientes() {
   };
 
   // --- Función para generar PDF (Llamada desde ModalEstadoCuenta) ---
-  // Esta función necesita recibir el cliente y los movimientos detallados (ya cargados y procesados en el modal)
   const generarPDFEstadoCuenta = (cliente, movimientosDetallados) => {
       if (!cliente || !movimientosDetallados || movimientosDetallados.length === 0) {
           toast('No hay datos para generar el PDF.', { icon: 'ℹ️' });
@@ -194,42 +260,41 @@ export default function SaldosClientes() {
       const rows = movimientosDetallados.map(mov => [
           new Date(mov.created_at).toLocaleDateString(),
           mov.tipo_movimiento,
-          // Mostrar referencia de venta si existe, si no la descripción
           mov.referencia_venta_id ? `Venta ID: ${mov.referencia_venta_id.substring(0, 8)}...` : (mov.descripcion || '-'),
-          mov.monto.toFixed(2), // Monto del movimiento (+ o -)
-          // Usar el saldo acumulado calculado en el modal
-          mov.saldo_acumulado.toFixed(2)
+          // Monto del movimiento: muestra el signo real (+ o -) para que el estado de cuenta tenga sentido
+          // Usamos formatNumberWithCommas para el formato, y añadimos el signo manualmente
+          `${mov.monto < 0 ? '-' : '+'}${formatNumberWithCommas(mov.monto)}`,
+          // Saldo Acumulado: Aplicamos el formato especial condicional
+          formatSaldoDisplay(mov.saldo_acumulado)
       ]);
 
-      // El saldo final ya es el último saldo_acumulado de la lista de movimientos detallados
-       const saldoFinal = movimientosDetallados.length > 0 ? movimientosDetallados[movimientosDetallados.length - 1].saldo_acumulado : 0;
+      // Saldo final: Aplicamos el formato especial condicional
+      const saldoFinal = movimientosDetallados.length > 0 ? movimientosDetallados[movimientosDetallados.length - 1].saldo_acumulado : 0;
+       const saldoFinalDisplay = formatSaldoDisplay(saldoFinal);
 
 
       doc.autoTable({
           head: [['Fecha', 'Tipo', 'Referencia / Descripción', 'Monto', 'Saldo Acumulado']],
           body: rows,
           startY: 35,
-           didDrawPage: (data) => { // Opcional: Añadir pie de página si es largo
+           didDrawPage: (data) => {
               let pageNumber = doc.internal.getNumberOfPages()
               doc.setFontSize(8)
-              // Posicionar el número de página en la parte inferior derecha
               doc.text('Página ' + pageNumber, doc.internal.pageSize.width - data.settings.margin.right, doc.internal.pageSize.height - 5, { align: 'right' })
            },
           styles: { fontSize: 8, cellPadding: 2 },
           headStyles: { fillColor: [200, 200, 200], textColor: [0, 0, 0] },
-          columnStyles: { // Alineación de columnas
-              3: { halign: 'right' }, // Monto a la derecha
-              4: { halign: 'right' } // Saldo acumulado a la derecha
+          columnStyles: {
+              3: { halign: 'right' },
+              4: { halign: 'right' }
           },
-          margin: { top: 30, right: 10, bottom: 10, left: 10 } // Márgenes para evitar superposición con encabezado/pie
+          margin: { top: 30, right: 10, bottom: 10, left: 10 }
       });
 
-      // Añadir saldo final después de la tabla
        const finalY = doc.lastAutoTable.finalY + 10;
-       doc.text(`Saldo Actual: $${saldoFinal.toFixed(2)}`, 10, finalY);
+       doc.text(`Saldo Actual: ${saldoFinalDisplay}`, 10, finalY);
 
 
-      // Abrir PDF en una nueva ventana
       doc.output('dataurlnewwindow');
   };
 
@@ -241,7 +306,7 @@ export default function SaldosClientes() {
       <div className="flex flex-col md:flex-row items-center justify-between gap-6 mb-8">
         <button
           onClick={() => navigate('/')}
-          className="px-6 py-2 bg-gray-700 text-white font-semibold rounded-lg shadow-md hover:bg-gray-800 transition duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-opacity-50"
+          className="px-6 py-2 bg-gray-700 text-white font-semibold rounded-lg shadow-md hover:bg-gray-800 transition duration-200 ease-in-out focus:outline-none focus:ring-2 focus::ring-gray-500 focus:ring-opacity-50"
         >
           Volver al inicio
         </button>
@@ -251,62 +316,128 @@ export default function SaldosClientes() {
          <div className="w-full md:w-[150px]" /> {/* Spacer */}
       </div>
 
-      {/* Barra de búsqueda (Opcional, implementar si necesitas buscar clientes por nombre) */}
-      {/* <div className="mb-6">
-           <input type="text" placeholder="Buscar cliente..." className="p-2 border rounded w-full" />
-      </div> */}
+      {/* Área de Resumen de Totales y Filtros */}
+      <div className="bg-white rounded-lg shadow p-6 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
+              {/* Resumen Por Cobrar */}
+              <div className="text-center md:text-left">
+                  <p className="text-lg font-medium text-gray-600">Total Por Cobrar</p>
+                  {/* Formato específico: -$ seguido del valor absoluto formateado */}
+                  <p className="text-2xl font-bold text-red-600">
+                      -${formatNumberWithCommas(totalPorCobrar)}
+                  </p>
+              </div>
 
-      {/* Tabla de Clientes con Saldo */}
+              {/* Resumen Saldo a Favor */}
+              <div className="text-center md:text-left">
+                   <p className="text-lg font-medium text-gray-600">Total Saldo a Favor</p>
+                  {/* Formato específico: $ seguido del valor absoluto formateado (sin signo negativo) */}
+                  <p className="text-2xl font-bold text-green-600">
+                       ${formatNumberWithCommas(totalSaldoFavor)}
+                  </p>
+              </div>
+
+              {/* Controles de Filtro y Búsqueda */}
+              {/* Usamos flexbox en columnas con gap para separar las líneas */}
+              <div className="flex flex-col gap-3 justify-center md:justify-end"> {/* Cambiado a flex-col con gap */}
+                  {/* Primera fila de botones de filtro */}
+                  <div className="flex space-x-3 justify-center md:justify-end">
+                      <button
+                          onClick={() => setActiveFilter('owing')}
+                          className={`px-4 py-2 border rounded-md text-sm font-semibold transition duration-200 ease-in-out
+                              ${activeFilter === 'owing'
+                                  ? 'bg-blue-600 text-white border-blue-600 shadow-md'
+                                  : 'bg-white text-blue-600 border-blue-600 hover:bg-blue-50'
+                              }`}
+                      >
+                          Clientes por Cobrar ({allClientsWithCalculatedBalance.filter(c => c.saldo > 0).length})
+                      </button>
+                       <button
+                          onClick={() => setActiveFilter('credit')}
+                           className={`px-4 py-2 border rounded-md text-sm font-semibold transition duration-200 ease-in-out
+                               ${activeFilter === 'credit'
+                                   ? 'bg-green-600 text-white border-green-600 shadow-md'
+                                   : 'bg-white text-green-600 border-green-600 hover:bg-green-50'
+                               }`}
+                      >
+                          Clientes Saldo a Favor ({allClientsWithCalculatedBalance.filter(c => c.saldo < 0).length})
+                      </button>
+                  </div>
+                  {/* Segunda fila: Botón "Mostrar todos" y campo de búsqueda */}
+                  <div className="flex space-x-3 justify-center md:justify-end">
+                      <button
+                           onClick={() => setActiveFilter('all')}
+                            className={`px-4 py-2 border rounded-md text-sm font-semibold transition duration-200 ease-in-out
+                                ${activeFilter === 'all'
+                                    ? 'bg-gray-600 text-white border-gray-600 shadow-md'
+                                    : 'bg-white text-gray-600 border-gray-600 hover:bg-gray-100'
+                                }`}
+                       >
+                           Mostrar todos ({allClientsWithCalculatedBalance.length})
+                       </button>
+                       {/* Campo de búsqueda */}
+                       <input
+                           type="text"
+                           placeholder="Buscar cliente..."
+                           value={searchText}
+                           onChange={(e) => setSearchText(e.target.value)}
+                           className="p-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                       />
+                  </div>
+              </div>
+          </div>
+      </div>
+
+
+      {/* Tabla de Clientes Filtrados y Buscados */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
         {loading ? (
           <p className="p-4 text-center">Cargando...</p>
         ) : error ? (
           <p className="p-4 text-center text-red-500">{error}</p>
-        ) : clientesConSaldo.length === 0 ? (
-          <p className="p-4 text-center">No hay clientes con saldo pendiente actualmente.</p>
+        ) : filteredAndSearchedClients.length === 0 ? (
+          <p className="p-4 text-center text-gray-500">
+              {searchText ? `No se encontraron clientes para "${searchText}" con el filtro actual.` : (
+                  activeFilter === 'owing' ? "No hay clientes con saldo pendiente actualmente." :
+                  activeFilter === 'credit' ? "No hay clientes con saldo a favor actualmente." :
+                  "No hay clientes registrados en el sistema."
+              )}
+          </p>
         ) : (
-          <div className="overflow-x-auto"> {/* Asegura scroll en pantallas pequeñas */}
+          <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Cliente
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Saldo Pendiente
-                  </th>
-                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Acciones
-                  </th>
-                </tr>
+                {/* === Formato corregido para evitar Whitespace Text Nodes en thead === */}
+                <tr><th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cliente</th><th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Saldo</th><th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th></tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {clientesConSaldo.map(cliente => (
+                {filteredAndSearchedClients.map(cliente => (
                   // Fila clicable para abrir estado de cuenta
                   <tr key={cliente.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => openEstadoCuentaModal(cliente)}>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                       {cliente.nombre}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-right font-semibold">
-                      ${cliente.saldo.toFixed(2)} {/* Mostrar el saldo calculado */}
+                    {/* Aplicamos el formato especial condicional según el saldo */}
+                    <td className={`px-6 py-4 whitespace-nowrap text-sm text-right font-semibold
+                        ${cliente.saldo > 0 ? 'text-red-600' : cliente.saldo < 0 ? 'text-green-600' : 'text-gray-700'}`}>
+                      {formatSaldoDisplay(cliente.saldo)}
                     </td>
                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">
                         {/* Botones de acción, prevenimos la propagación del clic */}
                         <button
                             onClick={(e) => { e.stopPropagation(); openAbonoModal(cliente); }}
-                            className="text-blue-600 hover:text-blue-900 mr-3 text-sm" // Añadido text-sm
+                            className="text-blue-600 hover:text-blue-900 mr-3 text-sm"
                             title="Registrar Abono"
                         >
                             Abonar
                         </button>
                          <button
                             onClick={(e) => { e.stopPropagation(); openSaldoFavorModal(cliente); }}
-                            className="text-green-600 hover:text-green-900 text-sm" // Añadido text-sm
+                            className="text-green-600 hover:text-green-900 text-sm"
                              title="Añadir Saldo a Favor"
                         >
-                            + Saldo Favor
+                            Saldo Favor
                         </button>
-                         {/* El clic en la fila abre el estado de cuenta, no necesitas un botón aquí */}
                      </td>
                   </tr>
                 ))}
@@ -316,30 +447,24 @@ export default function SaldosClientes() {
         )}
       </div>
 
-      {/* Modales (YA NO ESTÁN COMENTADOS) */}
-
-      {/* Modal para registrar Abono */}
+      {/* Modales */}
       <ModalAbono
           isOpen={showAbonoModal}
-          onClose={() => setShowAbonoModal(false)}
-          cliente={clienteSeleccionado} // Pasa el cliente seleccionado al modal
-          onRecordAbono={handleRecordAbono} // Pasa la función para registrar abono
+          onClose={() => {setShowAbonoModal(false); setClienteSeleccionado(null);}}
+          cliente={clienteSeleccionado}
+          onRecordAbono={handleRecordAbono}
       />
-
-      {/* Modal para añadir Saldo a Favor */}
       <ModalSaldoFavor
            isOpen={showSaldoFavorModal}
-           onClose={() => setShowSaldoFavorModal(false)}
-           cliente={clienteSeleccionado} // Pasa el cliente seleccionado al modal
-           onAddCredit={handleAddCredit} // Pasa la función para añadir crédito
+           onClose={() => {setShowSaldoFavorModal(false); setClienteSeleccionado(null);}}
+           cliente={clienteSeleccionado}
+           onAddCredit={handleAddCredit}
        />
-
-      {/* Modal para ver Estado de Cuenta y descargar PDF */}
       <ModalEstadoCuenta
            isOpen={showEstadoCuentaModal}
-           onClose={() => setShowEstadoCuentaModal(false)}
-           cliente={clienteSeleccionado} // Pasa el cliente seleccionado al modal
-           onGeneratePDF={generarPDFEstadoCuenta} // Pasa la función para generar PDF
+           onClose={() => {setShowEstadoCuentaModal(false); setClienteSeleccionado(null);}}
+           cliente={clienteSeleccionado}
+           onGeneratePDF={generarPDFEstadoCuenta}
       />
 
     </div>
