@@ -9,8 +9,8 @@ import QuickSaleModal from '../components/QuickSaleModal';
 import ClientSelector from '../components/ClientSelector';
 import NewClientModal from '../components/NewClientModal';
 import FilterTabs from '../components/FilterTabs';
-import ProductGrid from '../components/ProductGrid';
-import ModalCheckout from '../components/ModalCheckout';
+import ProductGrid from '../components/ProductGrid'; // Asegúrate de que esta importación sea correcta
+import ModalCheckout from '../components/ModalCheckout'; // Asegúrate de que esta importación sea correcta
 
 export default function Checkout() {
   const navigate = useNavigate();
@@ -37,6 +37,7 @@ export default function Checkout() {
       const prodMapped = (prod || []).map(p => {
         let imagenUrl = p.imagenUrl || p.imagen_url || p.imagen || '';
         if (imagenUrl && !imagenUrl.startsWith('http')) {
+          // Obtener la URL pública del bucket 'productos'
           const { data } = supabase.storage.from('productos').getPublicUrl(p.imagen);
           imagenUrl = data.publicUrl;
         }
@@ -63,24 +64,29 @@ export default function Checkout() {
   }
   const discountAmount = originalSubtotal - subtotal;
 
+  // Función para agregar producto al carrito
   const onAddToCart = producto => {
     setProductosVenta(prev => {
       const existe = prev.find(p => p.id === producto.id);
       if (existe) {
+        // Verificar stock antes de aumentar la cantidad
         if (existe.cantidad + 1 > (producto.stock || 0)) {
           toast.error('Stock insuficiente');
-          return prev;
+          return prev; // No modificar el estado si no hay stock
         }
+        // Aumentar cantidad y recalcular total parcial
         return prev.map(p =>
           p.id === producto.id
             ? { ...p, cantidad: p.cantidad + 1, total: (p.cantidad + 1) * (p.promocion ?? 0) }
             : p
         );
       }
+      // Agregar nuevo producto con cantidad 1 y total parcial inicial
       return [...prev, { ...producto, cantidad: 1, total: producto.promocion ?? 0 }];
     });
   };
 
+  // Función para abrir el modal de venta
   const openSaleModal = () => {
     if (!clienteSeleccionado || totalItems === 0) {
       // Mostrar un mensaje de advertencia si no hay cliente o ítems
@@ -94,6 +100,7 @@ export default function Checkout() {
     setShowSaleModal(true);
   };
 
+  // Función para finalizar la venta
   const handleFinalize = async () => {
     setProcessing(true);
     try {
@@ -106,8 +113,7 @@ export default function Checkout() {
 
       if (errorVentasPrevias) {
          console.error('Error al obtener ventas previas:', errorVentasPrevias.message);
-         // Considerar si lanzar un error aquí o intentar generar un código básico
-         // Por ahora, si falla, generamos un código basado en 0 ventas previas
+         // Si falla, intentamos generar un código básico
       }
 
       // Generar el nuevo código de venta
@@ -122,16 +128,17 @@ export default function Checkout() {
       const codigo = 'VT' + String(nextCodigoNumber).padStart(5, '0');
 
 
+      // Insertar cabecera de venta
       const { data: ventaInsertada, error: errorVenta } = await supabase
         .from('ventas')
         .insert([{
           codigo_venta: codigo,
           cliente_id: clienteSeleccionado.id,
-          subtotal,
+          subtotal: originalSubtotal, // Guardar el subtotal original
           forma_pago: paymentType,
           tipo_descuento: discountType,
-          valor_descuento: discountAmount,
-          total: subtotal // El total ya incluye el descuento aplicado
+          valor_descuento: discountAmount, // Guardar el monto del descuento aplicado
+          total: subtotal // Guardar el total final con descuento
         }])
         .select('id')
         .single();
@@ -210,6 +217,7 @@ export default function Checkout() {
     }
   };
 
+  // Función para generar el PDF del ticket
   const generarPDF = codigo => {
     const doc = new jsPDF();
     doc.setFontSize(16);
@@ -281,7 +289,7 @@ export default function Checkout() {
           <QuickSaleModal
             isOpen={showQuickSale}
             onClose={() => setShowQuickSale(false)}
-            onAdd={onAddToCart}
+            onAdd={onAddToCart} // QuickSaleModal también debe usar onAddToCart
           />
       </div>
 
@@ -294,9 +302,16 @@ export default function Checkout() {
 
       {/* Grid de Productos */}
       <div className="mb-20"> {/* Añadido mb-20 para dejar espacio al footer fijo */}
+         {/*
+           >>> IMPORTANTE: Asegúrate de que el componente ProductGrid
+           reciba y utilice la prop 'onAddToCart'. Cada elemento clickable
+           dentro de ProductGrid (por ejemplo, un botón "Agregar" o la tarjeta
+           del producto) debe llamar a 'onAddToCart' pasándole el objeto
+           completo del producto correspondiente.
+         */}
          <ProductGrid
             productos={productosFiltrados}
-            onAddToCart={onAddToCart}
+            onAddToCart={onAddToCart} // Pasamos la función onAddToCart
             showStock // Asegúrate de que ProductGrid maneje esta prop si quieres mostrar stock
           />
       </div>
