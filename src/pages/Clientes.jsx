@@ -401,7 +401,6 @@ const handleCancelSale = async () => {
   </table>
 </div>
 
-
       {/* === REINSERTANDO: Historial de ventas === */}
       {clienteActual && (
         <div className="bg-white shadow-lg rounded-lg p-6 mb-6">
