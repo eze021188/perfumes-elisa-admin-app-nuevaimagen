@@ -149,10 +149,21 @@ export default function Ventas() {
 
   return (
     <div className="min-h-screen bg-gray-100 p-4 md:p-8 lg:p-12">
-      <button onClick={() => navigate('/')} className="px-6 py-2 bg-gray-700 text-white font-semibold rounded-lg shadow-md hover:bg-gray-800 transition duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-opacity-50">
-        Volver al inicio
-      </button>
-      <h1 className="text-3xl font-bold text-gray-800 mb-6 text-center">Historial de Ventas</h1>
+       {/* Encabezado responsive */}
+      <div className="flex flex-col md:flex-row items-center justify-between gap-6 mb-8">
+        <button
+          onClick={() => navigate('/')}
+          className="px-6 py-2 bg-gray-700 text-white font-semibold rounded-lg shadow-md hover:bg-gray-800 transition duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-opacity-50"
+        >
+          Volver al inicio
+        </button>
+
+        <h1 className="text-3xl font-bold text-gray-800 text-center w-full md:w-auto">
+          Historial de Ventas
+        </h1>
+
+        <div className="w-full md:w-[150px]" />
+      </div>
       <div className="mb-6 flex justify-center">
         <input
           type="text"
