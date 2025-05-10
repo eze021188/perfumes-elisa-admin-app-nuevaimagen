@@ -1,5 +1,4 @@
 // supabase/functions/invite-user/index.ts
-
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
@@ -12,23 +11,27 @@ const corsHeaders = {
 const supabaseAdmin = createClient(
   Deno.env.get('SUPABASE_URL') ?? '',
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-  {
-    auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false },
-  }
+  { auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false } }
 ) as any
 
 Deno.serve(async (req) => {
-  // Maneja solicitudes OPTIONS (preflight de CORS)
+  // Preflight CORS
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 200, headers: corsHeaders })
   }
 
-  try {
-    // Leer y parsear body una única vez
-    const rawBody = await req.json().catch(() => null)
-    console.log('▶️ Request JSON:', rawBody)
+  // Solo parseamos body en POST
+  let rawBody: any = null
+  if (req.method === 'POST') {
+    try {
+      rawBody = await req.json()
+      console.log('▶️ Request JSON:', rawBody)
+    } catch {
+      console.log('⚠️ No se pudo parsear JSON del body')
+    }
+  }
 
-    // Verifica método POST
+  try {
     if (req.method !== 'POST') {
       return new Response(JSON.stringify({ error: 'Method Not Allowed' }), {
         status: 405,
@@ -36,7 +39,6 @@ Deno.serve(async (req) => {
       })
     }
 
-    // Obtener email
     const email = rawBody?.email
     if (!email) {
       return new Response(JSON.stringify({ error: 'Email is required' }), {
