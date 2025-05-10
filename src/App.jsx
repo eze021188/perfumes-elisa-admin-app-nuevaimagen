@@ -25,7 +25,7 @@ import Reportes from './pages/Reportes'
 import UsersPermissions from './pages/UsersPermissions'
 import SaldosClientes from './pages/SaldosClientes'
 
-// Componente para proteger rutas
+// Protege rutas privadas
 function ProtectedRoute({ children }) {
   const session = supabase.auth.getSession()?.data?.session
   return session ? children : <Navigate to="/login" replace />
@@ -39,12 +39,13 @@ export default function App() {
           <Toaster position="top-right" reverseOrder={false} />
           <BrowserRouter>
             <Routes>
-              {/* 1. Rutas públicas */}
+              {/* Rutas públicas */}
               <Route path="/login" element={<Login />} />
               <Route path="/reset-password" element={<ResetPassword />} />
+              {/* El mismo callback para invitación y recuperación */}
               <Route path="/usuarios/callback" element={<InviteCallback />} />
 
-              {/* 2. Rutas protegidas con layout */}
+              {/* Rutas protegidas (Layout + Auth) */}
               <Route
                 path="/"
                 element={
@@ -62,6 +63,7 @@ export default function App() {
                 <Route path="reportes" element={<Reportes />} />
                 <Route path="usuarios" element={<UsersPermissions />} />
                 <Route path="saldos-clientes" element={<SaldosClientes />} />
+                {/* Si no coincide, redirige a Home */}
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Route>
             </Routes>
