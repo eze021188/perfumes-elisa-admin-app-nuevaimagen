@@ -1,4 +1,3 @@
-// src/App.jsx
 import React, { useState } from 'react';
 import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
@@ -15,6 +14,9 @@ import Ventas from './pages/Ventas';
 import Reportes from './pages/Reportes';
 import UsersPermissions from './pages/UsersPermissions';
 import SaldosClientes from './pages/SaldosClientes';
+
+// 1️⃣ Importa tu nuevo callback handler
+import InviteCallback from './pages/InviteCallback';
 
 export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -101,6 +103,10 @@ export default function App() {
                     <Route path="/reportes" element={<Reportes />} />
                     <Route path="/usuarios" element={<UsersPermissions />} />
                     <Route path="/saldos-clientes" element={<SaldosClientes />} />
+
+                    {/* 2️⃣ Nueva ruta para manejar el enlace de invitación */}
+                    <Route path="/usuarios/callback" element={<InviteCallback />} />
+
                     {/* Fallback */}
                     <Route path="*" element={<Home />} />
                   </Routes>

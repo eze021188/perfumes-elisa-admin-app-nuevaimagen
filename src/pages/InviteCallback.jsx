@@ -1,61 +1,74 @@
 // src/pages/InviteCallback.jsx
-import React, { useEffect, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import toast from 'react-hot-toast'
 
 export default function InviteCallback() {
-  const [searchParams] = useSearchParams()
   const navigate = useNavigate()
-  const [loading, setLoading] = useState(true)
   const [password, setPassword] = useState('')
-  const [error, setError] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [ready, setReady] = useState(false)      // indica que el callback ya fue procesado
+  const [errorMsg, setErrorMsg] = useState(null) // mensaje de error al validar la invitación
 
   useEffect(() => {
-    // Procesa el token desde la URL e inicia sesión
-    const { data, error } = supabase.auth.getSessionFromUrl({ storeSession: true })
-    data?.session && navigate('/')      // ya autenticado, redirige al home
-    if (error) {
-      setError('Link inválido o expirado.')
-      console.error(error)
+    async function init() {
+      // Esto lee el fragment/hash de la URL y setea sesión si el token es válido
+      const { error } = await supabase.auth.getSessionFromUrl({ storeSession: true })
+      if (error) {
+        console.error('Error validando invitación:', error)
+        setErrorMsg('Enlace inválido o expirado.')
+      }
+      setReady(true)
     }
-    setLoading(false)
-  }, [navigate])
+    init()
+  }, [])
 
-  const handleSubmit = async e => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     setLoading(true)
     const { error } = await supabase.auth.updateUser({ password })
     if (error) {
       toast.error(error.message)
-      setLoading(false)
     } else {
-      toast.success('¡Contraseña actualizada!')
-      navigate('/')    // listo, lo mandamos al dashboard
+      toast.success('¡Contraseña establecida! Ya puedes entrar.')
+      navigate('/usuarios')
     }
+    setLoading(false)
   }
 
-  if (loading) return <p className="p-8 text-center">Procesando enlace…</p>
-  if (error)   return <p className="p-8 text-center text-red-500">{error}</p>
+  // Mientras validamos la invitación…
+  if (!ready) {
+    return <p className="p-8 text-center">Procesando tu invitación…</p>
+  }
 
+  // Si hubo error al leer el token
+  if (errorMsg) {
+    return <p className="p-8 text-center text-red-600">{errorMsg}</p>
+  }
+
+  // Formulario para que el usuario defina su contraseña
   return (
-    <div className="max-w-md mx-auto p-8">
-      <h1 className="text-2xl font-bold mb-4">Elige tu contraseña</h1>
-      <form onSubmit={handleSubmit} className="space-y-4">
+    <div className="flex items-center justify-center min-h-screen bg-gray-100 p-4">
+      <form
+        onSubmit={handleSubmit}
+        className="bg-white p-8 rounded shadow-md w-full max-w-sm"
+      >
+        <h1 className="text-2xl font-bold mb-4">Elige tu contraseña</h1>
         <input
           type="password"
           placeholder="Nueva contraseña"
           value={password}
           onChange={e => setPassword(e.target.value)}
-          className="w-full p-2 border rounded"
+          className="w-full mb-4 p-2 border rounded"
           required
         />
         <button
           type="submit"
-          disabled={!password || loading}
-          className="w-full bg-blue-600 text-white py-2 rounded disabled:opacity-50"
+          disabled={loading}
+          className="w-full py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
         >
-          {loading ? 'Guardando…' : 'Guardar contraseña'}
+          {loading ? 'Guardando...' : 'Guardar contraseña'}
         </button>
       </form>
     </div>
