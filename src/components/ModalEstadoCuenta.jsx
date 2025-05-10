@@ -2,8 +2,22 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
 import toast from 'react-hot-toast';
-import jsPDF from 'jspdf'; // Asegúrate de que jsPDF esté importado si lo usas directamente aquí para la generación
-import 'jspdf-autotable'; // Asegúrate de que jspdf-autotable esté importado
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
+
+// Define helpers de formato localmente para asegurar disponibilidad
+const formatNumberWithCommas = (amount) => {
+    return Math.abs(amount).toLocaleString('en-US', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+    });
+};
+const formatSaldoDisplay = (saldo) => {
+    const formattedAmount = formatNumberWithCommas(saldo);
+    if (saldo > 0) return `-${formattedAmount}`;
+    if (saldo < 0) return `$${formattedAmount}`;
+    return '$0.00';
+};
 
 
 export default function ModalEstadoCuenta({ isOpen, onClose, cliente, onGeneratePDF }) {
@@ -13,27 +27,28 @@ export default function ModalEstadoCuenta({ isOpen, onClose, cliente, onGenerate
 
   // Efecto para cargar los movimientos detallados cuando el modal se abre
   useEffect(() => {
-    if (isOpen && cliente) {
+    // Verifica que el modal esté abierto Y que cliente.client_id exista (no sea undefined)
+    if (isOpen && cliente && cliente.client_id) {
       const fetchMovimientos = async () => {
         setLoadingMovimientos(true);
         setErrorMovimientos(null);
         try {
-          // >>> Consulta los movimientos para este cliente, ordenados por fecha <<<
+          // >>> Consulta los movimientos para este cliente usando cliente.client_id <<<
           const { data, error } = await supabase
             .from('movimientos_cuenta_clientes')
-            .select('*') // Puedes seleccionar columnas específicas si no necesitas todas
-            .eq('cliente_id', cliente.id)
-            .order('created_at', { ascending: true }); // Ordenar cronológicamente
+            .select('*')
+            .eq('cliente_id', cliente.client_id) // <<< Usar cliente.client_id
+            .order('created_at', { ascending: true });
 
           if (error) throw error;
 
           // >>> Calcular el saldo acumulado <<<
           let saldoAcumulado = 0;
           const movimientosConSaldo = data.map(mov => {
-              saldoAcumulado += mov.monto; // Suma o resta el monto del movimiento
+              saldoAcumulado += mov.monto;
               return {
                   ...mov,
-                  saldo_acumulado: saldoAcumulado // Añade el campo calculado
+                  saldo_acumulado: saldoAcumulado
               };
           });
 
@@ -55,40 +70,38 @@ export default function ModalEstadoCuenta({ isOpen, onClose, cliente, onGenerate
         setLoadingMovimientos(false);
         setErrorMovimientos(null);
     }
-  }, [isOpen, cliente]); // Depende de si el modal está abierto y de qué cliente está seleccionado
+  }, [isOpen, cliente]); // Depende de isOpen y cliente (para acceder a cliente.client_id)
 
-  if (!isOpen || !cliente) return null; // No renderizar si no está abierto o no hay cliente
+  // No renderizar si no está abierto o no hay cliente O el cliente no tiene client_id (evita la consulta inicial con undefined)
+  if (!isOpen || !cliente || !cliente.client_id) return null;
 
-   // Calcular el saldo actual sumando todos los montos (si los movimientos ya están cargados)
-   // Aunque ya tenemos saldo_acumulado en el último movimiento, calcularlo aquí resume
-   // Esencialmente es lo mismo que movimientos[movimientos.length - 1]?.saldo_acumulado || 0
+   // Calcular el saldo actual sumando todos los montos
   const saldoActual = movimientos.reduce((sum, mov) => sum + mov.monto, 0);
 
 
   // Manejador para descargar el PDF
   const handleDownloadPDF = () => {
       if (movimientos.length === 0) {
-          toast('No hay movimientos para generar el PDF.', { icon: 'ℹ️' });
+          toast('No hay datos para generar el PDF.', { icon: 'ℹ️' });
           return;
       }
-      // Llama a la función generarPDFEstadoCuenta pasada desde la página principal
-      // Le pasamos el cliente y los movimientos detallados (ya con saldo_acumulado)
+      // onGeneratePDF recibe el cliente (con client_name) y los movimientos detallados (con saldo_acumulado)
       onGeneratePDF(cliente, movimientos);
   };
 
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4"> {/* Añadido padding para móviles */}
-      <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-3xl mx-auto max-h-[90vh] overflow-y-auto"> {/* Max width y scroll */}
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4">
+      <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-3xl mx-auto max-h-[90vh] overflow-y-auto">
         <div className="flex justify-between items-center mb-4 border-b pb-3">
           <h2 className="text-xl font-semibold">Estado de Cuenta</h2>
           <button onClick={onClose} className="text-gray-500 hover:text-gray-700 text-2xl">&times;</button>
         </div>
 
         <div className="mb-6">
-          <p className="text-lg font-medium">{cliente.nombre}</p>
+          <p className="text-lg font-medium">{cliente.client_name}</p> {/* Usar client_name */}
           <p className={`text-xl font-bold ${saldoActual > 0 ? 'text-red-600' : saldoActual < 0 ? 'text-green-600' : 'text-gray-700'}`}>
-             Saldo Actual: ${saldoActual.toFixed(2)}
+             Saldo Actual: {formatSaldoDisplay(saldoActual)} {/* Usar helper de formato */}
           </p>
         </div>
 
@@ -101,7 +114,7 @@ export default function ModalEstadoCuenta({ isOpen, onClose, cliente, onGenerate
         ) : movimientos.length === 0 ? (
           <p className="text-center text-gray-500">No hay movimientos registrados para este cliente.</p>
         ) : (
-          <div className="overflow-x-auto"> {/* Permite scroll horizontal en tablas pequeñas */}
+          <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
@@ -115,17 +128,17 @@ export default function ModalEstadoCuenta({ isOpen, onClose, cliente, onGenerate
               <tbody className="bg-white divide-y divide-gray-200 text-sm">
                 {movimientos.map((mov) => (
                   <tr key={mov.id}>
-                    {/* === INICIO: Formato corregido para evitar Whitespace Text Nodes === */}
                     <td className="px-4 py-2 whitespace-nowrap">{new Date(mov.created_at).toLocaleDateString()}</td>
                     <td className="px-4 py-2 whitespace-nowrap">{mov.tipo_movimiento}</td>
                     <td className="px-4 py-2 truncate max-w-[200px]">{mov.referencia_venta_id ? `Venta ID: ${mov.referencia_venta_id.substring(0, 8)}...` : (mov.descripcion || '-')}</td>
-                    <td className={`px-4 py-2 whitespace-nowrap text-right ${mov.monto > 0 ? 'text-red-700' : 'text-green-700'}`}>
-                       {mov.monto.toFixed(2)}
+                     <td className={`px-4 py-2 whitespace-nowrap text-right ${mov.monto > 0 ? 'text-red-700' : 'text-green-700'}`}>
+                       {/* Usar helper para formato de monto */}
+                       {`${mov.monto < 0 ? '-' : '+'}${formatNumberWithCommas(mov.monto)}`}
                     </td>
                     <td className="px-4 py-2 whitespace-nowrap text-right font-medium">
-                        {mov.saldo_acumulado.toFixed(2)}
+                         {/* Usar helper para formato de saldo acumulado */}
+                         {formatSaldoDisplay(mov.saldo_acumulado)}
                     </td>
-                    {/* === FIN: Formato corregido === */}
                   </tr>
                 ))}
               </tbody>

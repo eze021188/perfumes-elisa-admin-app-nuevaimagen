@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+// src/pages/Checkout.jsx
+import React, { useEffect, useState, useMemo } from 'react'; // <<< Importa useMemo aquí
 import { supabase } from '../supabase';
 import { useNavigate } from 'react-router-dom';
 import jsPDF from 'jspdf';
@@ -9,130 +10,205 @@ import QuickSaleModal from '../components/QuickSaleModal';
 import ClientSelector from '../components/ClientSelector';
 import NewClientModal from '../components/NewClientModal';
 import FilterTabs from '../components/FilterTabs';
-import ProductGrid from '../components/ProductGrid'; // Asegúrate de que esta importación sea correcta
-import ModalCheckout from '../components/ModalCheckout'; // Asegúrate de que esta importación sea correcta
+import ProductGrid from '../components/ProductGrid';
+import ModalCheckout from '../components/ModalCheckout';
+
+// Helper simple para formatear moneda (si no está global)
+const formatCurrency = (amount) => {
+    // ... (la definición de formatCurrency)
+     return parseFloat(amount).toLocaleString('en-US', {
+        style: 'currency',
+        currency: 'USD', // Ajusta según tu moneda
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+    });
+};
 
 export default function Checkout() {
-  const navigate = useNavigate();
+  const navigate = useNavigate();
 
-  const [clientes, setClientes] = useState([]);
-  const [productos, setProductos] = useState([]);
-  const [productosVenta, setProductosVenta] = useState([]);
-  const [filtro, setFiltro] = useState('All');
-  const [busqueda, setBusqueda] = useState('');
-  const [clienteSeleccionado, setClienteSeleccionado] = useState(null);
-  const [showQuickSale, setShowQuickSale] = useState(false);
-  const [showNewClient, setShowNewClient] = useState(false);
-  const [showSaleModal, setShowSaleModal] = useState(false);
-  const [processing, setProcessing] = useState(false);
-  const [paymentType, setPaymentType] = useState('');
-  const [discountType, setDiscountType] = useState('Sin descuento');
-  const [discountValue, setDiscountValue] = useState(0);
+  const [clientes, setClientes] = useState([]);
+  const [productos, setProductos] = useState([]);
+  const [productosVenta, setProductosVenta] = useState([]);
+  const [filtro, setFiltro] = useState('All');
+  const [busqueda, setBusqueda] = useState('');
+  // El cliente seleccionado desde el selector
+  const [clienteSeleccionado, setClienteSeleccionado] = useState(null);
+  // El usuario logueado (vendedor)
+  const [currentUser, setCurrentUser] = useState(null);
 
-  // Carga inicial
-  useEffect(() => {
-    async function loadData() {
-      const { data: cli } = await supabase.from('clientes').select('*');
-      const { data: prod } = await supabase.from('productos').select('*');
-      const prodMapped = (prod || []).map(p => {
-        let imagenUrl = p.imagenUrl || p.imagen_url || p.imagen || '';
-        if (imagenUrl && !imagenUrl.startsWith('http')) {
-          // Obtener la URL pública del bucket 'productos'
-          const { data } = supabase.storage.from('productos').getPublicUrl(p.imagen);
-          imagenUrl = data.publicUrl;
-        }
-        return { ...p, imagenUrl };
-      });
-      setClientes(cli || []);
-      setProductos(prodMapped);
-    }
-    loadData();
-  }, []);
+  const [showQuickSale, setShowQuickSale] = useState(false);
+  const [showNewClient, setShowNewClient] = useState(false);
+  const [showSaleModal, setShowSaleModal] = useState(false);
+  const [processing, setProcessing] = useState(false);
+  const [paymentType, setPaymentType] = useState('');
+  const [discountType, setDiscountType] = useState('Sin descuento');
+  const [discountValue, setDiscountValue] = useState(0);
 
-  // Filtrado y totales
-  const productosFiltrados = productos.filter(p =>
-    (filtro === 'All' || p.categoria === filtro) &&
-    p.nombre.toLowerCase().includes(busqueda.toLowerCase())
-  );
-  const totalItems = productosVenta.reduce((sum, p) => sum + (p.cantidad || 0), 0);
-  const originalSubtotal = productosVenta.reduce((sum, p) => sum + (p.total ?? 0), 0);
-  let subtotal = originalSubtotal;
-  if (discountType === 'Por importe') {
-    subtotal = Math.max(0, subtotal - discountValue);
-  } else if (discountType === 'Por porcentaje') {
-    subtotal *= (1 - discountValue / 100);
-  }
-  const discountAmount = originalSubtotal - subtotal;
+  // Carga inicial de clientes, productos y usuario logueado
+  useEffect(() => {
+    async function loadData() {
+      // Obtener el usuario logueado
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+          setCurrentUser(user);
+      } else {
+          console.warn('No hay usuario logueado en Checkout.');
+           // Decide si quieres redirigir al login o permitir ventas sin vendedor asignado (requiere vendedor_id sea nullable)
+          // toast.error('Debes iniciar sesión para registrar ventas.');
+          // navigate('/login');
+          // return;
+      }
 
-  // Función para agregar producto al carrito
-  const onAddToCart = producto => {
-    // *** MODIFICACIÓN INICIA AQUÍ ***
-    // Verificar si el stock es 0 antes de agregar o modificar cantidad
+      const { data: cli } = await supabase.from('clientes').select('*');
+      const { data: prod } = await supabase.from('productos').select('*');
+
+      const prodMapped = (prod || []).map(p => {
+        let imagenUrl = p.imagenUrl || p.imagen_url || p.imagen || '';
+        // Supabase Storage URL - Asegúrate de que el bucket se llama 'productos'
+         if (imagenUrl && !imagenUrl.startsWith('http') && supabase.storage) {
+             // Verificar si la ruta es correcta dentro del bucket
+             // Por ejemplo, si 'p.imagen' es solo el nombre del archivo 'mi_imagen.jpg'
+             const { data } = supabase.storage.from('productos').getPublicUrl(p.imagen);
+             imagenUrl = data.publicUrl;
+         } else if (imagenUrl && !imagenUrl.startsWith('http')) {
+            // Manejar caso si supabase.storage no accesible o bucket no encontrado
+            console.warn('Supabase Storage no accesible o bucket "productos" no encontrado para obtener URL pública.');
+             imagenUrl = ''; // O poner una URL de imagen placeholder
+         }
+
+        return { ...p, imagenUrl };
+      });
+      setClientes(cli || []);
+      setProductos(prodMapped);
+    }
+    loadData();
+  }, []); // Vacío para que solo se ejecute una vez al montar
+
+  // Filtrado y totales (usando useMemo para optimizar)
+  const productosFiltrados = useMemo(() => {
+       return productos.filter(p =>
+         (filtro === 'All' || p.categoria === filtro) &&
+         p.nombre.toLowerCase().includes(busqueda.toLowerCase())
+       );
+  }, [productos, filtro, busqueda]);
+
+
+   // Cálculos de totales (usando useMemo para optimizar)
+  const { totalItems, originalSubtotal, subtotal, discountAmount } = useMemo(() => {
+      const calculatedTotalItems = productosVenta.reduce((sum, p) => sum + (p.cantidad || 0), 0);
+      const calculatedOriginalSubtotal = productosVenta.reduce((sum, p) => sum + (p.total ?? 0), 0);
+
+      let calculatedSubtotal = calculatedOriginalSubtotal;
+      let calculatedDiscountAmount = 0;
+
+      if (discountType === 'Por importe') {
+          calculatedDiscountAmount = Math.min(discountValue, calculatedOriginalSubtotal);
+          calculatedSubtotal = Math.max(0, calculatedOriginalSubtotal - calculatedDiscountAmount);
+      } else if (discountType === 'Por porcentaje') {
+          const discountPercentage = Math.min(Math.max(0, discountValue), 100);
+          calculatedDiscountAmount = calculatedOriginalSubtotal * (discountPercentage / 100);
+          calculatedSubtotal = calculatedOriginalSubtotal - calculatedDiscountAmount;
+      }
+
+      return {
+          totalItems: calculatedTotalItems,
+          originalSubtotal: calculatedOriginalSubtotal,
+          subtotal: calculatedSubtotal,
+          discountAmount: calculatedDiscountAmount
+      };
+  }, [productosVenta, discountType, discountValue]);
+
+
+  // Función para agregar producto al carrito
+  const onAddToCart = producto => {
     if ((producto.stock || 0) <= 0) {
         toast.error('Producto sin stock disponible');
-        return; // No agregar el producto si no hay stock
+        return;
     }
-    // *** MODIFICACIÓN TERMINA AQUÍ ***
 
     setProductosVenta(prev => {
       const existe = prev.find(p => p.id === producto.id);
       if (existe) {
-        // Verificar stock antes de aumentar la cantidad (este chequeo ya existía)
         if (existe.cantidad + 1 > (producto.stock || 0)) {
           toast.error('Stock insuficiente');
-          return prev; // No modificar el estado si no hay stock
+          return prev;
         }
-        // Aumentar cantidad y recalcular total parcial
         return prev.map(p =>
           p.id === producto.id
-            ? { ...p, cantidad: p.cantidad + 1, total: (p.cantidad + 1) * (p.promocion ?? 0) }
+            ? { ...p, cantidad: p.cantidad + 1, total: (p.cantidad + 1) * (producto.promocion ?? 0) }
             : p
         );
       }
-      // Agregar nuevo producto con cantidad 1 y total parcial inicial (solo si pasó el chequeo inicial de stock)
       return [...prev, { ...producto, cantidad: 1, total: producto.promocion ?? 0 }];
     });
   };
 
-  // Función para abrir el modal de venta
-  const openSaleModal = () => {
+  // Función para abrir el modal de venta
+  const openSaleModal = () => {
+    // Verificar que haya usuario logueado (vendedor) Y tenga ID (tipo UUID)
+    if (!currentUser || !currentUser.id) {
+         toast.error('Debes iniciar sesión como vendedor para registrar una venta.');
+         // navigate('/login'); // Descomentar si quieres forzar login
+         return;
+    }
+
     if (!clienteSeleccionado || totalItems === 0) {
-      // Mostrar un mensaje de advertencia si no hay cliente o ítems
-      if (!clienteSeleccionado) {
-        toast.error('Selecciona un cliente para proceder.');
+       if (!clienteSeleccionado) {
+          toast.error('Selecciona un cliente para proceder.');
       } else if (totalItems === 0) {
         toast.error('Agrega productos a la venta.');
       }
-      return; // No abrir el modal si no se cumplen las condiciones
+      return;
     }
     setShowSaleModal(true);
   };
 
+
   // Función para finalizar la venta
   const handleFinalize = async () => {
     setProcessing(true);
+
+    // Validar nuevamente antes de procesar
+    // Aseguramos que currentUser y su ID existan
+    if (!currentUser || !currentUser.id || !clienteSeleccionado || productosVenta.length === 0 || !paymentType) {
+         toast.error('Faltan datos para completar la venta.');
+         setProcessing(false);
+         return;
+    }
+
+
     try {
       // Obtener el último código de venta para generar el siguiente
       const { data: ventasPrevias, error: errorVentasPrevias } = await supabase
         .from('ventas')
         .select('codigo_venta')
-        .order('created_at', { ascending: false }) // Ordenar para obtener el último
-        .limit(1); // Solo necesitamos el último
+        .order('created_at', { ascending: false })
+        .limit(1);
 
       if (errorVentasPrevias) {
          console.error('Error al obtener ventas previas:', errorVentasPrevias.message);
-         // Si falla, intentamos generar un código básico
+           // No lanzar error aquí, solo loguear y seguir con VT00001 si es necesario
       }
 
-      // Generar el nuevo código de venta
-      const lastCodigoVenta = ventasPrevias && ventasPrevias.length > 0 ? ventasPrevias[0].codigo_venta : null;
-      let nextCodigoNumber = 1;
-      if (lastCodigoVenta) {
-          const lastNumberMatch = lastCodigoVenta.match(/VT(\d+)/);
-          if (lastNumberMatch && lastNumberMatch[1]) {
-              nextCodigoNumber = parseInt(lastNumberMatch[1], 10) + 1;
-          }
-      }
+      // Generar el nuevo código de venta (mejorado para ser más robusto)
+       let nextCodigoNumber = 1;
+       if (ventasPrevias && ventasPrevias.length > 0 && ventasPrevias[0].codigo_venta) {
+           const lastCodigoVenta = ventasPrevias[0].codigo_venta;
+           const lastNumberMatch = lastCodigoVenta.match(/VT(\d+)/);
+            if (lastNumberMatch && lastNumberMatch[1]) {
+                const lastNumber = parseInt(lastNumberMatch[1], 10);
+                if (!isNaN(lastNumber)) {
+                    nextCodigoNumber = lastNumber + 1;
+                } else {
+                    console.warn('Código de venta previo no tiene el formato esperado (VT seguido de número). Iniciando secuencia en 1.');
+                }
+            } else {
+                console.warn('Código de venta previo no tiene el formato esperado (VT seguido de número). Iniciando secuencia en 1.');
+            }
+       } else {
+            console.log('No hay ventas previas. Iniciando secuencia de código de venta en 1.');
+       }
       const codigo = 'VT' + String(nextCodigoNumber).padStart(5, '0');
 
 
@@ -142,71 +218,87 @@ export default function Checkout() {
         .insert([{
           codigo_venta: codigo,
           cliente_id: clienteSeleccionado.id,
-          subtotal: originalSubtotal, // Guardar el subtotal original
+           vendedor_id: currentUser.id,       // <<< Usando el ID del usuario logueado (UUID)
+          subtotal: originalSubtotal,
           forma_pago: paymentType,
           tipo_descuento: discountType,
-          valor_descuento: discountAmount, // Guardar el monto del descuento aplicado
-          total: subtotal // Guardar el total final con descuento
+          valor_descuento: discountAmount,
+          total: subtotal
         }])
         .select('id')
         .single();
-      if (errorVenta) throw errorVenta;
+
+      if (errorVenta) {
+           console.error('Error al insertar cabecera de venta:', errorVenta.message);
+           if (errorVenta.code === '23503') { // Código de error típico de violación de FK
+              toast.error('Error de base de datos: El vendedor no está registrado o hay un problema de configuración.');
+           } else {
+              toast.error(`Error al registrar la venta: ${errorVenta.message}`);
+           }
+           throw errorVenta; // Lanzar el error para detener el proceso
+       }
       const ventaId = ventaInsertada.id;
 
-      // Si la forma de pago es 'Crédito', registra un movimiento de CARGO en la cuenta del cliente
-      if (paymentType === 'Crédito') { // <-- Asegúrate que 'Crédito' coincida exactamente con el valor en tu select de forma de pago
+      // Si la forma de pago es 'Crédito cliente', registra un movimiento de CARGO
+      // Asegúrate que 'Crédito cliente' coincida exactamente con el valor en tu select/BD
+      if (paymentType === 'Crédito cliente') {
         const { error: errorCargo } = await supabase
-            .from('movimientos_cuenta_clientes') // <-- Usa el nombre de tu nueva tabla
+            .from('movimientos_cuenta_clientes')
             .insert([{
                 cliente_id: clienteSeleccionado.id, // El ID del cliente
-                tipo_movimiento: 'CARGO_VENTA',    // Tipo de movimiento: cargo por venta
+                tipo_movimiento: 'CARGO_VENTA',
                 monto: subtotal,                   // El monto total de la venta (positivo)
                 referencia_venta_id: ventaId,      // El ID de la venta asociada
-                // created_at se llena automáticamente por Supabase
-                descripcion: `Venta ${codigo}`,    // Descripción opcional (ej: Venta VT00001)
+                descripcion: `Venta ${codigo}`,
             }]);
 
         if (errorCargo) {
             console.error('Error al registrar cargo por venta a crédito:', errorCargo.message);
-            // Opcional: Considera lanzar una excepción o manejar este error si quieres que falle toda la operación de venta
-            // si no se puede registrar el cargo. Por ahora, solo se registra el error.
+            toast.error('Error al registrar el cargo en la cuenta del cliente.');
+             throw errorCargo; // Detener si falla el cargo a crédito
         }
     }
 
       // Insertar detalles de venta y actualizar stock/movimientos
+      // Usamos un for...of para permitir await dentro del loop
       for (const p of productosVenta) {
+          // Validación extra de stock antes de insertar/actualizar
+           const { data: prodCheck, error: errorProdCheck } = await supabase
+            .from('productos')
+            .select('stock')
+            .eq('id', p.id)
+            .single();
+
+           if (errorProdCheck || (prodCheck?.stock || 0) < p.cantidad) {
+                console.error(`Error de stock o producto no encontrado para ${p.nombre}. Stock disponible: ${prodCheck?.stock ?? 'N/A'}`);
+                 toast.error(`Stock insuficiente para ${p.nombre}. Venta cancelada para este ítem o total.`);
+                 // Idealmente, aquí deberías revertir la inserción de la venta principal si ya se hizo
+                throw new Error(`Stock insuficiente para ${p.nombre}.`); // Detener la venta completamente
+           }
+
+
         // Insertar detalle de venta
         const { error: errorDetalle } = await supabase.from('detalle_venta').insert([{
           venta_id: ventaId,
           producto_id: p.id,
           cantidad: p.cantidad,
-          precio_unitario: p.promocion ?? 0, // Usar el precio de promoción o 0
-          total_parcial: p.total ?? 0 // Usar el total parcial calculado previamente
+          precio_unitario: p.promocion ?? 0,
+          total_parcial: p.total ?? 0
         }]);
         if (errorDetalle) {
              console.error(`Error al insertar detalle de venta para producto ${p.nombre}:`, errorDetalle.message);
-             // Decide si quieres detener el proceso o continuar registrando otros ítems
-             // Por ahora, solo loguea el error y continúa
+             toast.error(`Error al guardar detalle para ${p.nombre}.`);
+             throw errorDetalle; // Detener si falla el detalle
         }
 
 
         // Actualizar stock del producto
-        const { data: prodActual, error: errorProdActual } = await supabase
-          .from('productos')
-          .select('stock')
-          .eq('id', p.id)
-          .single();
-
-        if (errorProdActual) {
-            console.error(`Error al obtener stock actual para producto ${p.nombre}:`, errorProdActual.message);
-            // Decide si quieres detener el proceso o continuar
-        } else {
-            const nuevoStock = (prodActual?.stock || 0) - p.cantidad;
-             const { error: errorUpdateStock } = await supabase.from('productos').update({ stock: nuevoStock }).eq('id', p.id);
-             if (errorUpdateStock) {
-                 console.error(`Error al actualizar stock para producto ${p.nombre}:`, errorUpdateStock.message);
-                 // Decide si quieres detener el proceso o continuar
-             }
+        const nuevoStock = (prodCheck.stock || 0) - p.cantidad;
+        const { error: errorUpdateStock } = await supabase.from('productos').update({ stock: nuevoStock }).eq('id', p.id);
+        if (errorUpdateStock) {
+             console.error(`Error al actualizar stock para producto ${p.nombre}:`, errorUpdateStock.message);
+              toast.error(`Error al actualizar stock para ${p.nombre}.`);
+              throw errorUpdateStock; // Detener si falla el stock
         }
 
 
@@ -219,11 +311,16 @@ export default function Checkout() {
             cantidad: p.cantidad,
             referencia: codigo, // Referencia al código de venta
             motivo: 'venta',
-            fecha: new Date().toISOString() // Registrar la fecha y hora del movimiento
+            fecha: new Date().toISOString() // O usar created_at que Supabase añade automáticamente si existe
           }]);
-        if (errMov) console.error('Error mov_inventario (' + p.nombre + '):', errMov.message);
-      }
+        if (errMov) {
+            console.error('Error mov_inventario (' + p.nombre + '):', errMov.message);
+             toast.error(`Error al registrar movimiento de inventario para ${p.nombre}.`);
+             throw errMov; // Detener si falla el movimiento de inventario
+         }
+      } // Fin del loop de productosVenta
 
+      // Si llegamos aquí, la venta (cabecera y detalles/stock/mov inventario) se procesó sin errores
       // Limpiar estados y cerrar modal
       setShowSaleModal(false);
       setProductosVenta([]);
@@ -239,7 +336,10 @@ export default function Checkout() {
 
     } catch (err) {
       console.error('Error general al finalizar venta:', err.message);
-      toast.error('Ocurrió un error al procesar la venta.');
+      // Muestra un toast de error general si no se manejó un error específico arriba
+      // Usar err.message para dar más detalles si es posible
+      toast.error(`Error al procesar la venta: ${err.message || 'Error desconocido'}`);
+
     } finally {
       setProcessing(false);
     }
@@ -251,37 +351,45 @@ export default function Checkout() {
     doc.setFontSize(16);
     doc.text(`Ticket - ${codigo}`, 10, 12);
     if (clienteSeleccionado) {
-      doc.text(`Cliente: ${clienteSeleccionado.nombre}`, 10, 22);
+      doc.text(`Cliente: ${clienteSeleccionado.nombre}`, 10, 22); // Asume clienteSeleccionado tiene .nombre
     }
-    doc.text(`Fecha: ${new Date().toLocaleString()}`, 10, 30);
+    if (currentUser && currentUser.email) { // Mostrar vendedor si está logueado
+        doc.text(`Vendedor: ${currentUser.email}`, 10, 30); // O usar otro campo si tu tabla de usuarios tiene nombre
+        doc.text(`Fecha: ${new Date().toLocaleString()}`, 10, 38);
+    } else {
+        doc.text(`Fecha: ${new Date().toLocaleString()}`, 10, 30);
+    }
+
 
     const rows = productosVenta.map(p => [
       p.nombre,
       p.cantidad.toString(),
-      `$${((p.promocion ?? 0)).toFixed(2)}`,
-      `$${((p.total ?? 0)).toFixed(2)}`
+      // Formatear precios unitarios y totales parciales en el PDF
+      `${formatCurrency(p.promocion ?? 0)}`,
+      `${formatCurrency(p.total ?? 0)}`
     ]);
 
     doc.autoTable({
       head: [['Producto', 'Cant.', 'P.U.', 'Total']],
       body: rows,
-      startY: 40,
-      // Estilos básicos para la tabla
+      startY: currentUser ? 45 : 38, // Ajustar startY si mostramos vendedor
       styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak' },
       headStyles: { fillColor: [200, 200, 200], textColor: [0, 0, 0] },
       margin: { top: 10 }
     });
 
     const y = doc.lastAutoTable.finalY + 10;
-    doc.text(`Subtotal: $${originalSubtotal.toFixed(2)}`, 10, y); // Mostrar subtotal original
-    doc.text(`Descuento: -$${discountAmount.toFixed(2)}`, 10, y + 6);
-    doc.text(`Total: $${subtotal.toFixed(2)}`, 10, y + 12); // Mostrar total con descuento
+     // Usar formatCurrency para totales en el PDF
+    doc.text(`Subtotal: ${formatCurrency(originalSubtotal)}`, 10, y);
+    doc.text(`Descuento: -${formatCurrency(discountAmount)}`, 10, y + 6);
+    doc.text(`Total: ${formatCurrency(subtotal)}`, 10, y + 12);
 
     // Abrir PDF en una nueva ventana
     doc.output('dataurlnewwindow');
   };
 
-  return (
+  // --- Renderizado (JSX) ---
+   return (
 // Contenedor principal con padding y fondo ligero
     <div className="min-h-screen bg-gray-100 p-4 md:p-8 lg:p-12">
       {/* Encabezado responsive */}
@@ -296,7 +404,7 @@ export default function Checkout() {
 
         {/* Aquí tu título */}
         <h1 className="text-3xl font-bold text-gray-800 text-center w-full md:w-auto">
-          Gestión de Compras
+          Gestión de Ventas {/* <-- Título ajustado a Ventas */}
         </h1>
 
         {/* Spacer para md+ */}
@@ -314,7 +422,16 @@ export default function Checkout() {
         <NewClientModal
           isOpen={showNewClient}
           onClose={() => setShowNewClient(false)}
-          onClientAdded={c => setClienteSeleccionado(c)}
+          // Si onClientAdded en NewClientModal espera el cliente agregado,
+          // puedes pasárselo así para seleccionarlo automáticamente después de crear
+          onClientAdded={(newClient) => {
+              // Asume que NewClientModal devuelve el objeto del nuevo cliente con 'id' y 'nombre'
+              if (newClient && newClient.id) {
+                  setClienteSeleccionado(newClient); // Seleccionar el nuevo cliente
+                  setClientes(prev => [...prev, newClient]); // Añadir a la lista de clientes disponibles
+              }
+              setShowNewClient(false); // Cerrar modal después de añadir
+          }}
         />
       </div>
 
@@ -328,7 +445,7 @@ export default function Checkout() {
           <QuickSaleModal
             isOpen={showQuickSale}
             onClose={() => setShowQuickSale(false)}
-            onAdd={onAddToCart} // QuickSaleModal también debe usar onAddToCart
+            onAdd={onAddToCart} // QuickSaleModal debe llamar onAddToCart con el producto
           />
       </div>
 
@@ -341,13 +458,6 @@ export default function Checkout() {
 
       {/* Grid de Productos */}
       <div className="mb-20"> {/* Añadido mb-20 para dejar espacio al footer fijo */}
-         {/*
-           >>> IMPORTANTE: Asegúrate de que el componente ProductGrid
-           reciba y utilice la prop 'onAddToCart'. Cada elemento clickable
-           dentro de ProductGrid (por ejemplo, un botón "Agregar" o la tarjeta
-           del producto) debe llamar a 'onAddToCart' pasándole el objeto
-           completo del producto correspondiente.
-         */}
          <ProductGrid
             productos={productosFiltrados}
             onAddToCart={onAddToCart} // Pasamos la función onAddToCart
@@ -369,16 +479,16 @@ export default function Checkout() {
             : 'bg-green-600 text-white cursor-pointer hover:bg-green-700' // Estilo para carrito con items, listo para abrir modal
           }
         `}
+        // El clic solo debe funcionar si hay cliente, items y no está procesando
         onClick={openSaleModal}
-        // Deshabilitar el clic si no hay ítems o cliente seleccionado, aunque el estilo cambie
-        style={{ pointerEvents: (!clienteSeleccionado || totalItems === 0 || processing) ? 'none' : 'auto' }}
+        // Remover el style pointerEvents y confiar en la validación de openSaleModal
       >
         {/* Información del resumen */}
         <div className="flex-1 text-left">
             <span className="font-semibold text-lg">{totalItems} item{totalItems !== 1 ? 's' : ''}</span>
         </div>
          <div className="flex-1 text-right">
-             <span className="font-bold text-xl">${subtotal.toFixed(2)}</span>
+             <span className="font-bold text-xl">{formatCurrency(subtotal)}</span> {/* Usar formatCurrency */}
          </div>
          {/* Indicador de procesamiento */}
          {processing && (
@@ -391,6 +501,18 @@ export default function Checkout() {
         isOpen={showSaleModal}
         onClose={() => setShowSaleModal(false)}
         title="Detalle de venta"
+        // Pasar datos necesarios al ModalCheckout
+        productosVenta={productosVenta}
+        originalSubtotal={originalSubtotal}
+        discountAmount={discountAmount}
+        subtotal={subtotal}
+        paymentType={paymentType}
+        setPaymentType={setPaymentType}
+        discountType={discountType}
+        setDiscountType={setDiscountType}
+        discountValue={discountValue}
+        setDiscountValue={setDiscountValue}
+        processing={processing} // Pasar estado de procesamiento
         footer={
           <>
             <button
@@ -409,74 +531,15 @@ export default function Checkout() {
           </>
         }
       >
-        {/* Contenido del Modal de Checkout */}
-        <div className="p-4"> {/* Añadido padding al contenido del modal */}
-            <h4 className="font-semibold mb-3">Productos en el carrito:</h4>
-            <ul className="mb-4 text-sm space-y-2 border-b pb-4"> {/* Añadido borde y padding */}
-              {productosVenta.map((p, i) => (
-                <li key={i} className="flex justify-between items-center"> {/* Centrado vertical */}
-                  <span className="truncate w-2/3 font-medium">{p.nombre}</span> {/* Ancho y fuente */}
-                  <span className="text-gray-600">x{p.cantidad}</span> {/* Color gris */}
-                  <span className="font-semibold">${((p.total ?? 0)).toFixed(2)}</span> {/* Negrita */}
-                </li>
-              ))}
-            </ul>
-
-            <div className="mb-4 space-y-2 text-sm border-b pb-4"> {/* Espaciado y borde */}
-              <div className="flex justify-between">
-                <span className="font-medium">Subtotal:</span> {/* Negrita */}
-                <span>${originalSubtotal.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between text-red-600"> {/* Color rojo para descuento */}
-                <span className="font-medium">Descuento:</span> {/* Negrita */}
-                <span>-${discountAmount.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between font-bold text-lg text-green-700"> {/* Negrita, tamaño grande, color verde */}
-                <span>Total:</span>
-                <span>${subtotal.toFixed(2)}</span>
-              </div>
-            </div>
-
-            <div className="mb-4">
-              <label className="block mb-2 text-sm font-medium text-gray-700">Forma de pago</label> {/* Label con estilo */}
-              <select
-                value={paymentType}
-                onChange={e => setPaymentType(e.target.value)}
-                className="w-full border border-gray-300 p-2 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500" // Estilo de input
-              >
-                <option value="">Seleccione…</option>
-                <option value="Efectivo">Efectivo</option>
-                <option value="Transferencia">Transferencia</option>
-                <option value="Tarjeta">Tarjeta</option>
-                <option value="Crédito">Crédito cliente</option>
-              </select>
-            </div>
-
-            <div className="mb-4">
-              <label className="block mb-2 text-sm font-medium text-gray-700">Tipo de descuento</label> {/* Label con estilo */}
-              <div className="flex space-x-3"> {/* Espaciado entre elementos flex */}
-                <select
-                  value={discountType}
-                  onChange={e => setDiscountType(e.target.value)}
-                  className="flex-1 border border-gray-300 p-2 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500" // Estilo de input
-                >
-                  <option>Sin descuento</option>
-                  <option>Por importe</option>
-                  <option>Por porcentaje</option>
-                </select>
-                {(discountType === 'Por importe' ||
-                  discountType === 'Por porcentaje') && (
-                  <input
-                    type="number"
-                    value={discountValue}
-                    onChange={e => setDiscountValue(Number(e.target.value))}
-                    className="w-24 border border-gray-300 p-2 rounded-md text-right focus:outline-none focus:ring-blue-500 focus:border-blue-500" // Estilo de input y alineación derecha
-                    placeholder="Valor"
-                  />
-                )}
-              </div>
-            </div>
-        </div>
+        {/* Contenido del Modal de Checkout - Ahora se pasa como props */}
+        {/* Asegúrate de que ModalCheckout acepta y usa estas props para renderizar el contenido */}
+        {/*
+            Ejemplo básico dentro de ModalCheckout:
+            props.productosVenta.map(...)
+            props.paymentType, props.setPaymentType
+            props.discountType, props.setDiscountType, props.discountValue, props.setDiscountValue
+            props.originalSubtotal, props.discountAmount, props.subtotal
+        */}
       </ModalCheckout>
     </div>
   );

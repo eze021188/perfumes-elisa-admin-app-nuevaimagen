@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
+import { differenceInDays } from 'date-fns'; // Importa solo differenceInDays
 
 // Importa los componentes de modales
 import ModalAbono from '../components/ModalAbono';
@@ -15,12 +16,12 @@ import ModalEstadoCuenta from '../components/ModalEstadoCuenta';
 export default function SaldosClientes() {
   const navigate = useNavigate();
 
-  const [allClientsWithCalculatedBalance, setAllClientsWithCalculatedBalance] = useState([]);
+  // allClientsData ahora tendrá campos de la RPC (client_id, client_name, balance, etc.)
+  const [allClientsData, setAllClientsData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   // Estado para el filtro activo ('owing', 'credit', 'all')
-  // Por defecto mostramos solo los que deben (owing)
   const [activeFilter, setActiveFilter] = useState('owing');
 
   // Estado para la búsqueda por nombre
@@ -30,63 +31,50 @@ export default function SaldosClientes() {
   const [showAbonoModal, setShowAbonoModal] = useState(false);
   const [showSaldoFavorModal, setShowSaldoFavorModal] = useState(false);
   const [showEstadoCuentaModal, setShowEstadoCuentaModal] = useState(false);
+  // clienteSeleccionado ahora tendrá la estructura de datos de la RPC
   const [clienteSeleccionado, setClienteSeleccionado] = useState(null);
 
   // Efecto para cargar los datos al iniciar
   useEffect(() => {
-    fetchAllClientsAndCalculateBalances();
+    fetchClientsData(); // Llama a la función de fetching con la nueva RPC
   }, []);
 
-  // Función para obtener TODOS los clientes y calcular sus saldos
-  const fetchAllClientsAndCalculateBalances = async () => {
+  // Función para obtener datos de clientes, saldos y fechas usando la nueva RPC
+  const fetchClientsData = async () => {
     setLoading(true);
     setError(null);
     try {
-      // 1. Obtener todos los clientes
-      const { data: clientesData, error: clientesError } = await supabase
-        .from('clientes')
-        .select('id, nombre');
+      const { data, error } = await supabase.rpc('get_clients_balance_and_dates'); // Llama a la RPC
 
-      if (clientesError) throw clientesError;
+      if (error) throw error;
 
-      // 2. Obtener todos los movimientos de cuenta
-      const { data: movimientosData, error: movimientosError } = await supabase
-        .from('movimientos_cuenta_clientes')
-        .select('cliente_id, monto');
+      const today = new Date(); // Fecha actual
 
-      if (movimientosError) throw movimientosError;
+      // Procesar los datos para calcular los días
+      const clientsWithCalculatedDays = data.map(client => {
+          // Calcular días sin pagar (desde el último abono)
+          const daysSinceLastPayment = client.latest_payment_date
+              ? differenceInDays(today, new Date(client.latest_payment_date))
+              : null; // Null si no hay abonos
 
-      // 3. Calcular saldos fusionando datos de clientes y movimientos
-      const clientBalancesMap = {};
+          // Calcular días desde la primera compra (desde el primer cargo por venta)
+          const daysSinceFirstPurchase = client.first_purchase_date
+              ? differenceInDays(today, new Date(client.first_purchase_date))
+              : null; // Null si no hay cargos por venta
 
-      // Inicializar todos los clientes con saldo 0
-      clientesData.forEach(cliente => {
-        clientBalancesMap[cliente.id] = {
-          id: cliente.id,
-          nombre: cliente.nombre,
-          saldo: 0,
-        };
-      });
+          return {
+              ...client, // Incluye client_id, client_name, balance, latest_payment_date, first_purchase_date
+              daysSinceLastPayment,
+              daysSinceFirstPurchase,
+          };
+      }).sort((a, b) => a.client_name.localeCompare(b.client_name)); // Opcional: ordenar por nombre
 
-      // Sumar los montos de los movimientos a los saldos correspondientes
-      movimientosData.forEach(mov => {
-        if (clientBalancesMap[mov.cliente_id]) {
-          clientBalancesMap[mov.cliente_id].saldo += mov.monto;
-        } else {
-            console.warn(`Movimiento encontrado para cliente ID ${mov.cliente_id} que no existe en la tabla clientes!`);
-        }
-      });
-
-      // Convertir el mapa a un array y ordenar
-      const clientsWithBalanceArray = Object.values(clientBalancesMap)
-         .sort((a, b) => a.nombre.localeCompare(b.nombre));
-
-      setAllClientsWithCalculatedBalance(clientsWithBalanceArray); // Guarda TODOS los clientes con su saldo
+      setAllClientsData(clientsWithCalculatedDays); // Guarda los datos con días calculados
 
     } catch (err) {
-      console.error('Error cargando datos de clientes y saldos:', err.message);
-      setError('Error al cargar los datos de los clientes y sus saldos.');
-      toast.error('Error al cargar datos.');
+      console.error('Error cargando datos de clientes con fechas:', err.message);
+      setError('Error al cargar los datos de clientes.');
+      toast.error('Error al cargar clientes.');
     } finally {
       setLoading(false);
     }
@@ -94,7 +82,7 @@ export default function SaldosClientes() {
 
   // --- Helper para formatear número con separador de miles y decimales ---
   const formatNumberWithCommas = (amount) => {
-       return Math.abs(amount).toLocaleString('en-US', { // Usamos Math.abs porque el signo lo añadimos manualmente
+       return Math.abs(amount).toLocaleString('en-US', {
            minimumFractionDigits: 2,
            maximumFractionDigits: 2,
        });
@@ -105,13 +93,10 @@ export default function SaldosClientes() {
        const formattedAmount = formatNumberWithCommas(saldo);
 
        if (saldo > 0) {
-           // Por Cobrar (positivo), mostrar -$ + valor absoluto, color rojo
            return `-${formattedAmount}`;
        } else if (saldo < 0) {
-           // Saldo a Favor (negativo), mostrar $ + valor absoluto, color verde
            return `$${formattedAmount}`;
        } else {
-           // Saldo Cero, mostrar $0.00, color gris/neutro
            return '$0.00';
        }
    };
@@ -119,44 +104,46 @@ export default function SaldosClientes() {
 
   // --- Cálculos de totales (usando useMemo) ---
   const totalPorCobrar = useMemo(() => {
-    return allClientsWithCalculatedBalance
-      .filter(c => c.saldo > 0)
-      .reduce((sum, c) => sum + c.saldo, 0);
-  }, [allClientsWithCalculatedBalance]);
+    return allClientsData
+      .filter(c => c.balance > 0)
+      .reduce((sum, c) => sum + c.balance, 0);
+  }, [allClientsData]);
 
   const totalSaldoFavor = useMemo(() => {
-    return allClientsWithCalculatedBalance
-      .filter(c => c.saldo < 0)
-      .reduce((sum, c) => sum + c.saldo, 0);
-  }, [allClientsWithCalculatedBalance]);
+    return allClientsData
+      .filter(c => c.balance < 0)
+      .reduce((sum, c) => sum + c.balance, 0);
+  }, [allClientsData]);
 
 
   // --- Aplicar búsqueda y filtro de saldo (usando useMemo) ---
   const filteredAndSearchedClients = useMemo(() => {
-    let result = allClientsWithCalculatedBalance;
+    let result = allClientsData; // Usamos allClientsData
+
     const lowerSearchText = searchText.toLowerCase();
 
     // 1. Aplicar búsqueda primero, si hay texto
     if (searchText) {
         result = result.filter(c =>
-            c.nombre.toLowerCase().includes(lowerSearchText)
+            c.client_name.toLowerCase().includes(lowerSearchText) // Usar client_name para buscar
         );
     }
 
     // 2. Aplicar filtro de saldo al resultado de la búsqueda (o a la lista completa si no hay búsqueda)
     if (activeFilter === 'owing') {
-      result = result.filter(c => c.saldo > 0);
+      result = result.filter(c => c.balance > 0); // Usar balance
     } else if (activeFilter === 'credit') {
-      result = result.filter(c => c.saldo < 0);
+      result = result.filter(c => c.balance < 0); // Usar balance
     }
     // Si activeFilter es 'all', no filtramos por saldo en este paso
 
     return result; // Retorna la lista final filtrada y buscada
 
-  }, [allClientsWithCalculatedBalance, activeFilter, searchText]); // Depende de los datos completos, filtro y texto de búsqueda
+  }, [allClientsData, activeFilter, searchText]); // Depende de allClientsData, filtro y texto de búsqueda
 
 
   // --- Funciones para abrir modales ---
+  // Pasan el objeto cliente completo (con todos sus datos, incluyendo días/fechas)
   const openAbonoModal = (cliente) => {
     setClienteSeleccionado(cliente);
     setShowAbonoModal(true);
@@ -170,13 +157,13 @@ export default function SaldosClientes() {
   const openEstadoCuentaModal = (cliente) => {
     setClienteSeleccionado(cliente);
     setShowEstadoCuentaModal(true);
-    // La carga de movimientos detallados se hará dentro del ModalEstadoCuenta
+    // El modal EstadoCuenta necesitará usar cliente.client_id para cargar sus movimientos detallados
   };
 
 
-  // --- Funciones para registrar movimientos (serán pasadas a los modales) ---
-  // Después de un registro exitoso, volvemos a cargar TODOS los clientes y saldos
-  const handleRecordAbono = async (clienteId, montoAbono, descripcion = 'Pago cliente') => {
+  // --- Funciones para registrar movimientos ---
+  // Pasan cliente.client_id a las llamadas a Supabase
+  const handleRecordAbono = async (cliente, montoAbono, descripcion = 'Pago cliente') => { // Recibe el objeto cliente
       if (montoAbono <= 0) {
           toast.error("El monto del abono debe ser positivo.");
           return { success: false };
@@ -187,7 +174,7 @@ export default function SaldosClientes() {
           const { error } = await supabase
               .from('movimientos_cuenta_clientes')
               .insert([{
-                  cliente_id: clienteId,
+                  cliente_id: cliente.client_id, // <<< Usar cliente.client_id
                   tipo_movimiento: 'ABONO_PAGO',
                   monto: montoMovimiento,
                   referencia_venta_id: null,
@@ -200,7 +187,7 @@ export default function SaldosClientes() {
               return { success: false, error: error.message };
           } else {
               toast.success('Abono registrado con éxito.');
-              fetchAllClientsAndCalculateBalances(); // <<< Recarga TODOS los datos
+              fetchClientsData(); // Recarga todos los datos con la nueva RPC
               return { success: true };
           }
       } catch (err) {
@@ -210,18 +197,18 @@ export default function SaldosClientes() {
       }
   };
 
-  const handleAddCredit = async (clienteId, montoCredito, descripcion = 'Crédito a favor') => {
+  const handleAddCredit = async (cliente, montoCredito, descripcion = 'Crédito a favor') => { // Recibe el objeto cliente
        if (montoCredito <= 0) {
           toast.error("El monto del crédito debe ser positivo.");
           return { success: false };
       }
-      const montoMovimiento = -montoCredito;
+      const montoMovimiento = -montoCredito; // Monto negativo (a favor del cliente)
 
       try {
           const { error } = await supabase
               .from('movimientos_cuenta_clientes')
               .insert([{
-                  cliente_id: clienteId,
+                  cliente_id: cliente.client_id, // <<< Usar cliente.client_id
                   tipo_movimiento: 'CREDITO_FAVOR',
                   monto: montoMovimiento,
                   referencia_venta_id: null,
@@ -234,7 +221,7 @@ export default function SaldosClientes() {
                return { success: false, error: error.message };
           } else {
               toast.success('Saldo a favor añadido con éxito.');
-              fetchAllClientsAndCalculateBalances(); // <<< Recarga TODOS los datos
+              fetchClientsData(); // Recarga todos los datos con la nueva RPC
               return { success: true };
           }
       } catch (err) {
@@ -245,6 +232,7 @@ export default function SaldosClientes() {
   };
 
   // --- Función para generar PDF (Llamada desde ModalEstadoCuenta) ---
+   // Recibe el cliente (con estructura de RPC) y los movimientos detallados (cargados en el modal)
   const generarPDFEstadoCuenta = (cliente, movimientosDetallados) => {
       if (!cliente || !movimientosDetallados || movimientosDetallados.length === 0) {
           toast('No hay datos para generar el PDF.', { icon: 'ℹ️' });
@@ -253,7 +241,8 @@ export default function SaldosClientes() {
 
       const doc = new jsPDF();
       doc.setFontSize(16);
-      doc.text(`Estado de Cuenta - ${cliente.nombre}`, 10, 15);
+      // Usar client_name del objeto cliente
+      doc.text(`Estado de Cuenta - ${cliente.client_name}`, 10, 15);
       doc.setFontSize(10);
       doc.text(`Fecha Generación: ${new Date().toLocaleString()}`, 10, 25);
 
@@ -261,14 +250,10 @@ export default function SaldosClientes() {
           new Date(mov.created_at).toLocaleDateString(),
           mov.tipo_movimiento,
           mov.referencia_venta_id ? `Venta ID: ${mov.referencia_venta_id.substring(0, 8)}...` : (mov.descripcion || '-'),
-          // Monto del movimiento: muestra el signo real (+ o -) para que el estado de cuenta tenga sentido
-          // Usamos formatNumberWithCommas para el formato, y añadimos el signo manualmente
           `${mov.monto < 0 ? '-' : '+'}${formatNumberWithCommas(mov.monto)}`,
-          // Saldo Acumulado: Aplicamos el formato especial condicional
           formatSaldoDisplay(mov.saldo_acumulado)
       ]);
 
-      // Saldo final: Aplicamos el formato especial condicional
       const saldoFinal = movimientosDetallados.length > 0 ? movimientosDetallados[movimientosDetallados.length - 1].saldo_acumulado : 0;
        const saldoFinalDisplay = formatSaldoDisplay(saldoFinal);
 
@@ -310,8 +295,8 @@ export default function SaldosClientes() {
         >
           Volver al inicio
         </button>
-        <h1 className="text-3xl font-bold text-gray-800 t ext-center w-full md:w-auto">
-          Estados de cuenta 
+        <h1 className="text-3xl font-bold text-gray-800 text-center w-full md:w-auto"> {/* Corregido 't ext-center' */}
+          Estados de cuenta
         </h1>
          <div className="w-full md:w-[150px]" /> {/* Spacer */}
       </div>
@@ -322,25 +307,22 @@ export default function SaldosClientes() {
               {/* Resumen Por Cobrar */}
               <div className="text-center md:text-left">
                   <p className="text-lg font-medium text-gray-600">Total Por Cobrar</p>
-                  {/* Formato específico: -$ seguido del valor absoluto formateado */}
+                  {/* Formato específico: -$ seguido del valor absoluto formateado, o $0.00 si es 0 */}
                   <p className="text-2xl font-bold text-red-600">
-                      -${formatNumberWithCommas(totalPorCobrar)}
+                      {totalPorCobrar === 0 ? '$0.00' : `-${formatNumberWithCommas(totalPorCobrar)}`}
                   </p>
               </div>
 
               {/* Resumen Saldo a Favor */}
               <div className="text-center md:text-left">
                    <p className="text-lg font-medium text-gray-600">Total Saldo a Favor</p>
-                  {/* Formato específico: $ seguido del valor absoluto formateado (sin signo negativo) */}
                   <p className="text-2xl font-bold text-green-600">
                        ${formatNumberWithCommas(totalSaldoFavor)}
                   </p>
               </div>
 
               {/* Controles de Filtro y Búsqueda */}
-              {/* Usamos flexbox en columnas con gap para separar las líneas */}
-              <div className="flex flex-col gap-3 justify-center md:justify-end"> {/* Cambiado a flex-col con gap */}
-                  {/* Primera fila de botones de filtro */}
+              <div className="flex flex-col gap-3 justify-center md:justify-end">
                   <div className="flex space-x-3 justify-center md:justify-end">
                       <button
                           onClick={() => setActiveFilter('owing')}
@@ -350,7 +332,7 @@ export default function SaldosClientes() {
                                   : 'bg-white text-blue-600 border-blue-600 hover:bg-blue-50'
                               }`}
                       >
-                          Clientes por Cobrar ({allClientsWithCalculatedBalance.filter(c => c.saldo > 0).length})
+                          Clientes por Cobrar ({allClientsData.filter(c => c.balance > 0).length})
                       </button>
                        <button
                           onClick={() => setActiveFilter('credit')}
@@ -360,10 +342,9 @@ export default function SaldosClientes() {
                                    : 'bg-white text-green-600 border-green-600 hover:bg-green-50'
                                }`}
                       >
-                          Clientes Saldo a Favor ({allClientsWithCalculatedBalance.filter(c => c.saldo < 0).length})
+                          Clientes Saldo a Favor ({allClientsData.filter(c => c.balance < 0).length})
                       </button>
                   </div>
-                  {/* Segunda fila: Botón "Mostrar todos" y campo de búsqueda */}
                   <div className="flex space-x-3 justify-center md:justify-end">
                       <button
                            onClick={() => setActiveFilter('all')}
@@ -373,9 +354,8 @@ export default function SaldosClientes() {
                                     : 'bg-white text-gray-600 border-gray-600 hover:bg-gray-100'
                                 }`}
                        >
-                           Mostrar todos ({allClientsWithCalculatedBalance.length})
+                           Mostrar todos ({allClientsData.length})
                        </button>
-                       {/* Campo de búsqueda */}
                        <input
                            type="text"
                            placeholder="Buscar cliente..."
@@ -406,24 +386,49 @@ export default function SaldosClientes() {
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                {/* === Formato corregido para evitar Whitespace Text Nodes en thead === */}
-                <tr><th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cliente</th><th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Saldo</th><th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th></tr>
-              </thead>
+            <thead className="bg-gray-50">
+  {/* === Formato super compacto para evitar Whitespace Text Nodes en thead === */}
+  <tr><th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cliente</th><th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Días sin pagar</th><th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Días desde compra</th><th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Saldo</th><th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th></tr>
+  {/* === Fin Formato super compacto en thead === */}
+</thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {filteredAndSearchedClients.map(cliente => (
-                  // Fila clicable para abrir estado de cuenta
-                  <tr key={cliente.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => openEstadoCuentaModal(cliente)}>
+                  // Usa client_id como key
+                  <tr key={cliente.client_id} className="hover:bg-gray-50 cursor-pointer" onClick={() => openEstadoCuentaModal(cliente)}>
+                    {/* Celda Cliente */}
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {cliente.nombre}
+                      {cliente.client_name} {/* Usar client_name */}
                     </td>
-                    {/* Aplicamos el formato especial condicional según el saldo */}
+
+                    {/* === Nuevas Celdas de Datos Condicionales === */}
+                     {cliente.balance <= 0 ? (
+                         // Si el saldo es cero o negativo, mostrar "Sin adeudo" en ambas celdas
+                         <td className="px-3 py-4 whitespace-nowrap text-sm text-center text-gray-600 font-medium" colSpan="2">
+                             Sin adeudo
+                         </td>
+                     ) : (
+                         // Si el saldo es positivo (debe), mostrar los días calculados
+                         <>
+                             <td className="px-3 py-4 whitespace-nowrap text-sm text-center text-gray-800">
+                                 {/* Mostrar días sin pagar o '-' si no hay fecha de último pago */}
+                                 {cliente.daysSinceLastPayment !== null ? `${cliente.daysSinceLastPayment} días` : '-'}
+                             </td>
+                              <td className="px-3 py-4 whitespace-nowrap text-sm text-center text-gray-800">
+                                 {/* Mostrar días desde primera compra o '-' si no hay fecha (debería haber si debe) */}
+                                 {cliente.daysSinceFirstPurchase !== null ? `${cliente.daysSinceFirstPurchase} días` : '-'}
+                             </td>
+                         </>
+                     )}
+                    {/* ========================================== */}
+
+                    {/* Celda Saldo */}
                     <td className={`px-6 py-4 whitespace-nowrap text-sm text-right font-semibold
-                        ${cliente.saldo > 0 ? 'text-red-600' : cliente.saldo < 0 ? 'text-green-600' : 'text-gray-700'}`}>
-                      {formatSaldoDisplay(cliente.saldo)}
+                        ${cliente.balance > 0 ? 'text-red-600' : cliente.balance < 0 ? 'text-green-600' : 'text-gray-700'}`}>
+                      {formatSaldoDisplay(cliente.balance)}
                     </td>
+
+                    {/* Celda Acciones */}
                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">
-                        {/* Botones de acción, prevenimos la propagación del clic */}
                         <button
                             onClick={(e) => { e.stopPropagation(); openAbonoModal(cliente); }}
                             className="text-blue-600 hover:text-blue-900 mr-3 text-sm"
@@ -451,20 +456,20 @@ export default function SaldosClientes() {
       <ModalAbono
           isOpen={showAbonoModal}
           onClose={() => {setShowAbonoModal(false); setClienteSeleccionado(null);}}
-          cliente={clienteSeleccionado}
-          onRecordAbono={handleRecordAbono}
+          cliente={clienteSeleccionado} // Pasamos el objeto cliente (con client_id, etc.)
+          onRecordAbono={handleRecordAbono} // Esta función ahora espera el objeto cliente
       />
       <ModalSaldoFavor
            isOpen={showSaldoFavorModal}
            onClose={() => {setShowSaldoFavorModal(false); setClienteSeleccionado(null);}}
-           cliente={clienteSeleccionado}
-           onAddCredit={handleAddCredit}
+           cliente={clienteSeleccionado} // Pasamos el objeto cliente (con client_id, etc.)
+           onAddCredit={handleAddCredit} // Esta función ahora espera el objeto cliente
        />
       <ModalEstadoCuenta
            isOpen={showEstadoCuentaModal}
            onClose={() => {setShowEstadoCuentaModal(false); setClienteSeleccionado(null);}}
-           cliente={clienteSeleccionado}
-           onGeneratePDF={generarPDFEstadoCuenta}
+           cliente={clienteSeleccionado} // Pasamos el objeto cliente (con client_id, etc.)
+           onGeneratePDF={generarPDFEstadoCuenta} // Esta función ahora espera el objeto cliente (con client_name)
       />
 
     </div>

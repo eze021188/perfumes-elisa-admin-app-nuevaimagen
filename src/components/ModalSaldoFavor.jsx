@@ -2,21 +2,36 @@
 import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 
+// Define helpers de formato localmente para asegurar disponibilidad
+const formatNumberWithCommas = (amount) => {
+    return Math.abs(amount).toLocaleString('en-US', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+    });
+};
+const formatSaldoDisplay = (saldo) => {
+    const formattedAmount = formatNumberWithCommas(saldo);
+    if (saldo > 0) return `-${formattedAmount}`;
+    if (saldo < 0) return `$${formattedAmount}`;
+    return '$0.00';
+};
+
+
 export default function ModalSaldoFavor({ isOpen, onClose, cliente, onAddCredit }) {
   const [monto, setMonto] = useState('');
-  const [descripcion, setDescripcion] = useState(''); // Descripción para la razón del crédito
+  const [descripcion, setDescripcion] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // Limpiar el formulario cuando el modal se abre o el cliente cambia
   useEffect(() => {
     if (isOpen) {
       setMonto('');
       setDescripcion('');
-      setIsProcessing(false); // Resetear estado de procesamiento
+      setIsProcessing(false);
     }
-  }, [isOpen, cliente]); // Depende de isOpen y cliente
+  }, [isOpen, cliente]);
 
-  if (!isOpen || !cliente) return null; // No renderizar si no está abierto o no hay cliente
+  // Renderiza solo si está abierto y cliente existe Y tiene client_id
+  if (!isOpen || !cliente || !cliente.client_id) return null;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -28,15 +43,14 @@ export default function ModalSaldoFavor({ isOpen, onClose, cliente, onAddCredit 
     }
 
     setIsProcessing(true);
-    // Llama a la función handleAddCredit pasada desde la página principal
-    const result = await onAddCredit(cliente.id, montoNumerico, descripcion.trim() || 'Crédito a favor'); // Usar descripción o un valor por defecto
+    // Pasa el objeto cliente completo a onAddCredit, que en SaldosClientes usa cliente.client_id
+    const result = await onAddCredit(cliente, montoNumerico, descripcion.trim() || 'Crédito a favor');
 
     setIsProcessing(false);
 
     if (result.success) {
-       onClose(); // Cerrar modal solo si el registro fue exitoso
+       onClose();
     }
-    // El toast de éxito/error ya se maneja en onAddCredit
   };
 
   return (
@@ -47,7 +61,8 @@ export default function ModalSaldoFavor({ isOpen, onClose, cliente, onAddCredit 
           <button onClick={onClose} className="text-gray-500 hover:text-gray-700 text-2xl">&times;</button>
         </div>
 
-        <p className="mb-4">Cliente: <span className="font-medium">{cliente.nombre}</span></p>
+        {/* Usar client_name para mostrar el nombre */}
+        <p className="mb-4">Cliente: <span className="font-medium">{cliente.client_name}</span></p>
 
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
@@ -71,7 +86,7 @@ export default function ModalSaldoFavor({ isOpen, onClose, cliente, onAddCredit 
               value={descripcion}
               onChange={(e) => setDescripcion(e.target.value)}
               className="w-full border border-gray-300 p-2 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-              maxLength="100" // Limitar longitud
+              maxLength="100"
             />
           </div>
 
