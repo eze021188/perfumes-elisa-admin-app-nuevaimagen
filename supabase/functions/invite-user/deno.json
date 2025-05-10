@@ -1,3 +1,11 @@
 {
-  "imports": {}
+  "compilerOptions": {
+    "lib": ["esnext", "deno.ns", "deno.unstable"],
+    "strict": true
+  },
+  "importMap": "import_map.json",
+  "tasks": {
+    "dev": "deno run --allow-env --allow-net --allow-read --allow-run --unstable index.ts",
+    "deploy": "deno run --allow-env --allow-net --allow-read --allow-run --unstable index.ts"
+  }
 }
