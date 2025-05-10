@@ -1,4 +1,3 @@
-// src/App.jsx
 import React from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
@@ -26,8 +25,8 @@ import SaldosClientes from './pages/SaldosClientes'
 
 // Componente para proteger rutas
 function ProtectedRoute({ children }) {
-  // En v2 de supabase-js:
-  const session = supabase.auth.getSession()?.data.session
+  // En V2 de supabase-js getSession es síncrono:
+  const { data: { session } } = supabase.auth.getSession()
   return session ? children : <Navigate to="/login" replace />
 }
 
@@ -39,32 +38,32 @@ export default function App() {
           <Toaster position="top-right" reverseOrder={false} />
           <BrowserRouter>
             <Routes>
-              {/* RUTAS PÚBLICAS */}
+              {/* 1. Rutas públicas */}
               <Route path="/login" element={<Login />} />
               <Route path="/usuarios/callback" element={<InviteCallback />} />
 
-              {/* RUTAS PROTEGIDAS */}
+              {/* 2. Rutas protegidas con layout */}
               <Route
-                path="/*"
+                path="/"
                 element={
                   <ProtectedRoute>
-                    <DashboardLayout>
-                      <Routes>
-                        <Route path="/" element={<Home />} />
-                        <Route path="checkout" element={<Checkout />} />
-                        <Route path="productos" element={<Productos />} />
-                        <Route path="clientes" element={<Clientes />} />
-                        <Route path="compras" element={<Compras />} />
-                        <Route path="ventas" element={<Ventas />} />
-                        <Route path="reportes" element={<Reportes />} />
-                        <Route path="usuarios" element={<UsersPermissions />} />
-                        <Route path="saldos-clientes" element={<SaldosClientes />} />
-                        <Route path="*" element={<Navigate to="/" replace />} />
-                      </Routes>
-                    </DashboardLayout>
+                    <DashboardLayout />
                   </ProtectedRoute>
                 }
-              />
+              >
+                {/* Estas rutas se renderizan dentro de <DashboardLayout><Outlet/></DashboardLayout> */}
+                <Route index element={<Home />} />
+                <Route path="checkout" element={<Checkout />} />
+                <Route path="productos" element={<Productos />} />
+                <Route path="clientes" element={<Clientes />} />
+                <Route path="compras" element={<Compras />} />
+                <Route path="ventas" element={<Ventas />} />
+                <Route path="reportes" element={<Reportes />} />
+                <Route path="usuarios" element={<UsersPermissions />} />
+                <Route path="saldos-clientes" element={<SaldosClientes />} />
+                {/* Si no coincide ninguna, redirige a Home */}
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Route>
             </Routes>
           </BrowserRouter>
         </ComprasProvider>
