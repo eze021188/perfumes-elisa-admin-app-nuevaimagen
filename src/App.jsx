@@ -3,10 +3,9 @@ import React, { useState } from 'react';
 import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { ClientesProvider } from './contexts/ClientesContext';
-import { ProductosProvider } from './contexts/ProductosContext'; // CORREGIDO: apuntando a ProductosContext.jsx
+import { ProductosProvider } from './contexts/ProductosContext';
 import { ComprasProvider } from './contexts/ComprasContext';
 
-import DebugVentas from './pages/DebugVentas';
 import Home from './pages/Home';
 import Checkout from './pages/Checkout';
 import Productos from './pages/Productos';
@@ -15,7 +14,7 @@ import Compras from './pages/Compras';
 import Ventas from './pages/Ventas';
 import Reportes from './pages/Reportes';
 import UsersPermissions from './pages/UsersPermissions';
-import TestPDF from './pages/TestPDF';
+import SaldosClientes from './pages/SaldosClientes';
 
 export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -25,21 +24,16 @@ export default function App() {
     <ClientesProvider>
       <ProductosProvider>
         <ComprasProvider>
-          {/* Toast notifications */}
           <Toaster position="top-right" reverseOrder={false} />
-
           <BrowserRouter>
-            {/* Contenedor principal: flex para layout horizontal, sin fondo aquí */}
             <div className="min-h-screen flex relative">
 
               {/* Sidebar */}
               <nav
-                className={
-                  `fixed inset-y-0 left-0 w-64 bg-black text-white p-6 z-50
+                className={`fixed inset-y-0 left-0 w-64 bg-black text-white p-6 z-50
                   transform transition-transform duration-200 ease-in-out
                   ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-                  md:translate-x-0 md:static md:inset-auto flex-shrink-0`
-                }
+                  md:translate-x-0 md:static md:inset-auto flex-shrink-0`}
               >
                 <h1 className="text-2xl font-bold mb-6">Perfumes Elisa</h1>
                 <ul className="space-y-4">
@@ -51,7 +45,8 @@ export default function App() {
                     ['/compras', 'Compras'],
                     ['/ventas', 'Ventas'],
                     ['/reportes', 'Reportes'],
-                    ['/usuarios', 'Usuarios y permisos']
+                    ['/usuarios', 'Usuarios y permisos'],
+                    ['/saldos-clientes', 'Saldos Clientes'],
                   ].map(([to, label]) => (
                     <li key={to}>
                       <NavLink
@@ -59,7 +54,9 @@ export default function App() {
                         end={to === '/'}
                         className={({ isActive }) =>
                           `block px-4 py-2 rounded transition duration-150 ease-in-out ${
-                            isActive ? 'bg-gray-700 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                            isActive
+                              ? 'bg-gray-700 text-white'
+                              : 'text-gray-300 hover:bg-gray-800 hover:text-white'
                           }`
                         }
                         onClick={() => setSidebarOpen(false)}
@@ -71,21 +68,19 @@ export default function App() {
                 </ul>
               </nav>
 
-              {/* Toggle móvil */}
+              {/* Mobile Toggle */}
               <button
-                className={
-                  `fixed top-4 left-4 z-60 bg-gray-800 text-white rounded-md
+                className={`fixed top-4 left-4 z-60 bg-gray-800 text-white rounded-md
                   w-10 h-10 flex items-center justify-center text-xl
                   md:hidden transition-transform duration-200 shadow-lg
-                  ${sidebarOpen ? 'translate-x-64' : 'translate-x-0'}`
-                }
+                  ${sidebarOpen ? 'translate-x-64' : 'translate-x-0'}`}
                 onClick={toggleSidebar}
                 aria-label="Toggle menu"
               >
                 {sidebarOpen ? '✕' : '☰'}
               </button>
 
-              {/* Overlay móvil */}
+              {/* Mobile Overlay */}
               {sidebarOpen && (
                 <div
                   className="fixed inset-0 bg-black opacity-50 z-40 md:hidden"
@@ -93,11 +88,10 @@ export default function App() {
                 />
               )}
 
-              {/* Contenido principal - Este ocupa el espacio completo al lado del sidebar */}
+              {/* Main Content */}
               <main className="flex-1 overflow-auto pt-12 md:pt-0 md:ml-64">
-                {/* === NUEVO WRAPPER para centrar el contenido === */}
                 <div className="mx-auto max-w-screen-xl p-4 md:p-8">
-                   <Routes>
+                  <Routes>
                     <Route path="/" element={<Home />} />
                     <Route path="/checkout" element={<Checkout />} />
                     <Route path="/productos" element={<Productos />} />
@@ -106,13 +100,11 @@ export default function App() {
                     <Route path="/ventas" element={<Ventas />} />
                     <Route path="/reportes" element={<Reportes />} />
                     <Route path="/usuarios" element={<UsersPermissions />} />
-                    <Route path="/test-pdf" element={<TestPDF />} />
-                    <Route path="/debug-ventas" element={<DebugVentas />} />
-
-                    {/* Ruta comodín para evitar errores 404 */}
+                    <Route path="/saldos-clientes" element={<SaldosClientes />} />
+                    {/* Fallback */}
                     <Route path="*" element={<Home />} />
                   </Routes>
-                </div> {/* === FIN DEL WRAPPER === */}
+                </div>
               </main>
             </div>
           </BrowserRouter>
