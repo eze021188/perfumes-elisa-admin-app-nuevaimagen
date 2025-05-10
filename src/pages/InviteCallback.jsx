@@ -8,12 +8,11 @@ export default function InviteCallback() {
   const navigate = useNavigate()
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
-  const [ready, setReady] = useState(false)      // indica que el callback ya fue procesado
-  const [errorMsg, setErrorMsg] = useState(null) // mensaje de error al validar la invitación
+  const [ready, setReady] = useState(false)
+  const [errorMsg, setErrorMsg] = useState(null)
 
   useEffect(() => {
     async function init() {
-      // 1. Parseamos tokens de query params o del hash
       const url = new URL(window.location.href)
       const access_token =
         url.searchParams.get('access_token') ||
@@ -23,7 +22,6 @@ export default function InviteCallback() {
         url.hash.match(/refresh_token=([^&]+)/)?.[1]
 
       if (access_token && refresh_token) {
-        // 2. Establecemos la sesión manualmente
         const { error } = await supabase.auth.setSession({
           access_token,
           refresh_token
@@ -45,17 +43,18 @@ export default function InviteCallback() {
     e.preventDefault()
     setLoading(true)
     const { error } = await supabase.auth.updateUser({ password })
+    setLoading(false)
+
     if (error) {
       toast.error(error.message)
     } else {
-      toast.success('¡Contraseña establecida! Ya puedes entrar.')
-      navigate('/usuarios') // Ajusta la ruta a la que quieras enviar al usuario
+      toast.success('¡Contraseña establecida! Ahora puedes iniciar sesión.')
+      navigate('/login', { replace: true })
     }
-    setLoading(false)
   }
 
   if (!ready) {
-    return <p className="p-8 text-center">Procesando tu invitación…</p>
+    return <p className="p-8 text-center">Procesando…</p>
   }
 
   if (errorMsg) {
@@ -68,7 +67,7 @@ export default function InviteCallback() {
         onSubmit={handleSubmit}
         className="bg-white p-8 rounded shadow-md w-full max-w-sm"
       >
-        <h1 className="text-2xl font-bold mb-4">Elige tu contraseña</h1>
+        <h1 className="text-2xl font-bold mb-4">Define tu contraseña</h1>
         <input
           type="password"
           placeholder="Nueva contraseña"
@@ -82,7 +81,7 @@ export default function InviteCallback() {
           disabled={loading}
           className="w-full py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
         >
-          {loading ? 'Guardando...' : 'Guardar contraseña'}
+          {loading ? 'Guardando…' : 'Guardar contraseña'}
         </button>
       </form>
     </div>
