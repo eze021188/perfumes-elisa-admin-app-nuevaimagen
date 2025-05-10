@@ -13,12 +13,29 @@ export default function InviteCallback() {
 
   useEffect(() => {
     async function init() {
-      // Esto lee el fragment/hash de la URL y setea sesión si el token es válido
-      const { error } = await supabase.auth.getSessionFromUrl({ storeSession: true })
-      if (error) {
-        console.error('Error validando invitación:', error)
-        setErrorMsg('Enlace inválido o expirado.')
+      // 1. Parseamos tokens de query params o del hash
+      const url = new URL(window.location.href)
+      const access_token =
+        url.searchParams.get('access_token') ||
+        url.hash.match(/access_token=([^&]+)/)?.[1]
+      const refresh_token =
+        url.searchParams.get('refresh_token') ||
+        url.hash.match(/refresh_token=([^&]+)/)?.[1]
+
+      if (access_token && refresh_token) {
+        // 2. Establecemos la sesión manualmente
+        const { error } = await supabase.auth.setSession({
+          access_token,
+          refresh_token
+        })
+        if (error) {
+          console.error('Error al establecer sesión:', error.message)
+          setErrorMsg('Enlace inválido o expirado.')
+        }
+      } else {
+        setErrorMsg('No se encontraron los tokens de autenticación.')
       }
+
       setReady(true)
     }
     init()
@@ -32,22 +49,19 @@ export default function InviteCallback() {
       toast.error(error.message)
     } else {
       toast.success('¡Contraseña establecida! Ya puedes entrar.')
-      navigate('/usuarios')
+      navigate('/usuarios') // Ajusta la ruta a la que quieras enviar al usuario
     }
     setLoading(false)
   }
 
-  // Mientras validamos la invitación…
   if (!ready) {
     return <p className="p-8 text-center">Procesando tu invitación…</p>
   }
 
-  // Si hubo error al leer el token
   if (errorMsg) {
     return <p className="p-8 text-center text-red-600">{errorMsg}</p>
   }
 
-  // Formulario para que el usuario defina su contraseña
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-100 p-4">
       <form

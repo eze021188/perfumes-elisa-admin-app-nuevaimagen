@@ -102,6 +102,7 @@ export default function App() {
                     <Route path="/ventas" element={<Ventas />} />
                     <Route path="/reportes" element={<Reportes />} />
                     <Route path="/usuarios" element={<UsersPermissions />} />
+                    <Route path="/usuarios/callback" element={<InviteCallback />} />
                     <Route path="/saldos-clientes" element={<SaldosClientes />} />
 
                     {/* 2️⃣ Nueva ruta para manejar el enlace de invitación */}
