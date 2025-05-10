@@ -1,3 +1,4 @@
+// src/App.jsx
 import React from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
@@ -9,6 +10,7 @@ import { ComprasProvider } from './contexts/ComprasContext'
 
 // Páginas públicas
 import Login from './pages/Login'
+import ResetPassword from './pages/ResetPassword'
 import InviteCallback from './pages/InviteCallback'
 
 // Layout y páginas privadas
@@ -25,7 +27,6 @@ import SaldosClientes from './pages/SaldosClientes'
 
 // Componente para proteger rutas
 function ProtectedRoute({ children }) {
-  // Usamos optional chaining para evitar errores si getSession() es undefined
   const session = supabase.auth.getSession()?.data?.session
   return session ? children : <Navigate to="/login" replace />
 }
@@ -40,6 +41,7 @@ export default function App() {
             <Routes>
               {/* 1. Rutas públicas */}
               <Route path="/login" element={<Login />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/usuarios/callback" element={<InviteCallback />} />
 
               {/* 2. Rutas protegidas con layout */}
@@ -51,7 +53,6 @@ export default function App() {
                   </ProtectedRoute>
                 }
               >
-                {/* Estas rutas se renderizan dentro de <DashboardLayout><Outlet/></DashboardLayout> */}
                 <Route index element={<Home />} />
                 <Route path="checkout" element={<Checkout />} />
                 <Route path="productos" element={<Productos />} />
@@ -61,7 +62,6 @@ export default function App() {
                 <Route path="reportes" element={<Reportes />} />
                 <Route path="usuarios" element={<UsersPermissions />} />
                 <Route path="saldos-clientes" element={<SaldosClientes />} />
-                {/* Si no coincide ninguna, redirige a Home */}
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Route>
             </Routes>
