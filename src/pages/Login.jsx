@@ -1,5 +1,5 @@
 // src/pages/Login.jsx
-import { useState } from 'react'
+import React, { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { supabase } from '../supabase'
 import toast from 'react-hot-toast'
@@ -13,14 +13,28 @@ export default function Login() {
   const handleLogin = async (e) => {
     e.preventDefault()
     setLoading(true)
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+
+    // En v2, signInWithPassword devuelve { data: { session, user }, error }
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password
+    })
+
+    setLoading(false)
+
     if (error) {
       toast.error(error.message)
-    } else {
-      toast.success('¡Bienvenido!')
-      navigate('/')  // redirige al dashboard
+      return
     }
-    setLoading(false)
+
+    if (data?.session) {
+      toast.success('¡Bienvenido!')
+      // Espera un momento para que el auth state se propague
+      navigate('/', { replace: true })
+    } else {
+      // Por si no se crea session (flujo raro)
+      toast.error('No se pudo iniciar sesión. Intenta de nuevo.')
+    }
   }
 
   return (
@@ -61,12 +75,12 @@ export default function Login() {
           {loading ? 'Ingresando…' : 'Ingresar'}
         </button>
 
-        <div className="mt-4 text-center">
-          <Link
-            to="/reset-password"
-            className="text-sm text-blue-600 hover:underline"
-          >
+        <div className="mt-4 flex justify-between text-sm">
+          <Link to="/reset-password" className="text-blue-600 hover:underline">
             ¿Olvidaste tu contraseña?
+          </Link>
+          <Link to="/signup" className="text-gray-600 hover:underline">
+            Registrarse
           </Link>
         </div>
       </form>
