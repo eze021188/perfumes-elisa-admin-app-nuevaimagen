@@ -1,0 +1,36 @@
+{
+    "compilerOptions": {
+      "lib": ["esnext", "webworker"], // <<< Añade "webworker" aquí para tipos como Request, Response, fetch
+      "module": "esnext",
+      "target": "esnext",
+      "moduleResolution": "node",
+      "esModuleInterop": true,
+      "allowSyntheticDefaultImports": true,
+      "strict": true,
+      "checkJs": true,
+      "noEmit": true,
+      // "jsx": "react", // Solo si necesitas JSX en tus funciones (muy raro)
+  
+      // >>> Asegúrate de que "deno" está incluido en "types" <<<
+      "types": ["deno"],
+  
+      // Configuración adicional para esm.sh imports (opcional, puede variar)
+      // Dependiendo de tu editor, puede que necesites plugins o configuración adicional
+      // para que resuelva tipos de URLs. A menudo, los errores de Deno y Response son suficientes
+      // para una buena experiencia de desarrollo.
+      // "baseUrl": "./",
+      // "paths": {
+      //   "https://esm.sh/*": ["./node_modules/*"]
+      // }
+    },
+    // Indica al compilador dónde encontrar los archivos de código (relativo a la ubicación de tsconfig.json)
+    "include": [
+      "./**/*.ts",
+      "./**/*.js"
+    ],
+    // Excluye carpetas como node_modules
+    "exclude": [
+       "node_modules",
+       "../_shared" // Excluir carpetas compartidas si no necesitas que su TS se compile aquí
+    ]
+  }
