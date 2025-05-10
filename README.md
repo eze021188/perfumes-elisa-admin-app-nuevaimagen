@@ -1,12 +1,26 @@
-# React + Vite
+Perfumes Elisa PoS
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Perfumes Elisa PoS es un sistema web de gestión integral diseñado para administrar ventas, clientes, productos, inventario y compras de una perfumería especializada. Desarrollado con React, Tailwind CSS y Supabase como backend, este panel permite llevar un control preciso y automatizado del negocio.
 
-Currently, two official plugins are available:
+Funcionalidades principales:
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+Gestión de clientes: Registro con ID automático, búsqueda inteligente y edición de datos.
 
-## Expanding the ESLint configuration
+Módulo de ventas (Checkout): Selección de clientes y productos, descuentos personalizados, control de stock en tiempo real, generación de ticket PDF y registro automático en base de datos.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+Historial de ventas: Consulta detallada por cliente o código de venta, opción de ver PDF, eliminar ventas y revertir stock.
+
+Gestión de productos e inventario: Registro inteligente de compras, prorrateo automático de costos e importaciones, actualización de stock y visualización de movimientos.
+
+Estado de cuenta de clientes: Control de pagos por crédito, abonos, saldos a favor y descarga de estados de cuenta en PDF.
+
+Conexión con Supabase: Almacenamiento persistente de todas las operaciones, validaciones y reportes.
+
+
+Este proyecto busca ser una solución moderna, intuitiva y escalable para pequeños negocios enfocados en la venta de perfumes o productos similares.
+
+
+---
+
+¿Querés que lo traduzca al inglés o lo adapte para un README más completo con secciones como instalación y uso?
+
