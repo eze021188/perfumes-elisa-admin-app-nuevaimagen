@@ -211,4 +211,3 @@ export default function UsersPermissions() {
     </div>
   );
 }
-12
