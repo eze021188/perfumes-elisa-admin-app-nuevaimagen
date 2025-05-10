@@ -310,8 +310,8 @@ export default function SaldosClientes() {
         >
           Volver al inicio
         </button>
-        <h1 className="text-3xl font-bold text-gray-800 text-center w-full md:w-auto">
-          Saldos de Clientes (Cuentas por Cobrar)
+        <h1 className="text-3xl font-bold text-gray-800 t ext-center w-full md:w-auto">
+          Estados de cuenta 
         </h1>
          <div className="w-full md:w-[150px]" /> {/* Spacer */}
       </div>
