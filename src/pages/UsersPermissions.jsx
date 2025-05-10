@@ -85,14 +85,17 @@ export default function UsersPermissions() {
     setLoadingList(false)
   }
 
-  // <-- aquí manejamos 429
   const handleInviteUser = async (email, setLoading) => {
     try {
       const { data, error } = await fetch(
         'https://huwyzzrelxzunvetzawp.supabase.co/functions/v1/invite-user',
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            // Aquí añadimos tu Anon Key para autorizar la petición:
+            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          },
           body: JSON.stringify({ email }),
         }
       ).then(async res => {
@@ -105,11 +108,9 @@ export default function UsersPermissions() {
         }
         return res.json()
       })
-
+  
       toast.success('Invitación enviada!')
       setShowInviteModal(false)
-      // Opcional: refrescar lista si crea usuario automáticamente
-      // fetchUsers()
     } catch (err) {
       console.error(err)
       if (err.status === 429) {
@@ -120,7 +121,7 @@ export default function UsersPermissions() {
     } finally {
       setLoading(false)
     }
-  }
+  }  
 
   return (
     <div className="p-8 bg-gray-100 min-h-screen">
