@@ -25,8 +25,8 @@ import SaldosClientes from './pages/SaldosClientes'
 
 // Componente para proteger rutas
 function ProtectedRoute({ children }) {
-  // En V2 de supabase-js getSession es síncrono:
-  const { data: { session } } = supabase.auth.getSession()
+  // Usamos optional chaining para evitar errores si getSession() es undefined
+  const session = supabase.auth.getSession()?.data?.session
   return session ? children : <Navigate to="/login" replace />
 }
 
