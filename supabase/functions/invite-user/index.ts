@@ -12,11 +12,11 @@ const corsHeaders = {
 }
 
 // Inicializa el cliente Supabase usando la URL del proyecto y la SERVICE_ROLE_KEY
-// La SERVICE_ROLE_KEY está disponible automáticamente como variable de entorno SECURE_SUPABASE_KEY en Edge Functions.
-// Asegúrate de que configuras SECURE_SUPABASE_KEY en Project Settings > Edge Functions > Configuration.
+// La SERVICE_ROLE_KEY está disponible automáticamente como variable de entorno SUPABASE_SERVICE_ROLE_KEY en Edge Functions.
+// Asegúrate de que configuras SUPABASE_SERVICE_ROLE_KEY en Project Settings > Edge Functions > Configuration.
 const supabaseAdmin = createClient(
   Deno.env.get('SUPABASE_URL') ?? '', // URL del proyecto Supabase, disponible por defecto
-  Deno.env.get('SECURE_SUPABASE_KEY') ?? '', // SERVICE_ROLE_KEY, configurada en el dashboard
+  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '', // SERVICE_ROLE_KEY, configurada en el dashboard
   {
     auth: {
       autoRefreshToken: false, // No necesitas refrescar tokens admin
@@ -28,7 +28,13 @@ const supabaseAdmin = createClient(
 
 // Define el manejador principal de la función (Deno.serve)
 Deno.serve(async (req) => {
-  // Maneja solicitudes OPTIONS (preflight de CORS)
+  // 📝 DEBUG: mostrar body crudo en los logs
+  try {
+    const rawBody = await req.json();
+    console.log('▶️ Request JSON:', rawBody);
+  } catch {
+    console.log('⚠️ No se pudo parsear JSON del body');
+  }
   if (req.method === 'OPTIONS') {
     // Responde con status 200 OK y los headers CORS
     return new Response('ok', { headers: corsHeaders })
