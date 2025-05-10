@@ -10,7 +10,9 @@ import { ComprasProvider } from './contexts/ComprasContext'
 
 // Páginas públicas
 import Login from './pages/Login'
+import Signup from './pages/Signup'                           // Si implementas registro
 import ResetPassword from './pages/ResetPassword'
+import ResetPasswordCallback from './pages/ResetPasswordCallback'
 import InviteCallback from './pages/InviteCallback'
 
 // Layout y páginas privadas
@@ -25,7 +27,7 @@ import Reportes from './pages/Reportes'
 import UsersPermissions from './pages/UsersPermissions'
 import SaldosClientes from './pages/SaldosClientes'
 
-// Protege rutas privadas
+// Componente para proteger rutas
 function ProtectedRoute({ children }) {
   const session = supabase.auth.getSession()?.data?.session
   return session ? children : <Navigate to="/login" replace />
@@ -39,15 +41,22 @@ export default function App() {
           <Toaster position="top-right" reverseOrder={false} />
           <BrowserRouter>
             <Routes>
-              {/* Rutas públicas */}
+              {/** ===== RUTAS PÚBLICAS ===== */}
               <Route path="/login" element={<Login />} />
+              <Route path="/signup" element={<Signup />} />                             
               <Route path="/reset-password" element={<ResetPassword />} />
-              {/* El mismo callback para invitación y recuperación */}
-              <Route path="/usuarios/callback" element={<InviteCallback />} />
-
-              {/* Rutas protegidas (Layout + Auth) */}
               <Route
-                path="/"
+                path="/reset-password/callback"
+                element={<ResetPasswordCallback />}
+              />
+              <Route
+                path="/usuarios/callback"
+                element={<InviteCallback />}
+              />
+
+              {/** ===== RUTAS PROTEGIDAS BAJO LAYOUT ===== */}
+              <Route
+                path="/*"
                 element={
                   <ProtectedRoute>
                     <DashboardLayout />
@@ -63,7 +72,6 @@ export default function App() {
                 <Route path="reportes" element={<Reportes />} />
                 <Route path="usuarios" element={<UsersPermissions />} />
                 <Route path="saldos-clientes" element={<SaldosClientes />} />
-                {/* Si no coincide, redirige a Home */}
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Route>
             </Routes>

@@ -1,73 +1,65 @@
-// src/pages/ResetPasswordCallback.jsx
-import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+// src/pages/ResetPassword.jsx
+import { useState } from 'react'
 import { supabase } from '../supabase'
 import toast from 'react-hot-toast'
+import { Link } from 'react-router-dom'
 
-export default function ResetPasswordCallback() {
-  const navigate = useNavigate()
-  const [password, setPassword] = useState('')
+export default function ResetPassword() {
+  const [email, setEmail] = useState('')
   const [loading, setLoading] = useState(false)
-  const [ready, setReady] = useState(false)
-  const [errorMsg, setErrorMsg] = useState(null)
 
-  useEffect(() => {
-    async function init() {
-      const url = new URL(window.location.href)
-      const access_token =
-        url.searchParams.get('access_token') ||
-        url.hash.match(/access_token=([^&]+)/)?.[1]
-      const refresh_token =
-        url.searchParams.get('refresh_token') ||
-        url.hash.match(/refresh_token=([^&]+)/)?.[1]
-
-      if (access_token && refresh_token) {
-        const { error } = await supabase.auth.setSession({ access_token, refresh_token })
-        if (error) setErrorMsg('Enlace inválido o expirado.')
-      } else {
-        setErrorMsg('No se encontraron tokens de autenticación.')
-      }
-
-      setReady(true)
-    }
-    init()
-  }, [])
-
-  const handleSubmit = async (e) => {
+  const handleReset = async (e) => {
     e.preventDefault()
     setLoading(true)
-    const { error } = await supabase.auth.updateUser({ password })
+
+    // Primer parámetro debe ser el email (string), no un objeto
+    const { error } = await supabase.auth.resetPasswordForEmail(
+      email,
+      {
+        redirectTo: `${window.location.origin}/reset-password/callback`
+      }
+    )
+
     setLoading(false)
     if (error) {
       toast.error(error.message)
     } else {
-      toast.success('Contraseña restablecida. Ahora ingresa con tu nueva contraseña.')
-      navigate('/login', { replace: true })
+      toast.success('Revisa tu correo para restablecer la contraseña.')
     }
   }
 
-  if (!ready) return <p className="p-8 text-center">Procesando…</p>
-  if (errorMsg) return <p className="p-8 text-center text-red-600">{errorMsg}</p>
-
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-100 p-4">
-      <form onSubmit={handleSubmit} className="bg-white p-8 rounded shadow-md w-full max-w-sm">
-        <h1 className="text-2xl font-bold mb-4">Define tu nueva contraseña</h1>
-        <input
-          type="password"
-          placeholder="Nueva contraseña"
-          value={password}
-          onChange={e => setPassword(e.target.value)}
-          className="w-full mb-4 p-2 border rounded"
-          required
-        />
+      <form
+        onSubmit={handleReset}
+        className="bg-white p-8 rounded shadow-md w-full max-w-sm"
+      >
+        <h1 className="text-2xl font-bold mb-6">Restablecer contraseña</h1>
+
+        <label className="block mb-4">
+          <span className="text-gray-700">Email registrado</span>
+          <input
+            type="email"
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+            required
+            className="mt-1 block w-full p-2 border rounded"
+          />
+        </label>
+
         <button
           type="submit"
           disabled={loading}
           className="w-full py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
         >
-          {loading ? 'Guardando…' : 'Guardar contraseña'}
+          {loading ? 'Enviando…' : 'Enviar enlace de restablecimiento'}
         </button>
+
+        <div className="mt-4 text-center">
+          <Link to="/login" className="text-sm text-gray-600 hover:underline">
+            Volver al login
+          </Link>
+        </div>
       </form>
     </div>
   )
