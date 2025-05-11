@@ -1,27 +1,39 @@
 // src/pages/ResetPassword.jsx
-import { useState } from 'react'
-import { supabase } from '../supabase'
-import toast from 'react-hot-toast'
-import { Link } from 'react-router-dom'
+import React, { useState } from 'react'; // Importa React
+import { supabase } from '../supabase'; // Asegúrate de que la ruta a supabase.js sea correcta
+import toast from 'react-hot-toast';
+import { Link } from 'react-router-dom'; // Importa Link
 
 export default function ResetPassword() {
-  const [email, setEmail] = useState('')
-  const [loading, setLoading] = useState(false)
+  const [email, setEmail] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const handleReset = async (e) => {
-    e.preventDefault()
-    setLoading(true)
+    e.preventDefault();
+    setLoading(true);
+
+    // Llama al método de Supabase para enviar el correo de restablecimiento
+    // El primer argumento es el email, el segundo son las opciones (como redirectTo)
     const { error } = await supabase.auth.resetPasswordForEmail(
       email,
-      { redirectTo: `${window.location.origin}/usuarios/callback` }
-    )
+      {
+        // Asegúrate de que esta URL coincide con la configurada en tu dashboard de Supabase
+        // para "Password Reset URL" (Authentication -> URL Configuration)
+        redirectTo: `${window.location.origin}/reset-password/callback`
+      }
+    );
+
+    setLoading(false); // Finaliza el estado de carga
+
     if (error) {
-      toast.error(error.message)
+      console.error('Error al enviar correo de restablecimiento:', error.message);
+      toast.error(error.message); // Muestra el mensaje de error de Supabase
     } else {
-      toast.success('Revisa tu correo para restablecer la contraseña.')
+      // Mensaje de éxito indicando que se envió el correo
+      toast.success('Si el correo electrónico está registrado, recibirás un enlace para restablecer tu contraseña.');
+      // No redirigimos aquí, el usuario debe ir a su correo
     }
-    setLoading(false)
-  }
+  };
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-100 p-4">
@@ -29,10 +41,14 @@ export default function ResetPassword() {
         onSubmit={handleReset}
         className="bg-white p-8 rounded shadow-md w-full max-w-sm"
       >
-        <h1 className="text-2xl font-bold mb-6">Restablecer contraseña</h1>
+        <h1 className="text-2xl font-bold mb-6 text-center">Restablecer contraseña</h1>
+
+        <p className="text-gray-600 text-sm mb-6 text-center">
+            Ingresa el correo electrónico asociado a tu cuenta y te enviaremos un enlace para restablecer tu contraseña.
+        </p>
 
         <label className="block mb-4">
-          <span className="text-gray-700">Email registrado</span>
+          <span className="text-gray-700">Correo Electrónico</span>
           <input
             type="email"
             value={email}
@@ -44,21 +60,18 @@ export default function ResetPassword() {
 
         <button
           type="submit"
-          disabled={loading}
-          className="w-full py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
+          disabled={loading || !email} // Deshabilita si está cargando o el email está vacío
+          className="w-full py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {loading ? 'Enviando…' : 'Enviar enlace de restablecimiento'}
         </button>
 
-        <div className="mt-4 text-center">
-          <Link
-            to="/login"
-            className="text-sm text-gray-600 hover:underline"
-          >
+        <div className="mt-6 text-center"> {/* Más margen superior */}
+          <Link to="/login" className="text-sm text-blue-600 hover:underline"> {/* Color azul para consistencia */}
             Volver al login
           </Link>
         </div>
       </form>
     </div>
-  )
+  );
 }
