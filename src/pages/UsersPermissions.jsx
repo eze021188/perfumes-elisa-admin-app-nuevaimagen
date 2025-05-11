@@ -3,125 +3,78 @@ import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import toast from 'react-hot-toast'
-
-// Modal de invitación
-const InviteUserModal = ({ isOpen, onClose, onInvite }) => {
-  const [email, setEmail] = useState('')
-  const [loading, setLoading] = useState(false)
-
-  const handleSubmit = async e => {
-    e.preventDefault()
-    if (loading) return           // ❤️ evita envíos si ya está cargando
-    setLoading(true)
-    await onInvite(email, setLoading)  // pasamos setLoading para que lo resetees según respuesta
-    setLoading(false)
-  }
-
-  useEffect(() => {
-    if (!isOpen) {
-      setEmail('')
-      setLoading(false)
-    }
-  }, [isOpen])
-
-  if (!isOpen) return null
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
-      <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-sm">
-        <h2 className="text-xl font-semibold mb-4">Invitar Nuevo Usuario</h2>
-        <form onSubmit={handleSubmit}>
-          <label className="block text-sm mb-2">Correo Electrónico</label>
-          <input
-            type="email"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-            className="w-full border p-2 rounded mb-4"
-            required
-          />
-          <div className="flex justify-end space-x-2">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={loading}
-              className="px-4 py-2 bg-gray-300 rounded disabled:opacity-50"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={loading || !email}
-              className="px-4 py-2 bg-blue-600 text-white rounded disabled:opacity-50"
-            >
-              {loading ? 'Enviando…' : 'Enviar Invitación'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  )
-}
+import InviteUserModal from '../components/InviteUserModal'
+import PermissionsModal from '../components/PermissionsModal'
 
 export default function UsersPermissions() {
   const navigate = useNavigate()
+
+  // Estado de lista de usuarios
   const [users, setUsers] = useState([])
   const [loadingList, setLoadingList] = useState(true)
-  const [error, setError] = useState(null)
+  const [listError, setListError] = useState(null)
+
+  // Modal de invitación
   const [showInviteModal, setShowInviteModal] = useState(false)
 
+  // Modal de permisos
+  const [selectedUser, setSelectedUser] = useState(null)
+  const [showPermModal, setShowPermModal] = useState(false)
+
+  // Carga inicial de usuarios
   useEffect(() => {
     fetchUsers()
   }, [])
 
-  const fetchUsers = async () => {
+  async function fetchUsers() {
     setLoadingList(true)
-    setError(null)
-    const { data, error } = await supabase.from('usuarios').select('id,nombre,created_at')
+    setListError(null)
+    const { data, error } = await supabase
+      .from('usuarios')
+      .select('id, nombre, email')
     if (error) {
-      setError('No se pudo cargar usuarios.')
       console.error(error)
+      setListError('No se pudo cargar usuarios.')
     } else {
       setUsers(data || [])
     }
     setLoadingList(false)
   }
 
-  const handleInviteUser = async (email, setLoading) => {
+  // Invita usuario llamando a tu Edge Function
+  async function handleInviteUser(email, setInviteLoading) {
     try {
-      const { data, error } = await fetch(
-        'https://huwyzzrelxzunvetzawp.supabase.co/functions/v1/invite-user',
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/invite-user`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            // Aquí añadimos tu Anon Key para autorizar la petición:
             Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
           },
           body: JSON.stringify({ email }),
         }
-      ).then(async res => {
-        if (res.status === 429) {
-          throw { status: 429, message: 'Demasiadas solicitudes, espera un momento.' }
-        }
-        if (!res.ok) {
-          const bd = await res.json()
-          throw { status: res.status, message: bd.error || res.statusText }
-        }
-        return res.json()
-      })
-  
+      )
+      if (!res.ok) throw await res.json()
       toast.success('Invitación enviada!')
       setShowInviteModal(false)
+      fetchUsers()
     } catch (err) {
       console.error(err)
       if (err.status === 429) {
-        toast.error(err.message)
+        toast.error('Demasiadas solicitudes, espera un momento.')
       } else {
-        toast.error('Error enviando invitación.')
+        toast.error(err.error || 'Error enviando invitación.')
       }
     } finally {
-      setLoading(false)
+      setInviteLoading(false)
     }
-  }  
+  }
+
+  function openPermissions(user) {
+    setSelectedUser(user)
+    setShowPermModal(true)
+  }
 
   return (
     <div className="p-8 bg-gray-100 min-h-screen">
@@ -131,46 +84,70 @@ export default function UsersPermissions() {
       >
         Volver al inicio
       </button>
+
       <h1 className="text-2xl mb-4">Usuarios y permisos</h1>
+
       <button
         onClick={() => setShowInviteModal(true)}
-        className="mb-4 px-4 py-2 bg-blue-600 text-white rounded"
+        className="mb-6 px-4 py-2 bg-blue-600 text-white rounded"
       >
         Invitar Nuevo Usuario
       </button>
 
-      {/* Lista */}
-      {loadingList
-        ? <p>Cargando…</p>
-        : error
-          ? <p className="text-red-500">{error}</p>
-          : users.length === 0
-            ? <p>No hay usuarios.</p>
-            : (
-              <table className="w-full bg-white shadow rounded">
-                <thead>
-                  <tr>
-                    <th className="p-2">Nombre</th>
-                    <th className="p-2">ID</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {users.map(u => (
-                    <tr key={u.id}>
-                      <td className="p-2">{u.nombre || '—'}</td>
-                      <td className="p-2">{u.id}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )
-      }
+      {loadingList ? (
+        <p>Cargando…</p>
+      ) : listError ? (
+        <p className="text-red-500">{listError}</p>
+      ) : users.length === 0 ? (
+        <p>No hay usuarios.</p>
+      ) : (
+        <table className="w-full bg-white shadow rounded">
+          <thead>
+            <tr>
+              <th className="p-2">Nombre</th>
+              <th className="p-2">Email</th>
+              <th className="p-2">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {users.map(u => (
+              <tr key={u.id} className="hover:bg-gray-50">
+                <td className="p-2">{u.nombre || '—'}</td>
+                <td className="p-2">{u.email}</td>
+                <td className="p-2">
+                  <button
+                    onClick={() => openPermissions(u)}
+                    className="px-3 py-1 bg-green-600 text-white rounded"
+                  >
+                    Permisos
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
 
+      {/* Modal de invitación */}
       <InviteUserModal
         isOpen={showInviteModal}
         onClose={() => setShowInviteModal(false)}
         onInvite={handleInviteUser}
       />
+
+      {/* Modal de permisos */}
+      {selectedUser && (
+        <PermissionsModal
+          key={selectedUser.id}
+          user={selectedUser}
+          isOpen={showPermModal}
+          onClose={() => setShowPermModal(false)}
+          onSaved={() => {
+            toast.success('Permisos actualizados')
+            setShowPermModal(false)
+          }}
+        />
+      )}
     </div>
   )
 }
