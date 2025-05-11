@@ -1,5 +1,5 @@
 // src/pages/Checkout.jsx
-import React, { useEffect, useState, useMemo } from 'react'; // <<< Importa useMemo aquí
+import React, { useEffect, useState, useMemo } from 'react';
 import { supabase } from '../supabase';
 import { useNavigate } from 'react-router-dom';
 import jsPDF from 'jspdf';
@@ -15,14 +15,19 @@ import ModalCheckout from '../components/ModalCheckout';
 
 // Helper simple para formatear moneda (si no está global)
 const formatCurrency = (amount) => {
-    // ... (la definición de formatCurrency)
-     return parseFloat(amount).toLocaleString('en-US', {
+     // Asegurarse de que amount sea un número antes de formatear
+     const numericAmount = parseFloat(amount);
+     if (isNaN(numericAmount)) {
+         return '$0.00'; // Devolver un valor por defecto si no es un número válido
+     }
+     return numericAmount.toLocaleString('en-US', {
         style: 'currency',
         currency: 'USD', // Ajusta según tu moneda
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
     });
 };
+
 
 export default function Checkout() {
   const navigate = useNavigate();
@@ -42,8 +47,8 @@ export default function Checkout() {
   const [showSaleModal, setShowSaleModal] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [paymentType, setPaymentType] = useState('');
-  const [discountType, setDiscountType] = useState('Sin descuento');
-  const [discountValue, setDiscountValue] = useState(0);
+  const [discountType, setDiscountType] = useState('Sin descuento'); // 'Sin descuento', 'Por importe', 'Por porcentaje'
+  const [discountValue, setDiscountValue] = useState(0); // Valor numérico del descuento
 
   // Carga inicial de clientes, productos y usuario logueado
   useEffect(() => {
@@ -60,32 +65,43 @@ export default function Checkout() {
           // return;
       }
 
-      const { data: cli } = await supabase.from('clientes').select('*');
-      const { data: prod } = await supabase.from('productos').select('*');
+      const { data: cli, error: errorClientes } = await supabase.from('clientes').select('*');
+       if (errorClientes) {
+           console.error("Error loading clients:", errorClientes);
+           toast.error("Error al cargar clientes.");
+       } else {
+           setClientes(cli || []);
+       }
 
-      const prodMapped = (prod || []).map(p => {
-        let imagenUrl = p.imagenUrl || p.imagen_url || p.imagen || '';
-        // Supabase Storage URL - Asegúrate de que el bucket se llama 'productos'
-         if (imagenUrl && !imagenUrl.startsWith('http') && supabase.storage) {
-             // Verificar si la ruta es correcta dentro del bucket
-             // Por ejemplo, si 'p.imagen' es solo el nombre del archivo 'mi_imagen.jpg'
-             const { data } = supabase.storage.from('productos').getPublicUrl(p.imagen);
-             imagenUrl = data.publicUrl;
-         } else if (imagenUrl && !imagenUrl.startsWith('http')) {
-            // Manejar caso si supabase.storage no accesible o bucket no encontrado
-            console.warn('Supabase Storage no accesible o bucket "productos" no encontrado para obtener URL pública.');
-             imagenUrl = ''; // O poner una URL de imagen placeholder
-         }
 
-        return { ...p, imagenUrl };
-      });
-      setClientes(cli || []);
-      setProductos(prodMapped);
+      const { data: prod, error: errorProductos } = await supabase.from('productos').select('*');
+       if (errorProductos) {
+           console.error("Error loading products:", errorProductos);
+           toast.error("Error al cargar productos.");
+       } else {
+            const prodMapped = (prod || []).map(p => {
+                let imagenUrl = p.imagenUrl || p.imagen_url || p.imagen || '';
+                // Supabase Storage URL - Asegúrate de que el bucket se llama 'productos'
+                 if (imagenUrl && !imagenUrl.startsWith('http') && supabase.storage) {
+                     // Verificar si la ruta es correcta dentro del bucket
+                     // Por ejemplo, si 'p.imagen' es solo el nombre del archivo 'mi_imagen.jpg'
+                     const { data } = supabase.storage.from('productos').getPublicUrl(p.imagen);
+                     imagenUrl = data.publicUrl;
+                 } else if (imagenUrl && !imagenUrl.startsWith('http')) {
+                    // Manejar caso si supabase.storage no accesible o bucket no encontrado
+                    console.warn('Supabase Storage no accesible o bucket "productos" no encontrado para obtener URL pública.');
+                     imagenUrl = ''; // O poner una URL de imagen placeholder
+                 }
+
+                return { ...p, imagenUrl };
+            });
+            setProductos(prodMapped);
+       }
     }
     loadData();
   }, []); // Vacío para que solo se ejecute una vez al montar
 
-  // Filtrado y totales (usando useMemo para optimizar)
+  // Filtrado de productos por búsqueda y filtro de categoría
   const productosFiltrados = useMemo(() => {
        return productos.filter(p =>
          (filtro === 'All' || p.categoria === filtro) &&
@@ -94,22 +110,34 @@ export default function Checkout() {
   }, [productos, filtro, busqueda]);
 
 
-   // Cálculos de totales (usando useMemo para optimizar)
+   // Cálculos de totales y descuento
   const { totalItems, originalSubtotal, subtotal, discountAmount } = useMemo(() => {
-      const calculatedTotalItems = productosVenta.reduce((sum, p) => sum + (p.cantidad || 0), 0);
-      const calculatedOriginalSubtotal = productosVenta.reduce((sum, p) => sum + (p.total ?? 0), 0);
+      // Calcular el subtotal original basado en la cantidad y precio de promoción
+      const calculatedOriginalSubtotal = productosVenta.reduce((sum, p) => {
+          // Asegurarse de que p.cantidad y p.promocion son números válidos
+          const cantidad = parseFloat(p.cantidad) || 0;
+          const precio = parseFloat(p.promocion) || 0;
+          return sum + (cantidad * precio);
+      }, 0);
+
+      const calculatedTotalItems = productosVenta.reduce((sum, p) => sum + (parseFloat(p.cantidad) || 0), 0);
+
 
       let calculatedSubtotal = calculatedOriginalSubtotal;
       let calculatedDiscountAmount = 0;
 
+      // Calcular descuento basado en el tipo y valor
       if (discountType === 'Por importe') {
-          calculatedDiscountAmount = Math.min(discountValue, calculatedOriginalSubtotal);
+          // El descuento no puede ser mayor que el subtotal original
+          calculatedDiscountAmount = Math.min(parseFloat(discountValue) || 0, calculatedOriginalSubtotal);
           calculatedSubtotal = Math.max(0, calculatedOriginalSubtotal - calculatedDiscountAmount);
       } else if (discountType === 'Por porcentaje') {
-          const discountPercentage = Math.min(Math.max(0, discountValue), 100);
+          // El porcentaje debe estar entre 0 y 100
+          const discountPercentage = Math.min(Math.max(0, parseFloat(discountValue) || 0), 100);
           calculatedDiscountAmount = calculatedOriginalSubtotal * (discountPercentage / 100);
           calculatedSubtotal = calculatedOriginalSubtotal - calculatedDiscountAmount;
       }
+      // Si discountType es 'Sin descuento', discountAmount es 0 y subtotal es originalSubtotal
 
       return {
           totalItems: calculatedTotalItems,
@@ -122,7 +150,9 @@ export default function Checkout() {
 
   // Función para agregar producto al carrito
   const onAddToCart = producto => {
-    if ((producto.stock || 0) <= 0) {
+    // Validación de stock antes de añadir
+    const currentStock = parseFloat(producto.stock) || 0;
+    if (currentStock <= 0) {
         toast.error('Producto sin stock disponible');
         return;
     }
@@ -130,19 +160,64 @@ export default function Checkout() {
     setProductosVenta(prev => {
       const existe = prev.find(p => p.id === producto.id);
       if (existe) {
-        if (existe.cantidad + 1 > (producto.stock || 0)) {
+        // Validación de stock al incrementar cantidad
+        if (existe.cantidad + 1 > currentStock) {
           toast.error('Stock insuficiente');
           return prev;
         }
+        // Incrementar cantidad y recalcular total parcial
         return prev.map(p =>
           p.id === producto.id
-            ? { ...p, cantidad: p.cantidad + 1, total: (p.cantidad + 1) * (producto.promocion ?? 0) }
+            ? { ...p, cantidad: p.cantidad + 1, total: (p.cantidad + 1) * (parseFloat(producto.promocion) || 0) }
             : p
         );
       }
-      return [...prev, { ...producto, cantidad: 1, total: producto.promocion ?? 0 }];
+      // Añadir nuevo producto con cantidad 1 y total parcial inicial
+      return [...prev, { ...producto, cantidad: 1, total: (parseFloat(producto.promocion) || 0) }];
     });
   };
+
+    // Función para eliminar un producto del carrito
+    const onRemoveFromCart = (productoId) => {
+        setProductosVenta(prev => prev.filter(p => p.id !== productoId));
+    };
+
+    // Función para ajustar la cantidad de un producto en el carrito
+    const onUpdateQuantity = (productoId, newQuantity) => {
+        const quantity = parseInt(newQuantity, 10);
+        // Validar que la cantidad sea un número positivo
+        if (isNaN(quantity) || quantity <= 0) {
+            // Si la cantidad es inválida o 0, eliminar el producto
+             onRemoveFromCart(productoId);
+            return;
+        }
+
+        setProductosVenta(prev => {
+            const productoIndex = prev.findIndex(p => p.id === productoId);
+
+            if (productoIndex === -1) return prev; // Producto no encontrado
+
+            const producto = prev[productoIndex];
+            const currentStock = parseFloat(producto.stock) || 0;
+
+            // Validar que la nueva cantidad no exceda el stock disponible
+            if (quantity > currentStock) {
+                toast.error(`Stock insuficiente. Máximo disponible: ${currentStock}`);
+                // Opcional: podrías establecer la cantidad al stock máximo en lugar de no hacer nada
+                 return prev; // No actualizar si excede stock
+            }
+
+            // Actualizar cantidad y recalcular total parcial
+            const updatedProductos = [...prev];
+            updatedProductos[productoIndex] = {
+                ...producto,
+                cantidad: quantity,
+                total: quantity * (parseFloat(producto.promocion) || 0)
+            };
+            return updatedProductos;
+        });
+    };
+
 
   // Función para abrir el modal de venta
   const openSaleModal = () => {
@@ -171,8 +246,23 @@ export default function Checkout() {
 
     // Validar nuevamente antes de procesar
     // Aseguramos que currentUser y su ID existan
-    if (!currentUser || !currentUser.id || !clienteSeleccionado || productosVenta.length === 0 || !paymentType) {
-         toast.error('Faltan datos para completar la venta.');
+    if (!currentUser || !currentUser.id) {
+         toast.error('Error de vendedor: Debes iniciar sesión.');
+         setProcessing(false);
+         return;
+    }
+    if (!clienteSeleccionado) {
+         toast.error('Error de cliente: Selecciona un cliente.');
+         setProcessing(false);
+         return;
+    }
+     if (productosVenta.length === 0) {
+         toast.error('Error de productos: Agrega productos a la venta.');
+         setProcessing(false);
+         return;
+    }
+     if (!paymentType) {
+         toast.error('Error de pago: Selecciona una forma de pago.');
          setProcessing(false);
          return;
     }
@@ -282,8 +372,8 @@ export default function Checkout() {
           venta_id: ventaId,
           producto_id: p.id,
           cantidad: p.cantidad,
-          precio_unitario: p.promocion ?? 0,
-          total_parcial: p.total ?? 0
+          precio_unitario: parseFloat(p.promocion) || 0, // Usar el precio de promoción
+          total_parcial: parseFloat(p.total) || 0 // Usar el total calculado en el frontend
         }]);
         if (errorDetalle) {
              console.error(`Error al insertar detalle de venta para producto ${p.nombre}:`, errorDetalle.message);
@@ -472,14 +562,14 @@ export default function Checkout() {
           fixed bottom-0 left-0 right-0 p-4 text-center rounded-t-xl shadow-lg
           flex justify-between items-center
           transition-colors duration-300 ease-in-out
-          ${totalItems === 0
-            ? 'bg-gray-300 text-gray-600 cursor-not-allowed' // Estilo para carrito vacío
+          ${totalItems === 0 || !clienteSeleccionado // Deshabilitar si no hay items O no hay cliente seleccionado
+            ? 'bg-gray-300 text-gray-600 cursor-not-allowed' // Estilo para carrito vacío o sin cliente
             : processing
             ? 'bg-yellow-500 text-white cursor-wait' // Estilo mientras procesa
-            : 'bg-green-600 text-white cursor-pointer hover:bg-green-700' // Estilo para carrito con items, listo para abrir modal
+            : 'bg-green-600 text-white cursor-pointer hover:bg-green-700' // Estilo para carrito con items y cliente, listo para abrir modal
           }
         `}
-        // El clic solo debe funcionar si hay cliente, items y no está procesando
+        // El clic solo debe funcionar si hay cliente, items y no está procesando (la validación ya está en openSaleModal)
         onClick={openSaleModal}
         // Remover el style pointerEvents y confiar en la validación de openSaleModal
       >
@@ -501,18 +591,8 @@ export default function Checkout() {
         isOpen={showSaleModal}
         onClose={() => setShowSaleModal(false)}
         title="Detalle de venta"
-        // Pasar datos necesarios al ModalCheckout
-        productosVenta={productosVenta}
-        originalSubtotal={originalSubtotal}
-        discountAmount={discountAmount}
-        subtotal={subtotal}
-        paymentType={paymentType}
-        setPaymentType={setPaymentType}
-        discountType={discountType}
-        setDiscountType={setDiscountType}
-        discountValue={discountValue}
-        setDiscountValue={setDiscountValue}
-        processing={processing} // Pasar estado de procesamiento
+        // Ya no pasamos los datos como props a ModalCheckout,
+        // los usamos directamente como children
         footer={
           <>
             <button
@@ -531,15 +611,126 @@ export default function Checkout() {
           </>
         }
       >
-        {/* Contenido del Modal de Checkout - Ahora se pasa como props */}
-        {/* Asegúrate de que ModalCheckout acepta y usa estas props para renderizar el contenido */}
-        {/*
-            Ejemplo básico dentro de ModalCheckout:
-            props.productosVenta.map(...)
-            props.paymentType, props.setPaymentType
-            props.discountType, props.setDiscountType, props.discountValue, props.setDiscountValue
-            props.originalSubtotal, props.discountAmount, props.subtotal
-        */}
+        {/* --- Contenido del cuerpo del modal --- */}
+        {/* Este JSX se renderizará dentro del cuerpo del ModalCheckout */}
+        <div className="mb-4 max-h-80 overflow-y-auto pr-2"> {/* Añadido pr-2 para espacio del scrollbar */}
+            {/* Lista de productos en la venta */}
+            <h4 className="text-md font-semibold mb-2">Productos:</h4>
+            {productosVenta.length === 0 ? (
+                <p className="text-gray-600">No hay productos en la venta.</p>
+            ) : (
+                 <ul className="space-y-2">
+                    {productosVenta.map(p => (
+                        <li key={p.id} className="flex justify-between items-center text-sm text-gray-800 border-b pb-2 last:border-b-0">
+                            <div className="flex-1 mr-4">
+                                <span className="font-medium">{p.nombre}</span>
+                                <div className="text-xs text-gray-500">{formatCurrency(p.promocion ?? 0)} c/u</div> {/* Mostrar precio unitario */}
+                            </div>
+                            <div className="flex items-center">
+                                {/* Input para cantidad */}
+                                <input
+                                    type="number"
+                                    min="1"
+                                    value={p.cantidad}
+                                    onChange={(e) => onUpdateQuantity(p.id, e.target.value)}
+                                    className="w-12 text-center border rounded-md mr-2 text-sm py-1"
+                                    disabled={processing} // Deshabilitar input mientras procesa
+                                />
+                                {/* Total parcial */}
+                                <span className="font-semibold w-20 text-right">{formatCurrency(p.total ?? 0)}</span>
+                                {/* Botón para eliminar producto */}
+                                <button
+                                    onClick={() => onRemoveFromCart(p.id)}
+                                    className="ml-2 text-red-600 hover:text-red-800 disabled:opacity-50"
+                                     disabled={processing} // Deshabilitar botón mientras procesa
+                                >
+                                    ✕
+                                </button>
+                            </div>
+                        </li>
+                    ))}
+                </ul>
+            )}
+
+
+            <hr className="my-4" /> {/* Separador */}
+
+            {/* Totales y Descuento */}
+            <div className="text-right text-sm space-y-1">
+                <p>Subtotal original: <span className="font-medium">{formatCurrency(originalSubtotal)}</span></p>
+                <p className="text-red-600">Descuento: <span className="font-medium">- {formatCurrency(discountAmount)}</span></p>
+                <p className="text-lg font-bold mt-2">Total: <span className="text-green-700">{formatCurrency(subtotal)}</span></p>
+            </div>
+
+            <hr className="my-4" /> {/* Separador */}
+
+            {/* Opciones de Pago y Descuento */}
+            <div className="space-y-4">
+                 {/* Forma de Pago */}
+                <div>
+                    <label htmlFor="paymentType" className="block text-sm font-medium text-gray-700 mb-1">Forma de Pago:</label>
+                    <select
+                        id="paymentType"
+                        value={paymentType}
+                        onChange={e => setPaymentType(e.target.value)}
+                        className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50"
+                         disabled={processing} // Deshabilitar select mientras procesa
+                    >
+                        <option value="">Selecciona una forma de pago</option>
+                        {/* Asegúrate de tener tus opciones de pago aquí */}
+                        <option value="Efectivo">Efectivo</option>
+                        <option value="Tarjeta">Tarjeta</option>
+                        <option value="Transferencia">Transferencia</option>
+                         <option value="Crédito cliente">Crédito cliente</option> {/* Si usas crédito */}
+                    </select>
+                </div>
+
+                {/* Opciones de Descuento */}
+                 <div>
+                    <label htmlFor="discountType" className="block text-sm font-medium text-gray-700 mb-1">Descuento:</label>
+                    <select
+                        id="discountType"
+                        value={discountType}
+                        onChange={e => {
+                            setDiscountType(e.target.value);
+                            // Resetear valor del descuento si cambia el tipo
+                            setDiscountValue(0);
+                        }}
+                        className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50"
+                         disabled={processing} // Deshabilitar select mientras procesa
+                    >
+                        <option value="Sin descuento">Sin descuento</option>
+                        <option value="Por importe">Por importe ($)</option>
+                        <option value="Por porcentaje">Por porcentaje (%)</option>
+                    </select>
+                </div>
+
+                 {/* Input para Valor del Descuento (visible si hay descuento aplicado) */}
+                {discountType !== 'Sin descuento' && (
+                    <div>
+                         <label htmlFor="discountValue" className="block text-sm font-medium text-gray-700 mb-1">
+                            Valor del Descuento ({discountType === 'Por importe' ? '$' : '%'}):
+                         </label>
+                         <input
+                            id="discountValue"
+                            type="number"
+                            step={discountType === 'Por porcentaje' ? "1" : "0.01"} // Permite decimales para importe
+                            min={discountType === 'Por porcentaje' ? "0" : "0"}
+                            max={discountType === 'Por porcentaje' ? "100" : undefined} // Máx 100%
+                            value={discountValue}
+                            onChange={e => setDiscountValue(parseFloat(e.target.value) || 0)} // Convertir a número
+                            className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50"
+                            disabled={processing} // Deshabilitar input mientras procesa
+                         />
+                    </div>
+                )}
+
+            </div> {/* Fin opciones de pago y descuento */}
+
+
+        </div> {/* Fin del div con scroll */}
+
+        {/* --- Fin del contenido del cuerpo del modal --- */}
       </ModalCheckout>
     </div>
   );
