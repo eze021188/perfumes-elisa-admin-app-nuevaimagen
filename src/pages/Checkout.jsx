@@ -28,6 +28,28 @@ const formatCurrency = (amount) => {
     });
 };
 
+// Función para cargar una imagen local y convertirla a Base64
+// Esto es necesario para incrustar la imagen en el PDF
+const getBase64Image = async (url) => {
+    try {
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const blob = await response.blob();
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+        });
+    } catch (error) {
+        console.error("Error loading image for PDF:", error);
+        // Devuelve null o lanza el error si la imagen es opcional o requerida
+        return null; // Devuelve null si la imagen no se pudo cargar
+    }
+};
+
 
 export default function Checkout() {
   const navigate = useNavigate();
@@ -39,8 +61,11 @@ export default function Checkout() {
   const [busqueda, setBusqueda] = useState('');
   // El cliente seleccionado desde el selector
   const [clienteSeleccionado, setClienteSeleccionado] = useState(null);
-  // El usuario logueado (vendedor)
+  // El usuario logueado (vendedor) - Objeto de auth.users
   const [currentUser, setCurrentUser] = useState(null);
+   // Información adicional del vendedor desde la tabla 'usuarios'
+   const [vendedorInfo, setVendedorInfo] = useState(null);
+
 
   const [showQuickSale, setShowQuickSale] = useState(false);
   const [showNewClient, setShowNewClient] = useState(false);
@@ -50,21 +75,50 @@ export default function Checkout() {
   const [discountType, setDiscountType] = useState('Sin descuento'); // 'Sin descuento', 'Por importe', 'Por porcentaje'
   const [discountValue, setDiscountValue] = useState(0); // Valor numérico del descuento
 
-  // Carga inicial de clientes, productos y usuario logueado
+   // Estado para almacenar la imagen del logo en Base64
+   const [logoBase64, setLogoBase64] = useState(null);
+
+
+  // Carga inicial de clientes, productos, usuario logueado (auth y tabla) y logo
   useEffect(() => {
     async function loadData() {
-      // Obtener el usuario logueado
-      const { data: { user } } = await supabase.auth.getUser();
+      // 1. Obtener el usuario logueado de Supabase Auth
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError) {
+          console.error("Error getting auth user:", authError);
+          // Manejar error de autenticación si es necesario
+      }
+
       if (user) {
           setCurrentUser(user);
+
+          // 2. Si hay un usuario logueado, obtener su información de la tabla 'usuarios'
+          // Asumimos que el ID del usuario en auth.users coincide con el ID en la tabla 'usuarios'
+          const { data: vendedorData, error: vendedorError } = await supabase
+              .from('usuarios')
+              .select('nombre') // Selecciona solo el campo 'nombre'
+              .eq('id', user.id) // Filtra por el ID del usuario logueado
+              .single(); // Espera un solo resultado
+
+          if (vendedorError) {
+              console.error("Error loading vendedor info from 'usuarios' table:", vendedorError);
+              // Puedes mostrar un toast si el nombre del vendedor no se pudo cargar
+              // toast.error("No se pudo cargar la información del vendedor.");
+              setVendedorInfo({ nombre: user.email }); // Usar email como fallback si falla la carga del nombre
+          } else {
+              setVendedorInfo(vendedorData); // Guarda el objeto { nombre: '...' }
+          }
       } else {
           console.warn('No hay usuario logueado en Checkout.');
+          setCurrentUser(null);
+          setVendedorInfo(null); // No hay vendedor si no hay usuario logueado
            // Decide si quieres redirigir al login o permitir ventas sin vendedor asignado (requiere vendedor_id sea nullable)
           // toast.error('Debes iniciar sesión para registrar ventas.');
           // navigate('/login');
           // return;
       }
 
+      // Cargar clientes
       const { data: cli, error: errorClientes } = await supabase.from('clientes').select('*');
        if (errorClientes) {
            console.error("Error loading clients:", errorClientes);
@@ -73,7 +127,7 @@ export default function Checkout() {
            setClientes(cli || []);
        }
 
-
+      // Cargar productos
       const { data: prod, error: errorProductos } = await supabase.from('productos').select('*');
        if (errorProductos) {
            console.error("Error loading products:", errorProductos);
@@ -97,6 +151,12 @@ export default function Checkout() {
             });
             setProductos(prodMapped);
        }
+
+        // --- Cargar la imagen del logo al iniciar ---
+        const logoUrl = '/imagen/PERFUMESELISA.jpg'; // Asegúrate que esta ruta sea correcta
+        const base64 = await getBase64Image(logoUrl);
+        setLogoBase64(base64);
+        // ------------------------------------------
     }
     loadData();
   }, []); // Vacío para que solo se ejecute una vez al montar
@@ -250,7 +310,7 @@ export default function Checkout() {
          toast.error('Error de vendedor: Debes iniciar sesión.');
          setProcessing(false);
          return;
-    }
+         }
     if (!clienteSeleccionado) {
          toast.error('Error de cliente: Selecciona un cliente.');
          setProcessing(false);
@@ -419,8 +479,8 @@ export default function Checkout() {
       setDiscountType('Sin descuento'); // Resetear descuento
       setDiscountValue(0); // Resetear valor descuento
 
-      // Generar PDF del ticket
-      generarPDF(codigo);
+      // Generar PDF del ticket - Ahora es async
+      await generarPDF(codigo); // Usar await aquí
 
       toast.success(`Venta ${codigo} registrada exitosamente!`);
 
@@ -435,20 +495,47 @@ export default function Checkout() {
     }
   };
 
-  // Función para generar el PDF del ticket
-  const generarPDF = codigo => {
+  // Función para generar el PDF del ticket - Ahora es async
+  const generarPDF = async (codigo) => { // Añadido async
     const doc = new jsPDF();
-    doc.setFontSize(16);
-    doc.text(`Ticket - ${codigo}`, 10, 12);
-    if (clienteSeleccionado) {
-      doc.text(`Cliente: ${clienteSeleccionado.nombre}`, 10, 22); // Asume clienteSeleccionado tiene .nombre
-    }
-    if (currentUser && currentUser.email) { // Mostrar vendedor si está logueado
-        doc.text(`Vendedor: ${currentUser.email}`, 10, 30); // O usar otro campo si tu tabla de usuarios tiene nombre
-        doc.text(`Fecha: ${new Date().toLocaleString()}`, 10, 38);
+    let yOffset = 10; // Offset inicial para el contenido
+
+    // --- Añadir el logo si está cargado ---
+    if (logoBase64) {
+        const imgWidth = 30; // Ancho deseado de la imagen en el PDF (en mm)
+        const imgHeight = 30; // Altura deseada (ajusta según la proporción si es necesario, o usa un cálculo)
+        const xPos = (doc.internal.pageSize.getWidth() - imgWidth) / 2; // Centrar horizontalmente
+
+        doc.addImage(logoBase64, 'JPEG', xPos, yOffset, imgWidth, imgHeight);
+        yOffset += imgHeight + 5; // Aumentar offset para dejar espacio después del logo
     } else {
-        doc.text(`Fecha: ${new Date().toLocaleString()}`, 10, 30);
+        console.warn("Logo image not loaded, skipping addition to PDF.");
+         // Puedes añadir un texto placeholder si el logo no carga
+         // doc.text("Logo no disponible", 10, yOffset + 10);
+         // yOffset += 20;
     }
+    // --------------------------------------
+
+    doc.setFontSize(16);
+    doc.text(`Ticket - ${codigo}`, 10, yOffset); // Usar yOffset
+    yOffset += 10; // Espacio después del título del ticket
+
+    if (clienteSeleccionado) {
+      doc.text(`Cliente: ${clienteSeleccionado.nombre}`, 10, yOffset); // Usar yOffset
+      yOffset += 8; // Espacio después del cliente
+    }
+    // --- Mostrar el nombre del vendedor si está disponible ---
+    if (vendedorInfo && vendedorInfo.nombre) { // Usar vendedorInfo.nombre
+        doc.text(`Vendedor: ${vendedorInfo.nombre}`, 10, yOffset); // Usar yOffset
+        yOffset += 8; // Espacio después del vendedor
+    } else if (currentUser && currentUser.email) { // Fallback al email si no hay nombre en vendedorInfo
+         doc.text(`Vendedor: ${currentUser.email}`, 10, yOffset); // Usar yOffset
+         yOffset += 8; // Espacio después del vendedor
+    }
+    // ----------------------------------------------------
+    // Fecha siempre se muestra
+    doc.text(`Fecha: ${new Date().toLocaleString()}`, 10, yOffset);
+    yOffset += 10; // Espacio antes de la tabla
 
 
     const rows = productosVenta.map(p => [
@@ -462,17 +549,20 @@ export default function Checkout() {
     doc.autoTable({
       head: [['Producto', 'Cant.', 'P.U.', 'Total']],
       body: rows,
-      startY: currentUser ? 45 : 38, // Ajustar startY si mostramos vendedor
+      // Ajustar startY para que comience después del logo y la información de la cabecera
+      startY: yOffset, // Usar el offset calculado
       styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak' },
       headStyles: { fillColor: [200, 200, 200], textColor: [0, 0, 0] },
-      margin: { top: 10 }
+      margin: { top: 10 } // El margen superior se suma a startY, considera ajustarlo si es necesario
     });
 
-    const y = doc.lastAutoTable.finalY + 10;
+    // Obtener la posición Y final de la tabla
+    const finalY = doc.lastAutoTable.finalY;
+
      // Usar formatCurrency para totales en el PDF
-    doc.text(`Subtotal: ${formatCurrency(originalSubtotal)}`, 10, y);
-    doc.text(`Descuento: -${formatCurrency(discountAmount)}`, 10, y + 6);
-    doc.text(`Total: ${formatCurrency(subtotal)}`, 10, y + 12);
+    doc.text(`Subtotal: ${formatCurrency(originalSubtotal)}`, 10, finalY + 10);
+    doc.text(`Descuento: -${formatCurrency(discountAmount)}`, 10, finalY + 16);
+    doc.text(`Total: ${formatCurrency(subtotal)}`, 10, finalY + 22); // Ajustar posición Y
 
     // Abrir PDF en una nueva ventana
     doc.output('dataurlnewwindow');
@@ -494,7 +584,7 @@ export default function Checkout() {
 
         {/* Aquí tu título */}
         <h1 className="text-3xl font-bold text-gray-800 text-center w-full md:w-auto">
-          Gestión de Ventas {/* <-- Título ajustado a Ventas */}
+          Gesti\u00f3n de Ventas {/* <-- T\u00edtulo ajustado a Ventas */}
         </h1>
 
         {/* Spacer para md+ */}
@@ -513,19 +603,19 @@ export default function Checkout() {
           isOpen={showNewClient}
           onClose={() => setShowNewClient(false)}
           // Si onClientAdded en NewClientModal espera el cliente agregado,
-          // puedes pasárselo así para seleccionarlo automáticamente después de crear
+          // puedes pas\u00e1rselo as\u00ed para seleccionarlo autom\u00e1ticamente despu\u00e9s de crear
           onClientAdded={(newClient) => {
               // Asume que NewClientModal devuelve el objeto del nuevo cliente con 'id' y 'nombre'
               if (newClient && newClient.id) {
                   setClienteSeleccionado(newClient); // Seleccionar el nuevo cliente
-                  setClientes(prev => [...prev, newClient]); // Añadir a la lista de clientes disponibles
+                  setClientes(prev => [...prev, newClient]); // A\u00f1adir a la lista de clientes disponibles
               }
-              setShowNewClient(false); // Cerrar modal después de añadir
+              setShowNewClient(false); // Cerrar modal despu\u00e9s de a\u00f1adir
           }}
         />
       </div>
 
-      {/* Barra de búsqueda rápida y Modal de Venta Rápida */}
+      {/* Barra de b\u00fasqueda r\u00e1pida y Modal de Venta R\u00e1pida */}
       <div className="mb-6">
          <QuickEntryBar
             busqueda={busqueda}
@@ -547,13 +637,13 @@ export default function Checkout() {
 
 
       {/* Grid de Productos */}
-      <div className="mb-20"> {/* Añadido mb-20 para dejar espacio al footer fijo */}
+      <div className="mb-20"> {/* A\u00f1adido mb-20 para dejar espacio al footer fijo */}
          <ProductGrid
             productos={productosFiltrados}
-            onAddToCart={onAddToCart} // Pasamos la función onAddToCart
-            showStock // Asegúrate de que ProductGrid maneje esta prop si quieres mostrar stock
+            onAddToCart={onAddToCart} // Pasamos la funci\u00f3n onAddToCart
+            showStock // Aseg\u00farate de que ProductGrid maneje esta prop si quieres mostrar stock
           />
-      </div>
+          </div>
 
 
       {/* Footer Fijo con Resumen de Venta */}
@@ -563,26 +653,30 @@ export default function Checkout() {
           flex justify-between items-center
           transition-colors duration-300 ease-in-out
           ${totalItems === 0 || !clienteSeleccionado // Deshabilitar si no hay items O no hay cliente seleccionado
-            ? 'bg-gray-300 text-gray-600 cursor-not-allowed' // Estilo para carrito vacío o sin cliente
+            ? 'bg-gray-300 text-gray-600 cursor-not-allowed' // Estilo para carrito vac\u00edo o sin cliente
             : processing
             ? 'bg-yellow-500 text-white cursor-wait' // Estilo mientras procesa
             : 'bg-green-600 text-white cursor-pointer hover:bg-green-700' // Estilo para carrito con items y cliente, listo para abrir modal
           }
         `}
-        // El clic solo debe funcionar si hay cliente, items y no está procesando (la validación ya está en openSaleModal)
+        // El clic solo debe funcionar si hay cliente, items y no est\u00e1 procesando (la validaci\u00f3n ya est\u00e1 en openSaleModal)
         onClick={openSaleModal}
-        // Remover el style pointerEvents y confiar en la validación de openSaleModal
+        // Remover el style pointerEvents y confiar en la validaci\u00f3n de openSaleModal
       >
-        {/* Información del resumen */}
+        {/* Informaci\u00f3n del resumen */}
         <div className="flex-1 text-left">
             <span className="font-semibold text-lg">{totalItems} item{totalItems !== 1 ? 's' : ''}</span>
+            {/* Mostrar nombre del cliente seleccionado en el footer */}
+             {clienteSeleccionado && (
+                 <span className="ml-4 text-sm text-gray-200">Cliente: {clienteSeleccionado.nombre}</span>
+             )}
         </div>
          <div className="flex-1 text-right">
              <span className="font-bold text-xl">{formatCurrency(subtotal)}</span> {/* Usar formatCurrency */}
          </div>
          {/* Indicador de procesamiento */}
          {processing && (
-             <div className="ml-4 text-sm font-semibold">Procesando…</div>
+             <div className="ml-4 text-sm font-semibold">Procesando\u2026</div>
          )}
       </div>
 
@@ -603,7 +697,7 @@ export default function Checkout() {
             </button>
             <button
               onClick={handleFinalize}
-              disabled={!paymentType || processing} // Mantiene la lógica de deshabilitación
+              disabled={!paymentType || processing} // Mantiene la l\u00f3gica de deshabilitaci\u00f3n
               className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition duration-200 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
             >
               {processing ? 'Confirmando...' : 'Confirmar'}
@@ -612,8 +706,8 @@ export default function Checkout() {
         }
       >
         {/* --- Contenido del cuerpo del modal --- */}
-        {/* Este JSX se renderizará dentro del cuerpo del ModalCheckout */}
-        <div className="mb-4 max-h-80 overflow-y-auto pr-2"> {/* Añadido pr-2 para espacio del scrollbar */}
+        {/* Este JSX se renderizar\u00e1 dentro del cuerpo del ModalCheckout */}
+        <div className="mb-4 max-h-80 overflow-y-auto pr-2"> {/* A\u00f1adido pr-2 para espacio del scrollbar */}
             {/* Lista de productos en la venta */}
             <h4 className="text-md font-semibold mb-2">Productos:</h4>
             {productosVenta.length === 0 ? (
@@ -638,13 +732,13 @@ export default function Checkout() {
                                 />
                                 {/* Total parcial */}
                                 <span className="font-semibold w-20 text-right">{formatCurrency(p.total ?? 0)}</span>
-                                {/* Botón para eliminar producto */}
+                                {/* Bot\u00f3n para eliminar producto */}
                                 <button
                                     onClick={() => onRemoveFromCart(p.id)}
                                     className="ml-2 text-red-600 hover:text-red-800 disabled:opacity-50"
-                                     disabled={processing} // Deshabilitar botón mientras procesa
+                                     disabled={processing} // Deshabilitar bot\u00f3n mientras procesa
                                 >
-                                    ✕
+                                    \u2715
                                 </button>
                             </div>
                         </li>
@@ -677,11 +771,11 @@ export default function Checkout() {
                          disabled={processing} // Deshabilitar select mientras procesa
                     >
                         <option value="">Selecciona una forma de pago</option>
-                        {/* Asegúrate de tener tus opciones de pago aquí */}
+                        {/* Aseg\u00farate de tener tus opciones de pago aqu\u00ed */}
                         <option value="Efectivo">Efectivo</option>
                         <option value="Tarjeta">Tarjeta</option>
                         <option value="Transferencia">Transferencia</option>
-                         <option value="Crédito cliente">Crédito cliente</option> {/* Si usas crédito */}
+                         <option value="Cr\u00e9dito cliente">Cr\u00e9dito cliente</option> {/* Si usas cr\u00e9dito */}
                     </select>
                 </div>
 
@@ -716,9 +810,9 @@ export default function Checkout() {
                             type="number"
                             step={discountType === 'Por porcentaje' ? "1" : "0.01"} // Permite decimales para importe
                             min={discountType === 'Por porcentaje' ? "0" : "0"}
-                            max={discountType === 'Por porcentaje' ? "100" : undefined} // Máx 100%
+                            max={discountType === 'Por porcentaje' ? "100" : undefined} // M\u00e1x 100%
                             value={discountValue}
-                            onChange={e => setDiscountValue(parseFloat(e.target.value) || 0)} // Convertir a número
+                            onChange={e => setDiscountValue(parseFloat(e.target.value) || 0)} // Convertir a n\u00famero
                             className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50"
                             disabled={processing} // Deshabilitar input mientras procesa
                          />

@@ -47,7 +47,7 @@ export default function DashboardLayout() {
         {/* --- Aquí añadimos la imagen de tu logo --- */}
         <div className="flex justify-center mb-6"> {/* Contenedor para centrar el logo */}
             <img
-                src="/images/PERFUMESELISA.jpg" // Ruta a tu logo en la carpeta public/imagen
+                src="/images/PERFUMESELISAblack.jpg" // Ruta a tu logo en la carpeta public/imagen
                 alt="Logo Perfumes Elisa" // Texto alternativo
                 className="h-auto w-32" // Clases de Tailwind para tamaño (altura automática, ancho fijo)
             />
