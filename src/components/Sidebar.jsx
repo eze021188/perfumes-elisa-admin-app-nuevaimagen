@@ -10,7 +10,7 @@ export default function Sidebar({ open, onClose }) {
         ${open ? 'translate-x-0' : '-translate-x-full'}
         md:translate-x-0 md:static md:inset-auto flex-shrink-0`}
     >
-      <h1 className="text-2xl font-bold mb-6">Perfumes Elisa</h1>
+      <h1 className="text-2xl font-bold mb-6">Perfumes Elisitaa</h1>
       <ul className="space-y-4">
         {[
           ['/', 'Inicio'],
