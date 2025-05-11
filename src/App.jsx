@@ -6,7 +6,8 @@ import { Toaster } from 'react-hot-toast';
 
 // Importa tus Contextos
 import { ClientesProvider } from './contexts/ClientesContext';
-import { ProductosProvider }Provider>
+// CORRECCIÓN: Sintaxis de importación para ProductosProvider
+import { ProductosProvider } from './contexts/ProductosContext';
 import { ComprasProvider } from './contexts/ComprasContext';
 // >>> Importa tu nuevo AuthProvider y useAuth <<<
 import { AuthProvider, useAuth } from './contexts/AuthContext'; // Asegúrate de que la ruta sea correcta
@@ -32,7 +33,7 @@ import SaldosClientes from './pages/SaldosClientes';
 
 // >>> Componente para proteger rutas usando el contexto de Auth <<<
 function ProtectedRoute({ children }) {
-  // *** CORRECCIÓN: Usar useAuth para obtener el estado reactivo ***
+  // Usar useAuth para obtener el estado reactivo
   const { user, loading } = useAuth(); // Obtiene el estado del usuario y carga del AuthContext
 
   // Si todavía estamos verificando la sesión inicial, muestra un indicador de carga
@@ -55,7 +56,7 @@ function ProtectedRoute({ children }) {
 // >>> Componente para redirigir si el usuario *ya* está logueado <<<
 // Se usa en rutas como /login, /signup, /reset-password
 function RedirectIfAuthenticated({ children }) {
-    // *** CORRECCIÓN: Usar useAuth para obtener el estado reactivo ***
+    // Usar useAuth para obtener el estado reactivo
     const { user, loading } = useAuth(); // Obtiene el estado del usuario y carga del AuthContext
 
     // Si todavía estamos verificando la sesión inicial, muestra un indicador de carga
@@ -168,6 +169,6 @@ export default function App() {
           </ComprasProvider>
         </ProductosProvider>
       </ClientesProvider>
-    </AuthProvider> {/* <<< Cierra AuthProvider */}
+    </AuthProvider>
   );
 }
