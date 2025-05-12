@@ -241,8 +241,12 @@ export default function Home() {
                 data: monthlySalesData.map(item => item.monthly_sales),
                 borderColor: 'rgb(75, 192, 192)',
                 backgroundColor: 'rgba(75, 192, 192, 0.5)', // Área bajo la línea
-                tension: 0.1,
+                tension: 0.3, // Curva más suave
                 fill: true, // Rellenar bajo la línea
+                pointBackgroundColor: 'rgb(75, 192, 192)', // Color de los puntos
+                pointBorderColor: '#fff', // Borde de los puntos
+                pointHoverBackgroundColor: '#fff',
+                pointHoverBorderColor: 'rgb(75, 192, 192)',
             }],
         };
     }, [monthlySalesData]); // Regenerar si monthlySalesData cambia
@@ -254,6 +258,12 @@ export default function Home() {
         plugins: {
             legend: {
                 position: 'top',
+                labels: {
+                    font: {
+                        size: 12, // Tamaño de fuente de la leyenda
+                    },
+                    color: '#333', // Color de la leyenda
+                }
             },
             title: {
                 display: false, // El título se maneja en el h3 del JSX
@@ -270,16 +280,41 @@ export default function Home() {
                          }
                          return label;
                      }
-                 }
+                 },
+                 backgroundColor: 'rgba(0, 0, 0, 0.7)', // Fondo oscuro del tooltip
+                 bodyColor: '#fff', // Color del texto del tooltip
+                 borderColor: '#fff', // Borde del tooltip
+                 borderWidth: 1,
+                 cornerRadius: 4, // Bordes redondeados del tooltip
+                 padding: 10, // Padding del tooltip
              }
         },
         scales: {
-            y: {
+            x: { // Estilo del eje X
+                ticks: {
+                    color: '#666', // Color de las etiquetas del eje X
+                    font: {
+                        size: 10, // Tamaño de fuente del eje X
+                    }
+                },
+                grid: {
+                    display: false, // Ocultar líneas de la cuadrícula del eje X
+                }
+            },
+            y: { // Estilo del eje Y
                 beginAtZero: true,
                  ticks: {
                      callback: function(value) {
                          return formatCurrency(value); // Formatear ticks del eje Y como moneda
-                     }
+                     },
+                     color: '#666', // Color de las etiquetas del eje Y
+                     font: {
+                        size: 10, // Tamaño de fuente del eje Y
+                    }
+                 },
+                 grid: {
+                    color: '#eee', // Color de las líneas de la cuadrícula del eje Y
+                    borderDash: [2, 2], // Líneas punteadas
                  }
             }
         }
@@ -290,12 +325,14 @@ export default function Home() {
     const paymentMethodChartData = useMemo(() => {
         // Colores de ejemplo (puedes expandir o usar una paleta)
         const backgroundColors = [
-            'rgba(255, 99, 132, 0.6)', // Rojo
-            'rgba(54, 162, 235, 0.6)', // Azul
-            'rgba(255, 206, 86, 0.6)', // Amarillo
-            'rgba(75, 192, 192, 0.6)', // Verde azulado
-            'rgba(153, 102, 255, 0.6)', // Morado
-            'rgba(255, 159, 64, 0.6)', // Naranja
+            'rgba(255, 99, 132, 0.7)', // Rojo
+            'rgba(54, 162, 235, 0.7)', // Azul
+            'rgba(255, 206, 86, 0.7)', // Amarillo
+            'rgba(75, 192, 192, 0.7)', // Verde azulado
+            'rgba(153, 102, 255, 0.7)', // Morado
+            'rgba(255, 159, 64, 0.7)', // Naranja
+            'rgba(199, 199, 199, 0.7)', // Gris
+            'rgba(83, 102, 255, 0.7)', // Azul claro
         ];
          const borderColors = [
             'rgba(255, 99, 132, 1)',
@@ -304,6 +341,8 @@ export default function Home() {
             'rgba(75, 192, 192, 1)',
             'rgba(153, 102, 255, 1)',
             'rgba(255, 159, 64, 1)',
+            'rgba(199, 199, 199, 1)',
+            'rgba(83, 102, 255, 1)',
         ];
 
         return {
@@ -313,6 +352,7 @@ export default function Home() {
                 backgroundColor: salesByPaymentMethodData.map((_, index) => backgroundColors[index % backgroundColors.length]),
                 borderColor: salesByPaymentMethodData.map((_, index) => borderColors[index % borderColors.length]),
                 borderWidth: 1,
+                hoverOffset: 8, // Efecto hover
             }],
         };
     }, [salesByPaymentMethodData]); // Regenerar si salesByPaymentMethodData cambia
@@ -324,6 +364,13 @@ export default function Home() {
         plugins: {
             legend: {
                 position: 'right', // Posición de la leyenda
+                 labels: {
+                    font: {
+                        size: 12, // Tamaño de fuente de la leyenda
+                    },
+                    color: '#333', // Color de la leyenda
+                    usePointStyle: true, // Usar el color del punto en la leyenda
+                }
             },
              tooltip: {
                  callbacks: {
@@ -340,7 +387,13 @@ export default function Home() {
                          const percentage = total > 0 ? ((context.raw / total) * 100).toFixed(1) + '%' : '0%';
                          return `${label} (${percentage})`;
                      }
-                 }
+                 },
+                  backgroundColor: 'rgba(0, 0, 0, 0.7)', // Fondo oscuro del tooltip
+                  bodyColor: '#fff', // Color del texto del tooltip
+                  borderColor: '#fff', // Borde del tooltip
+                  borderWidth: 1,
+                  cornerRadius: 4, // Bordes redondeados del tooltip
+                  padding: 10, // Padding del tooltip
              }
         },
      }), []); // Las opciones no dependen de los datos
@@ -354,13 +407,13 @@ export default function Home() {
         <h1 className="text-3xl font-bold text-gray-800">Dashboard</h1>
         {/* Selector de Rango de Fechas */}
          <div className="flex flex-col sm:flex-row items-center gap-2"> {/* Flexbox para alinear inputs */}
-             <label htmlFor="startDate" className="text-gray-600 text-sm">Rango:</label>
+             <label htmlFor="startDate" className="text-gray-600 text-sm font-medium">Rango de Fechas:</label> {/* Etiqueta mejorada */}
              <input
                 type="date"
                 id="startDate"
                 value={startDate}
                 onChange={e => setStartDate(e.target.value)}
-                className="p-2 border rounded-md shadow-sm text-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                className="p-2 border border-gray-300 rounded-md shadow-sm text-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
              />
              <span className="text-gray-600 hidden sm:inline">-</span> {/* Guion visible en sm+ */}
              <input
@@ -368,7 +421,7 @@ export default function Home() {
                 id="endDate"
                 value={endDate}
                 onChange={e => setEndDate(e.target.value)}
-                className="p-2 border rounded-md shadow-sm text-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                className="p-2 border border-gray-300 rounded-md shadow-sm text-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
              />
          </div>
       </div>
@@ -377,89 +430,91 @@ export default function Home() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           {loadingMetrics ? (
               // Skeleton loader para métricas
-              Array.from({ length: 6 }).map((_, i) => (
-                  <div key={i} className="bg-white rounded-lg shadow p-4 animate-pulse">
-                      <div className="h-4 bg-gray-300 rounded w-3/4 mb-2"></div>
-                      <div className="h-6 bg-gray-300 rounded w-1/2"></div>
+              Array.from({ length: 8 }).map((_, i) => ( // Ajustado a 8 para los nuevos KPIs
+                  <div key={i} className="bg-white rounded-lg shadow-md p-5 animate-pulse border border-gray-200"> {/* Sombra y borde mejorados */}
+                      <div className="h-4 bg-gray-200 rounded w-3/4 mb-3"></div> {/* Color y mb ajustados */}
+                      <div className="h-6 bg-gray-200 rounded w-1/2"></div> {/* Color ajustado */}
                   </div>
               ))
           ) : metricsError ? (
-              <p className="col-span-full text-center text-red-500">{metricsError}</p>
+              <> {/* Wrap in fragment */}
+                  <p className="col-span-full text-center text-red-600 font-semibold">{metricsError}</p> {/* Color y fuente mejorados */}
+              </>
           ) : (
               <>
                 {/* Tarjeta Total Pedidos */}
-                <div className="bg-white rounded-lg shadow p-4 flex items-center justify-between">
+                <div className="bg-white rounded-lg shadow-md p-5 flex items-center justify-between border border-gray-200"> {/* Sombra, padding, borde mejorados */}
                     <div>
                         <p className="text-sm font-medium text-gray-500">Pedidos en total</p>
                         <p className="text-2xl font-bold text-blue-600">{kpis.total_orders}</p>
                     </div>
-                    <div className="text-blue-400 text-4xl opacity-70">🛒</div> {/* Icono */}
+                    <div className="text-blue-500 text-4xl opacity-80">🛒</div> {/* Color y opacidad ajustados */}
                 </div>
 
                  {/* Tarjeta Total Ventas */}
-                 <div className="bg-white rounded-lg shadow p-4 flex items-center justify-between">
+                 <div className="bg-white rounded-lg shadow-md p-5 flex items-center justify-between border border-gray-200">
                     <div>
                         <p className="text-sm font-medium text-gray-500">Total ventas</p>
                         <p className="text-2xl font-bold text-green-600">{formatCurrency(kpis.total_sales)}</p>
                     </div>
-                    <div className="text-green-400 text-4xl opacity-70">💰</div> {/* Icono */}
+                    <div className="text-green-500 text-4xl opacity-80">💰</div> {/* Color y opacidad ajustados */}
                 </div>
 
                  {/* Tarjeta Clientes Nuevos */}
-                 <div className="bg-white rounded-lg shadow p-4 flex items-center justify-between">
+                 <div className="bg-white rounded-lg shadow-md p-5 flex items-center justify-between border border-gray-200">
                     <div>
                         <p className="text-sm font-medium text-gray-500">Clientes nuevos</p>
                         <p className="text-2xl font-bold text-cyan-600">{kpis.new_clients_count}</p>
                     </div>
-                     <div className="text-cyan-400 text-4xl opacity-70">👤+</div> {/* Icono */}
+                     <div className="text-cyan-500 text-4xl opacity-80">👤+</div> {/* Color y opacidad ajustados */}
                 </div>
 
                  {/* Tarjeta Ventas Clientes Nuevos */}
-                  <div className="bg-white rounded-lg shadow p-4 flex items-center justify-between">
+                  <div className="bg-white rounded-lg shadow-md p-5 flex items-center justify-between border border-gray-200">
                      <div>
                          <p className="text-sm font-medium text-gray-500">Ventas clientes nuevos</p>
                          <p className="text-2xl font-bold text-cyan-600">{formatCurrency(kpis.new_clients_sales)}</p>
                      </div>
-                      <div className="text-cyan-400 text-4xl opacity-70">💸</div> {/* Icono */}
+                      <div className="text-cyan-500 text-4xl opacity-80">💸</div> {/* Color y opacidad ajustados */}
                  </div>
 
                  {/* >>> Nueva Tarjeta: Venta Promedio por Pedido <<< */}
-                 <div className="bg-white rounded-lg shadow p-4 flex items-center justify-between">
+                 <div className="bg-white rounded-lg shadow-md p-5 flex items-center justify-between border border-gray-200">
                      <div>
                          <p className="text-sm font-medium text-gray-500">Venta promedio / pedido</p>
                          <p className="text-2xl font-bold text-purple-600">{formatCurrency(kpis.average_sale_value)}</p>
                      </div>
-                      <div className="text-purple-400 text-4xl opacity-70">📈</div> {/* Icono */}
+                      <div className="text-purple-500 text-4xl opacity-80">📈</div> {/* Color y opacidad ajustados */}
                  </div>
 
                  {/* >>> Nueva Tarjeta: Ventas por Día <<< */}
-                 <div className="bg-white rounded-lg shadow p-4 flex items-center justify-between">
+                 <div className="bg-white rounded-lg shadow-md p-5 flex items-center justify-between border border-gray-200">
                      <div>
                          <p className="text-sm font-medium text-gray-500">Ventas por día</p>
                          <p className="text-2xl font-bold text-teal-600">{formatCurrency(kpis.sales_per_day)}</p>
                      </div>
-                      <div className="text-teal-400 text-4xl opacity-70">📅</div> {/* Icono */}
+                      <div className="text-teal-500 text-4xl opacity-80">📅</div> {/* Color y opacidad ajustados */}
                  </div>
 
 
                  {/* Tarjeta Cuentas por cobrar */}
-                 <div className="bg-white rounded-lg shadow p-4 flex items-center justify-between">
+                 <div className="bg-white rounded-lg shadow-md p-5 flex items-center justify-between border border-gray-200">
                     <div>
                         <p className="text-sm font-medium text-gray-500">Cuentas por cobrar</p>
                         {/* Usamos color rojo para deuda */}
                         <p className="text-2xl font-bold text-red-600">{formatCurrency(kpis.accounts_receivable)}</p>
                     </div>
-                     <div className="text-red-400 text-4xl opacity-70">🏦</div> {/* Icono */}
+                     <div className="text-red-500 text-4xl opacity-80">🏦</div> {/* Color y opacidad ajustados */}
                 </div>
 
                  {/* Tarjeta Saldos Vencidos (Placeholder - Requiere BD) */}
-                 <div className="bg-white rounded-lg shadow p-4 flex items-center justify-between">
+                 <div className="bg-white rounded-lg shadow-md p-5 flex items-center justify-between border border-gray-200">
                     <div>
                         <p className="text-sm font-medium text-gray-500">Saldos vencidos</p>
                         {/* Mostrar en rojo o naranja si hay saldo vencido */}
                         <p className="text-2xl font-bold text-orange-600">{formatCurrency(kpis.overdue_balances)}</p>
                     </div>
-                    <div className="text-orange-400 text-4xl opacity-70">🚨</div> {/* Icono */}
+                    <div className="text-orange-500 text-4xl opacity-80">🚨</div> {/* Color y opacidad ajustados */}
                 </div>
 
 
@@ -467,142 +522,207 @@ export default function Home() {
           )}
       </div>
 
-      {/* Gráficos de Ventas */}
-       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-           {loadingCharts ? (
-               // Skeleton loader para gráficos
-                Array.from({ length: 2 }).map((_, i) => (
-                    <div key={i} className="bg-white rounded-lg shadow p-4 animate-pulse h-80 flex items-center justify-center">
-                        <div className="w-3/4 h-3/4 bg-gray-300 rounded"></div>
-                    </div>
-                ))
-           ) : chartsError ? (
-               <p className="col-span-full text-center text-red-500">{chartsError}</p>
-           ) : (
-               <>
-                   {/* Gráfico Tendencia de Ventas Mensuales */}
-                   <div className="bg-white rounded-lg shadow p-4">
-                       <h3 className="text-lg font-semibold mb-3 text-gray-700">Tendencia de Ventas Mensuales</h3>
-                       {monthlySalesData.length > 0 ? (
-                           <div className="h-64 w-full"> {/* Altura fija para el contenedor del gráfico */}
-                               {/* >>> Gráfico de Líneas Real <<< */}
-                               <Line data={monthlySalesChartData} options={monthlySalesChartOptions} />
-                           </div>
-                       ) : (
-                            <p className="text-center text-gray-500">No hay datos de ventas mensuales para el período.</p>
-                       )}
-                   </div>
+{/* Gráficos de Ventas */}
+<div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+  {loadingCharts ? (
+    // Skeleton loader para gráficos
+    Array.from({ length: 2 }).map((_, i) => (
+      <div
+        key={i}
+        className="bg-white rounded-lg shadow-md p-4 animate-pulse h-80 flex items-center justify-center border border-gray-200"
+      >
+        <div className="w-3/4 h-3/4 bg-gray-200 rounded"></div>
+      </div>
+    ))
+  ) : chartsError ? (
+    <div className="col-span-full">
+      {/* Color y fuente mejorados */}
+      <p className="text-center text-red-600 font-semibold">
+        {chartsError}
+      </p>
+    </div>
+  ) : (
+    <>
+      {/* Gráfico Tendencia de Ventas Mensuales */}
+      <div className="bg-white rounded-lg shadow-md p-4 border border-gray-200">
+        <h3 className="text-lg font-semibold mb-3 text-gray-700">
+          Tendencia de Ventas Mensuales
+        </h3>
+        {monthlySalesData.length > 0 ? (
+          <div className="h-64 w-full">
+            {/* >>> Gráfico de Líneas Real <<< */}
+            <Line
+              data={monthlySalesChartData}
+              options={monthlySalesChartOptions}
+            />
+          </div>
+        ) : (
+          <p className="text-center text-gray-500 italic">
+            No hay datos de ventas mensuales para el período.
+          </p>
+        )}
+      </div>
 
-                    {/* Gráfico Ventas por Forma de Pago */}
-                    <div className="bg-white rounded-lg shadow p-4">
-                       <h3 className="text-lg font-semibold mb-3 text-gray-700">Ventas por Forma de Pago</h3>
-                        {salesByPaymentMethodData.length > 0 ? (
-                           <div className="h-64 w-full flex justify-center items-center"> {/* Altura fija y centrado para el contenedor */}
-                              {/* >>> Gráfico de Pastel Real <<< */}
-                                <Pie data={paymentMethodChartData} options={paymentMethodChartOptions} />
-                           </div>
-                        ) : (
-                            <p className="text-center text-gray-500">No hay datos de ventas por forma de pago para el período.</p>
-                        )}
-                   </div>
-               </>
-           )}
-       </div>
+      {/* Gráfico Ventas por Forma de Pago */}
+      <div className="bg-white rounded-lg shadow-md p-4 border border-gray-200">
+        <h3 className="text-lg font-semibold mb-3 text-gray-700">
+          Ventas por Forma de Pago
+        </h3>
+        {salesByPaymentMethodData.length > 0 ? (
+          <div className="h-64 w-full flex justify-center items-center">
+            {/* >>> Gráfico de Pastel Real <<< */}
+            <Pie
+              data={paymentMethodChartData}
+              options={paymentMethodChartOptions}
+            />
+          </div>
+        ) : (
+          <p className="text-center text-gray-500 italic">
+            No hay datos de ventas por forma de pago para el período.
+          </p>
+        )}
+      </div>
+    </>
+  )}
+</div>
 
+{/* Secciones de Listas Top */}
+<div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+  {loadingLists ? (
+    // Skeleton loader para listas
+    Array.from({ length: 3 }).map((_, i) => (
+      <div
+        key={i}
+        className="bg-white rounded-lg shadow-md p-4 animate-pulse border border-gray-200"
+      >
+        <div className="h-6 bg-gray-200 rounded w-2/3 mb-4"></div>
+        <ul>
+          {Array.from({ length: 5 }).map((_, j) => (
+            <li
+              key={j}
+              className="flex justify-between items-center py-3 border-b border-gray-200 last:border-b-0"
+            >
+              <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+              <div className="h-4 bg-gray-200 rounded w-1/4"></div>
+            </li>
+          ))}
+        </ul>
+      </div>
+    ))
+  ) : listsError ? (
+    <p className="col-span-full text-center text-red-600 font-semibold">
+      {listsError}
+    </p>
+  ) : (
+    <>
+      {/* Top Productos por Ventas */}
+      <div className="bg-white rounded-lg shadow-md p-4 border border-gray-200">
+        <h3 className="text-lg font-semibold mb-3 text-gray-700">
+          Top productos por Ventas
+        </h3>
+        <ul>
+          {topProducts.map((p, index) => (
+            <li
+              key={p.product_id || index}
+              className="flex justify-between items-center py-2 border-b border-gray-200 last:border-b-0 text-sm"
+            >
+              <span className="text-gray-800">{p.product_name}</span>
+              <span className="font-semibold text-gray-700">
+                {formatCurrency(p.total_sales)}
+              </span>
+            </li>
+          ))}
+          {topProducts.length === 0 && (
+            <li className="text-sm text-gray-500 italic">
+              No hay datos de productos top para el período.
+            </li>
+          )}
+        </ul>
+      </div>
 
-      {/* Secciones de Listas Top */}
-       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-           {loadingLists ? (
-               // Skeleton loader para listas
-               Array.from({ length: 3 }).map((_, i) => (
-                   <div key={i} className="bg-white rounded-lg shadow p-4 animate-pulse">
-                       <div className="h-6 bg-gray-300 rounded w-2/3 mb-4"></div>
-                       <ul>
-                           {Array.from({ length: 5 }).map((_, j) => (
-                               <li key={j} className="flex justify-between items-center py-2 border-b last:border-b-0">
-                                    <div className="h-4 bg-gray-300 rounded w-1/2"></div>
-                                    <div className="h-4 bg-gray-300 rounded w-1/4"></div>
-                               </li>
-                           ))}
-                       </ul>
-                   </div>
-               ))
-           ) : listsError ? (
-               <p className="col-span-full text-center text-red-500">{listsError}</p>
-           ) : (
-               <>
-                   {/* Top Productos por Ventas */}
-                   <div className="bg-white rounded-lg shadow p-4">
-                       <h3 className="text-lg font-semibold mb-3 text-gray-700">Top productos por Ventas</h3>
-                       <ul>
-                           {topProducts.map((p, index) => (
-                               <li key={p.product_id || index} className="flex justify-between items-center py-2 border-b last:border-b-0 text-sm">
-                                   <span className="text-gray-800">{p.product_name}</span>
-                                   <span className="font-medium text-gray-600">{formatCurrency(p.total_sales)}</span>
-                               </li>
-                           ))}
-                           {topProducts.length === 0 && <li className="text-sm text-gray-500">No hay datos de productos top para el período.</li>}
-                       </ul>
-                   </div>
+      {/* Top Clientes por Compras */}
+      <div className="bg-white rounded-lg shadow-md p-4 border border-gray-200">
+        <h3 className="text-lg font-semibold mb-3 text-gray-700">
+          Top Clientes por Compras
+        </h3>
+        <ul>
+          {topClients.map((c, index) => (
+            <li
+              key={c.client_id || index}
+              className="flex justify-between items-center py-2 border-b border-gray-200 last:border-b-0 text-sm"
+            >
+              <span className="text-gray-800">{c.client_name}</span>
+              <span className="font-semibold text-gray-700">
+                {formatCurrency(c.total_purchases)}
+              </span>
+            </li>
+          ))}
+          {topClients.length === 0 && (
+            <li className="text-sm text-gray-500 italic">
+              No hay datos de clientes top para el período.
+            </li>
+          )}
+        </ul>
+      </div>
 
-                   {/* Top Clientes por Compras */}
-                    <div className="bg-white rounded-lg shadow p-4">
-                       <h3 className="text-lg font-semibold mb-3 text-gray-700">Top Clientes por Compras</h3>
-                       <ul>
-                           {topClients.map((c, index) => (
-                               <li key={c.client_id || index} className="flex justify-between items-center py-2 border-b last:border-b-0 text-sm">
-                                   <span className="text-gray-800">{c.client_name}</span>
-                                   <span className="font-medium text-gray-600">{formatCurrency(c.total_purchases)}</span>
-                               </li>
-                           ))}
-                            {topClients.length === 0 && <li className="text-sm text-gray-500">No hay datos de clientes top para el período.</li>}
-                       </ul>
-                   </div>
+      {/* Top Vendedores por Ventas */}
+      <div className="bg-white rounded-lg shadow-md p-4 border border-gray-200">
+        <h3 className="text-lg font-semibold mb-3 text-gray-700">
+          Top Vendedores por Ventas
+        </h3>
+        {topVendors.length === 0 && !listsError ? (
+          <p className="text-sm text-gray-500 italic">
+            No hay datos de vendedores top o la función no aplica.
+          </p>
+        ) : (
+          <ul>
+            {topVendors.map((s, index) => (
+              <li
+                key={s.seller_id || index}
+                className="flex justify-between items-center py-2 border-b border-gray-200 last:border-b-0 text-sm"
+              >
+                <span className="text-gray-800">{s.seller_name}</span>
+                <span className="font-semibold text-gray-700">
+                  {formatCurrency(s.total_sales)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </>
+  )}
+</div>
 
-                   {/* Top Vendedores por Ventas (Requiere vendedor_id en ventas) */}
-                    <div className="bg-white rounded-lg shadow p-4">
-                       <h3 className="text-lg font-semibold mb-3 text-gray-700">Top Vendedores por Ventas</h3>
-                       {topVendors.length === 0 && !listsError ? ( // Solo mostrar este mensaje si no hay error en la lista
-                           <p className="text-sm text-gray-500">No hay datos de vendedores top o la función no aplica.</p>
-                       ) : (
-                            <ul>
-                                {topVendors.map((s, index) => (
-                                    <li key={s.seller_id || index} className="flex justify-between items-center py-2 border-b last:border-b-0 text-sm">
-                                        <span className="text-gray-800">{s.seller_name}</span>
-                                        <span className="font-medium text-gray-600">{formatCurrency(s.total_sales)}</span>
-                                    </li>
-                                ))}
-                            </ul>
-                       )}
-                   </div>
+{/* Sección de Inventario / Alertas */}
+<div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+  <div className="bg-white rounded-lg shadow-md p-4 border border-gray-200">
+    <h3 className="text-lg font-semibold mb-3 text-gray-700">
+      Productos con Bajo Stock (Umbral 10)
+    </h3>
+    {inventoryError ? (
+      <p className="text-red-600 font-semibold">{inventoryError}</p>
+    ) : lowStockProducts.length === 0 ? (
+      <p className="text-sm text-gray-500 italic">
+        No hay productos por debajo del umbral de stock.
+      </p>
+    ) : (
+      <ul>
+        {lowStockProducts.map((p, index) => (
+          <li
+            key={p.product_id || index}
+            className="flex justify-between items-center py-2 border-b border-gray-200 last:border-b-0 text-sm text-orange-600 font-semibold"
+          >
+            <span>{p.product_name}</span>
+            <span>Stock: {p.current_stock}</span>
+          </li>
+        ))}
+      </ul>
+    )}
+  </div>
+  {/* <div className="bg-white rounded-lg shadow p-4">Valor del Inventario Total</div> */}
+</div>
 
-               </>
-           )}
-       </div>
-
-       {/* Sección de Inventario / Alertas */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="bg-white rounded-lg shadow p-4">
-                <h3 className="text-lg font-semibold mb-3 text-gray-700">Productos con Bajo Stock (Umbral 10)</h3>
-                {/* Mostrar error de inventario si existe */}
-                 {inventoryError ? (
-                     <p className="text-red-500">{inventoryError}</p>
-                 ) : lowStockProducts.length === 0 ? (
-                    <p className="text-sm text-gray-500">No hay productos por debajo del umbral de stock.</p>
-                ) : (
-                    <ul>
-                        {lowStockProducts.map((p, index) => (
-                            <li key={p.product_id || index} className="flex justify-between items-center py-2 border-b last:border-b-0 text-sm text-orange-600 font-medium">
-                               <span>{p.product_name}</span>
-                               <span>Stock: {p.current_stock}</span>
-                            </li>
-                        ))}
-                    </ul>
-                )}
-           </div>
-            {/* Podrías añadir aquí la sección para Valor del Inventario Total si creas la RPC/View correspondiente */}
-            {/* <div className="bg-white rounded-lg shadow p-4"> ... </div> */}
-       </div>
 
 
        {/* Modales (Si los necesitas en Home) */}

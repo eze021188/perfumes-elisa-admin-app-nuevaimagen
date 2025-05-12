@@ -748,34 +748,31 @@ export default function Reportes() {
 
              {/* Tabla para Reporte de Niveles de Stock Actual */}
              {reportData && selectedReport === 'stock_actual' && (
-                 <div className="overflow-x-auto">
-                     <h3 className="text-xl font-semibold mb-4">Resultado: Niveles de Stock Actual</h3>
-                      {reportData.length === 0 ? (
-                         <p className="text-center text-gray-500 italic mt-4">No hay productos en el inventario.</p>
-                     ) : (
-                         <table className="min-w-full divide-y divide-gray-200">
-                             <thead>
-                                 <tr className="bg-gray-200">
-                                     <th className="p-3 text-left text-xs font-semibold text-gray-600 uppercase">Producto</th>
-                                     {/* >>> CORRECCIÓN: Eliminar columna Categoría <<< */}
-                                     {/* <th className="p-3 text-left text-xs font-semibold text-gray-600 uppercase">Categoría</th> */}
-                                     <th className="p-3 text-right text-xs font-semibold text-gray-600 uppercase">Stock Actual</th>
-                                 </tr>
-                             </thead>
-                             {/* >>> CORRECCIÓN: Eliminar espacios en blanco en el tbody y tr <<< */}
-                             <tbody>{reportData.map((producto) => (
-                                     <tr key={producto.nombre} className="border-b"> {/* Usar nombre como key si no hay ID */}
-                                         <td className="p-3 text-sm text-gray-800">{producto.nombre}</td>
-                                         {/* >>> CORRECCIÓN: Eliminar celda de Categoría <<< */}
-                                         {/* <td className="p-3 text-sm text-gray-800">{producto.categoria || 'Sin categoría'}</td> */}
-                                         <td className="p-3 text-sm text-gray-800 text-right">{producto.stock ?? 0}</td>
-                                     </tr>
-                                 ))}</tbody>
-                             {/* >>> FIN CORRECCIÓN <<< */}
-                         </table>
-                     )}
-                 </div>
-             )}
+  <div className="overflow-x-auto">
+    <h3 className="text-xl font-semibold mb-4">Resultado: Niveles de Stock Actual</h3>
+    {reportData.length === 0 ? (
+      <p className="text-center text-gray-500 italic mt-4">No hay productos en el inventario.</p>
+    ) : (
+      <table className="min-w-full divide-y divide-gray-200">
+        <thead>
+          <tr className="bg-gray-200">
+            <th className="p-3 text-left text-xs font-semibold text-gray-600 uppercase">Producto</th>
+            <th className="p-3 text-right text-xs font-semibold text-gray-600 uppercase">Stock Actual</th>
+          </tr>
+        </thead>
+        <tbody>
+          {reportData.map((producto) => (
+            <tr key={producto.nombre} className="border-b">
+              <td className="p-3 text-sm text-gray-800">{producto.nombre}</td>
+              <td className="p-3 text-sm text-gray-800 text-right">{producto.stock ?? 0}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    )}
+  </div>
+)}
+
 
               {/* Tabla para Reporte de Saldos de Clientes */}
              {reportData && selectedReport === 'saldos_clientes' && (
