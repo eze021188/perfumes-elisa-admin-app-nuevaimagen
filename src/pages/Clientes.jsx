@@ -7,9 +7,9 @@ import NewClientModal from '../components/NewClientModal';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import toast from 'react-hot-toast';
-// >>> Importar el componente HtmlTicketDisplay <<<
+// Importar el componente HtmlTicketDisplay
 import HtmlTicketDisplay from '../components/HtmlTicketDisplay';
-// >>> Importar useAuth para obtener info del vendedor <<<
+// Importar useAuth para obtener info del vendedor
 import { useAuth } from '../contexts/AuthContext';
 
 
@@ -27,11 +27,32 @@ const formatCurrency = (amount) => {
     });
 };
 
+// Función para cargar una imagen local y convertirla a Base64 para jsPDF
+// Esta función es necesaria si quieres incluir el logo en el PDF
+const getBase64Image = async (url) => {
+    try {
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const blob = await response.blob();
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+        });
+    } catch (error) {
+        console.error("Error loading image for PDF:", error);
+        return null;
+    }
+};
+
 
 export default function Clientes() {
   const navigate = useNavigate();
   const { clientes, loading: clientesLoading, actualizarCliente, eliminarCliente } = useClientes();
-  // >>> Obtener usuario logueado (vendedor) del contexto <<<
+  // Obtener usuario logueado (vendedor) del contexto
   const { user: currentUser } = useAuth();
 
   const [busqueda, setBusqueda] = useState('');
@@ -50,15 +71,29 @@ export default function Clientes() {
   const [clientSalesLoading, setClientSalesLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
 
-  // >>> Estados para mostrar el ticket HTML <<<
+  // Estados para mostrar el ticket HTML
    const [showHtmlTicket, setShowHtmlTicket] = useState(false);
    const [htmlTicketData, setHtmlTicketData] = useState(null);
-  // ------------------------------------------
+
+   // Estado para almacenar la imagen del logo en Base64 para el PDF
+   const [logoBase64, setLogoBase64] = useState(null);
+
 
   const filtrados = clientes.filter(c => (c.nombre || '').toLowerCase().includes(busqueda.toLowerCase()));
   const inicio = (pagina - 1) * porPagina;
   const clientesPag = filtrados.slice(inicio, inicio + porPagina);
   const totalPaginas = Math.ceil(filtrados.length / porPagina);
+
+  // Cargar logo al iniciar
+  useEffect(() => {
+      async function loadLogo() {
+          const logoUrl = '/images/PERFUMESELISAwhite.jpg'; // Asegúrate que esta ruta sea correcta
+          const base64 = await getBase64Image(logoUrl);
+          setLogoBase64(base64);
+      }
+      loadLogo();
+  }, []); // Solo se ejecuta una vez al montar
+
 
   const handleVerCompras = async c => {
     setClienteActual(c);
@@ -94,7 +129,7 @@ export default function Clientes() {
     setSelectedSaleDetails([]); // Limpiar detalles anteriores
 
     console.log(`[handleSelectSale] Fetching details for venta ID: ${venta.id}`);
-    // >>> Seleccionar también el nombre del producto desde la tabla productos <<<
+    // Seleccionar también el nombre del producto desde la tabla productos
     const { data: detalle, error } = await supabase
         .from('detalle_venta')
         .select('*, productos(nombre)') // Asegúrate de que 'productos' es el nombre correcto de tu tabla de productos
@@ -126,7 +161,6 @@ const handleCloseSaleDetailModal = () => {
 };
 
 // --- Función para cancelar/eliminar venta ---
-// (Se mantiene la lógica de cancelación, no se modifica para el ticket HTML)
 const handleCancelSale = async () => {
     if (cancelLoading || !selectedSale) return;
 
@@ -194,67 +228,304 @@ const handleCancelSale = async () => {
     }
 };
 
-  // Generar PDF del ticket de venta seleccionado (Se mantiene por si se necesita)
-  const generarPDF = () => {
-    if (!selectedSale || !selectedSaleDetails.length) {
-        toast.error("No hay datos de venta para generar el PDF.");
-        return;
-    }
+  // >>> Función para generar el PDF en formato Carta (con diseño más completo) <<<
+  const generarPDF = async () => {
+      if (!selectedSale || !selectedSaleDetails.length || !clienteActual || !currentUser) {
+          toast.error("Datos incompletos para generar el PDF.");
+          return;
+      }
 
-    const doc = new jsPDF();
-    doc.setFont('helvetica');
+      const doc = new jsPDF({
+          orientation: 'portrait', // Vertical
+          unit: 'mm', // Unidades en milímetros
+          format: 'letter' // Formato Carta
+      });
 
-    doc.setFontSize(16);
-    doc.text(`Ticket - ${selectedSale.codigo_venta || 'N/A'}`, 10, 15);
-    doc.setFontSize(12);
-    doc.text(`Cliente: ${clienteActual?.nombre || 'Público General'}`, 10, 25);
-    doc.text(`Fecha: ${(selectedSale.fecha || selectedSale.created_at) ? new Date(selectedSale.fecha || selectedSale.created_at).toLocaleString() : 'Fecha desconocida'}`, 10, 35);
-    doc.text(`Forma de Pago: ${selectedSale.forma_pago || 'Desconocida'}`, 10, 45);
+      const margin = 15; // Margen en mm
+      let yOffset = margin; // Offset vertical inicial con margen
 
-    const rows = selectedSaleDetails.map(p => [
-      p.nombreProducto || '–',
-      (p.cantidad ?? 0).toString(),
-      `$${(p.precio_unitario ?? 0).toFixed(2)}`,
-      `$${(p.total_parcial ?? 0).toFixed(2)}`
-    ]);
+      // --- Encabezado del Documento ---
+      const logoWidth = 30; // Ancho del logo en mm
+      const logoHeight = 30; // Alto del logo en mm
+      const companyInfoX = margin + logoWidth + 10; // Posición X para la información de la empresa
 
-    doc.autoTable({
-      head: [['Producto', 'Cant.', 'P.U.', 'Total']],
-      body: rows,
-      startY: 55,
-      styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak' },
-      headStyles: { fillColor: [200, 200, 200], textColor: [0, 0, 0] },
-      columnStyles: {
-          1: { halign: 'center' },
-          2: { halign: 'right' },
-          3: { halign: 'right' },
-      },
-      margin: { top: 10, right: 10, bottom: 10, left: 10 }
-    });
+      if (logoBase64) {
+          doc.addImage(logoBase64, 'JPEG', margin, yOffset, logoWidth, logoHeight);
+      } else {
+          console.warn("Logo image not loaded for PDF.");
+          // Placeholder si el logo no carga
+           doc.setFontSize(10);
+           doc.text("Logo Aquí", margin + logoWidth / 2, yOffset + logoHeight / 2, { align: 'center' });
+      }
 
-    const y = doc.lastAutoTable?.finalY ? doc.lastAutoTable.finalY + 10 : 65;
-    doc.setFont(undefined, 'bold');
+      // Información de la Empresa
+      doc.setFontSize(14);
+      doc.setFont(undefined, 'bold');
+      doc.text('PERFUMES ELISA', companyInfoX, yOffset + 5); // Título de la empresa
+      doc.setFontSize(10);
+      doc.setFont(undefined, 'normal');
+      doc.text('Tu Calle #123, Tu Colonia', companyInfoX, yOffset + 12); // Dirección
+      doc.text('Ciudad Apodaca, N.L., C.P. 66600', companyInfoX, yOffset + 17); // Ciudad y CP
+      doc.text('Teléfono: 81 3080 4010', companyInfoX, yOffset + 22); // Teléfono
+      // doc.text('RFC: TU RFC AQUÍ', companyInfoX, yOffset + 27); // RFC (opcional)
 
-    const subtotal = selectedSale.subtotal ?? 0;
-    const total = selectedSale.total ?? 0;
-    const valorDescuento = selectedSale.valor_descuento ?? 0;
 
-    doc.text(`Subtotal: $${subtotal.toFixed(2)}`, 10, y);
+      // Título del Documento y Código de Venta (alineado a la derecha)
+      doc.setFontSize(20);
+      doc.setFont(undefined, 'bold');
+      doc.text('TICKET DE VENTA', doc.internal.pageSize.getWidth() - margin, yOffset + 10, { align: 'right' });
+      doc.setFontSize(12);
+      doc.setFont(undefined, 'normal');
+      doc.text(`Código: ${selectedSale.codigo_venta || 'N/A'}`, doc.internal.pageSize.getWidth() - margin, yOffset + 17, { align: 'right' });
 
-    let descuentoTexto = 'Descuento: $0.00';
-    if (selectedSale.tipo_descuento === 'porcentaje' && valorDescuento > 0) {
-        const montoDescuento = (subtotal * (valorDescuento / 100));
-        descuentoTexto = `Descuento: -${valorDescuento}% (-$${montoDescuento.toFixed(2)})`;
-    } else if (selectedSale.tipo_descuento === 'fijo' && valorDescuento > 0) {
-        descuentoTexto = `Descuento: -$${valorDescuento.toFixed(2)}`;
-    }
-    doc.text(descuentoTexto, 10, y + 6);
-    doc.text(`Total: $${total.toFixed(2)}`, 180, y + 12, { align: 'right' });
+      yOffset += Math.max(logoHeight, 30) + 15; // Espacio después del encabezado (usar el mayor entre logoHeight y un mínimo)
 
-    doc.output('dataurlnewwindow');
+      // --- Divisor ---
+      doc.line(margin, yOffset, doc.internal.pageSize.getWidth() - margin, yOffset);
+      yOffset += 10;
+
+      // --- Información del Cliente y Venta ---
+      const infoLabelFontSize = 9;
+      const infoValueFontSize = 10;
+      const infoLineHeight = 6; // Espaciado entre líneas de info
+
+      doc.setFontSize(infoLabelFontSize); doc.setFont(undefined, 'bold'); doc.text('CLIENTE:', margin, yOffset);
+      doc.setFontSize(infoValueFontSize); doc.setFont(undefined, 'normal'); doc.text(clienteActual?.nombre || 'Público General', margin + doc.getTextWidth('CLIENTE:') + 5, yOffset);
+
+      yOffset += infoLineHeight;
+      doc.setFontSize(infoLabelFontSize); doc.setFont(undefined, 'bold'); doc.text('TELÉFONO:', margin, yOffset);
+      doc.setFontSize(infoValueFontSize); doc.setFont(undefined, 'normal'); doc.text(clienteActual?.telefono || 'N/A', margin + doc.getTextWidth('TELÉFONO:') + 5, yOffset);
+
+      yOffset += infoLineHeight;
+      doc.setFontSize(infoLabelFontSize); doc.setFont(undefined, 'bold'); doc.text('CORREO:', margin, yOffset);
+       // Nota: Si tienes el correo del cliente en clienteActual, úsalo aquí
+      doc.setFontSize(infoValueFontSize); doc.setFont(undefined, 'normal'); doc.text(clienteActual?.correo || 'N/A', margin + doc.getTextWidth('CORREO:') + 5, yOffset);
+
+       yOffset += infoLineHeight;
+      doc.setFontSize(infoLabelFontSize); doc.setFont(undefined, 'bold'); doc.text('DIRECCIÓN:', margin, yOffset);
+       // Nota: Si tienes la dirección del cliente en clienteActual, úsala aquí
+      doc.setFontSize(infoValueFontSize); doc.setFont(undefined, 'normal');
+      const direccionCliente = clienteActual?.direccion || 'N/A';
+       // Autoajustar texto si la dirección es larga
+      const splitDir = doc.splitTextToSize(direccionCliente, doc.internal.pageSize.getWidth() - margin - (margin + doc.getTextWidth('DIRECCIÓN:') + 5));
+      doc.text(splitDir, margin + doc.getTextWidth('DIRECCIÓN:') + 5, yOffset);
+      yOffset += (splitDir.length * infoLineHeight) + infoLineHeight; // Ajustar yOffset por las líneas de dirección
+
+
+      yOffset += infoLineHeight; // Espacio antes de los datos de venta
+      doc.setFontSize(infoLabelFontSize); doc.setFont(undefined, 'bold'); doc.text('FECHA:', margin, yOffset);
+      doc.setFontSize(infoValueFontSize); doc.setFont(undefined, 'normal'); doc.text(((selectedSale.fecha || selectedSale.created_at) ? new Date(selectedSale.fecha || selectedSale.created_at).toLocaleString() : 'Fecha desconocida'), margin + doc.getTextWidth('FECHA:') + 5, yOffset);
+
+      yOffset += infoLineHeight;
+      doc.setFontSize(infoLabelFontSize); doc.setFont(undefined, 'bold'); doc.text('VENDEDOR:', margin, yOffset);
+       // Nota: Obtener el nombre completo del vendedor aquí requeriría cargar su info desde la tabla 'usuarios'
+      doc.setFontSize(infoValueFontSize); doc.setFont(undefined, 'normal'); doc.text(currentUser?.email || 'N/A', margin + doc.getTextWidth('VENDEDOR:') + 5, yOffset);
+
+
+      yOffset += infoLineHeight * 2; // Espacio antes de la tabla de productos
+
+
+      // --- Tabla de Productos ---
+      const productsHead = [['Producto', 'Cant.', 'P. Unitario', 'Desc. Item', 'Total Item']]; // Columnas más detalladas
+      const productsRows = selectedSaleDetails.map(p => {
+          // Aquí necesitarías calcular el descuento por ítem si lo aplicas de forma individual
+          // Como la lógica actual aplica el descuento al total, mostraremos 0 o N/A para Desc. Item
+          // y el Total Item será solo Cant * P. Unitario si no hay descuento por ítem
+          const unitPrice = parseFloat(p.precio_unitario ?? 0);
+          const quantity = parseFloat(p.cantidad ?? 0);
+          const totalItem = unitPrice * quantity; // Total sin descuento por ítem
+
+          return [
+              p.nombreProducto || '–',
+              quantity.toString(),
+              formatCurrency(unitPrice),
+              formatCurrency(0), // Simulación: Descuento por ítem (ajustar si aplicas descuento por ítem)
+              formatCurrency(totalItem) // Total del ítem sin considerar el descuento general
+          ];
+      });
+
+      doc.autoTable({
+          head: productsHead,
+          body: productsRows,
+          startY: yOffset,
+          theme: 'striped', // Tema rayado para mejor legibilidad
+          styles: { fontSize: 9, cellPadding: 3, overflow: 'linebreak' },
+          headStyles: { fillColor: [220, 220, 220], textColor: [0, 0, 0], fontStyle: 'bold' },
+          columnStyles: {
+              0: { cellWidth: 60 }, // Ancho para nombre producto
+              1: { cellWidth: 15, halign: 'center' }, // Cantidad
+              2: { cellWidth: 25, halign: 'right' }, // P. Unitario
+              3: { cellWidth: 25, halign: 'right' }, // Desc. Item (ajustar si es real)
+              4: { cellWidth: 30, halign: 'right' }, // Total Item
+          },
+          margin: { left: margin, right: margin },
+          didDrawPage: function (data) {
+              // Añadir número de página en el pie si hay varias páginas
+              doc.setFontSize(8);
+              doc.text('Página ' + data.pageNumber, doc.internal.pageSize.getWidth() - margin, doc.internal.pageSize.getHeight() - margin);
+          }
+      });
+
+      yOffset = doc.lastAutoTable?.finalY ? doc.lastAutoTable.finalY + 10 : yOffset + 10; // Actualizar yOffset después de la tabla
+
+      // --- Resumen de Totales ---
+      const totalsLabelWidth = 40; // Ancho para las etiquetas de totales
+      const totalsValueStartX = doc.internal.pageSize.getWidth() - margin - 50; // Posición X para los valores alineados a la derecha
+      const totalsLineHeight = 6;
+      const totalsFontSize = 10;
+      const finalTotalFontSize = 14;
+
+
+      doc.setFontSize(totalsFontSize);
+      doc.setFont(undefined, 'normal');
+
+      doc.text('Subtotal:', totalsValueStartX - totalsLabelWidth, yOffset, { align: 'right' });
+      doc.text(formatCurrency(selectedSale.subtotal ?? 0), totalsValueStartX, yOffset, { align: 'right' });
+      yOffset += totalsLineHeight;
+
+      let descuentoTexto = 'Descuento:';
+      let montoDescuentoTexto = formatCurrency(0);
+      if (selectedSale.tipo_descuento === 'porcentaje' && (selectedSale.valor_descuento ?? 0) > 0) {
+          const montoDescuentoCalc = (selectedSale.subtotal ?? 0) * ((selectedSale.valor_descuento ?? 0) / 100);
+          descuentoTexto = `Descuento (${selectedSale.valor_descuento}%):`;
+          montoDescuentoTexto = `- ${formatCurrency(montoDescuentoCalc)}`;
+      } else if (selectedSale.tipo_descuento === 'fijo' && (selectedSale.valor_descuento ?? 0) > 0) {
+          descuentoTexto = 'Descuento:';
+          montoDescuentoTexto = `- ${formatCurrency(selectedSale.valor_descuento ?? 0)}`;
+      }
+      doc.text(descuentoTexto, totalsValueStartX - totalsLabelWidth, yOffset, { align: 'right' });
+      doc.setTextColor(220, 53, 69); // Rojo para descuento
+      doc.text(montoDescuentoTexto, totalsValueStartX, yOffset, { align: 'right' });
+      doc.setTextColor(0, 0, 0); // Resetear color a negro
+      yOffset += totalsLineHeight;
+
+       // Forma de Pago
+      doc.text('Forma de Pago:', totalsValueStartX - totalsLabelWidth, yOffset, { align: 'right' });
+      doc.text(selectedSale.forma_pago || 'Desconocida', totalsValueStartX, yOffset, { align: 'right' });
+      yOffset += totalsLineHeight;
+
+       // Enganche (solo si es Crédito cliente Y hubo enganche > 0)
+      if (selectedSale.forma_pago === 'Crédito cliente' && (selectedSale.enganche ?? 0) > 0) {
+          doc.text('Enganche:', totalsValueStartX - totalsLabelWidth, yOffset, { align: 'right' });
+          doc.text(formatCurrency(selectedSale.enganche ?? 0), totalsValueStartX, yOffset, { align: 'right' });
+          yOffset += totalsLineHeight;
+      }
+
+       // Impuestos (simulación si aplica)
+       // doc.text('Impuestos (IVA):', totalsValueStartX - totalsLabelWidth, yOffset, { align: 'right' });
+       // doc.text(formatCurrency(0), totalsValueStartX, yOffset, { align: 'right' }); // Ajustar si calculas impuestos
+       // yOffset += totalsLineHeight;
+
+
+      yOffset += totalsLineHeight; // Espacio antes del Total Final
+
+      // Total Final
+      doc.setFontSize(finalTotalFontSize);
+      doc.setFont(undefined, 'bold');
+      doc.text('TOTAL:', totalsValueStartX - totalsLabelWidth, yOffset, { align: 'right' });
+      doc.setTextColor(40, 167, 69); // Verde para total
+      doc.text(formatCurrency(selectedSale.total ?? 0), totalsValueStartX, yOffset, { align: 'right' });
+      doc.setTextColor(0, 0, 0); // Resetear color a negro
+      yOffset += finalTotalFontSize + 15;
+
+
+      // --- Sección de Balance de Cuenta (solo si es Crédito cliente) ---
+       if (selectedSale.forma_pago === 'Crédito cliente') {
+           const balanceLabelFontSize = 10;
+           const balanceValueFontSize = 12;
+           const balanceNoteFontSize = 8;
+           const balanceLineHeight = 5;
+
+           // Necesitamos obtener el balance anterior para mostrar el desglose
+           let previousBalance = 0;
+           // Obteniendo el balance actual ya lo hicimos en handleShowHtmlTicket,
+           // pero para el PDF necesitamos el desglose.
+           // Esto podría requerir cargar historial de movimientos antes de generar el PDF,
+           // o si el selectedSale contiene info del balance previo, usarla.
+           // Por ahora, asumiremos que podemos calcular el balance anterior si tenemos el actual y el total de la venta
+           // Balance Anterior = Balance Actual - Total de Venta (si la venta es un cargo)
+           // Esto es una simplificación y podría necesitar ajuste según tu lógica exacta de movimientos.
+           const currentBalance = (selectedSale.balance_cuenta ?? 0); // Usamos el balance_cuenta calculado antes
+           previousBalance = currentBalance - (selectedSale.total ?? 0); // Simplificación
+
+
+           doc.setFontSize(balanceLabelFontSize);
+           doc.setFont(undefined, 'bold');
+           doc.text('DETALLE DE CUENTA', margin, yOffset);
+           yOffset += balanceLineHeight * 2;
+
+           doc.setFontSize(balanceValueFontSize);
+           doc.setFont(undefined, 'normal');
+
+           // Balance Anterior
+           doc.text('Saldo Anterior:', margin + 10, yOffset);
+           doc.text(formatCurrency(previousBalance), doc.internal.pageSize.getWidth() - margin, yOffset, { align: 'right' });
+           yOffset += balanceLineHeight;
+
+           // Cargo por Venta Actual
+           doc.text('Venta Actual:', margin + 10, yOffset);
+           doc.text(formatCurrency(selectedSale.total ?? 0), doc.internal.pageSize.getWidth() - margin, yOffset, { align: 'right' });
+           yOffset += balanceLineHeight;
+
+           // Pagos/Enganche (si aplica)
+           if ((selectedSale.enganche ?? 0) > 0) {
+                doc.text('Enganche Pagado:', margin + 10, yOffset);
+                 doc.text(`- ${formatCurrency(selectedSale.enganche ?? 0)}`, doc.internal.pageSize.getWidth() - margin, yOffset, { align: 'right' });
+                 yOffset += balanceLineHeight;
+           }
+           // Si hubiera otros pagos registrados en esta venta, también se sumarían aquí
+
+           yOffset += balanceLineHeight; // Espacio antes del Nuevo Balance
+
+           // Nuevo Balance
+           doc.setFontSize(balanceValueFontSize + 2); // Fuente más grande
+           doc.setFont(undefined, 'bold');
+           doc.text('Nuevo Saldo:', margin + 10, yOffset);
+            // Determinar color del nuevo balance
+           if (currentBalance > 0) {
+               doc.setTextColor(220, 53, 69); // Rojo para deuda
+           } else {
+               doc.setTextColor(40, 167, 69); // Verde para saldo a favor
+           }
+           doc.text(formatCurrency(currentBalance), doc.internal.pageSize.getWidth() - margin, yOffset, { align: 'right' });
+           doc.setTextColor(0, 0, 0); // Resetear color a negro
+           yOffset += balanceLineHeight * 2;
+
+            doc.setFontSize(balanceNoteFontSize);
+            doc.setFont(undefined, 'normal');
+            const balanceNoteText = currentBalance > 0
+                ? '(Saldo positivo indica deuda del cliente)'
+                : '(Saldo negativo indica crédito a favor del cliente)';
+            doc.text(balanceNoteText, margin, yOffset); // Nota alineada a la izquierda
+
+
+           yOffset += balanceLineHeight * 2; // Espacio después del balance
+       }
+
+
+      // --- Información Adicional / Pie de Página ---
+      const footerFontSize = 8;
+      const footerLineHeight = 4;
+
+      doc.setFontSize(footerFontSize);
+      doc.setFont(undefined, 'normal');
+
+      // Mensaje de agradecimiento
+      doc.text('¡Gracias por tu compra!', margin, yOffset);
+      yOffset += footerLineHeight;
+      doc.text('Visítanos de nuevo pronto.', margin, yOffset);
+      yOffset += footerLineHeight * 2;
+
+      // Línea para firma del cliente (opcional)
+      // doc.line(margin, yOffset, margin + 50, yOffset);
+      // doc.text('Firma del Cliente', margin, yOffset + footerLineHeight);
+
+
+      // Abrir PDF en una nueva ventana
+      doc.output('dataurlnewwindow');
   };
 
-  // >>> Función para preparar datos y mostrar el ticket HTML <<<
+  // Función para preparar datos y mostrar el ticket HTML
   const handleShowHtmlTicket = async () => {
       if (!selectedSale || !selectedSaleDetails.length || !clienteActual || !currentUser) {
           toast.error("Datos incompletos para mostrar el ticket HTML.");
@@ -262,27 +533,34 @@ const handleCancelSale = async () => {
       }
 
       // Necesitamos obtener el balance de cuenta del cliente en este punto
-      // Ya lo tenemos en el estado clienteBalance en la página Checkout,
-      // pero aquí en Clientes no lo cargamos al seleccionar la venta.
-      // Vamos a hacer una consulta rápida para obtenerlo.
       let currentClientBalance = 0;
-      const { data: balanceData, error: balanceError } = await supabase
-          .from('movimientos_cuenta_clientes')
-          .select('monto')
-          .eq('cliente_id', clienteActual.id); // Usamos clienteActual que ya está cargado
+      // Nota: Si el balance se registra como un total acumulado en una tabla de clientes,
+      // podrías consultarla aquí. Si solo tienes movimientos, tendrías que sumarlos todos.
+      // Asumiendo que 'balance_cuenta' en la tabla 'ventas' almacena el balance FINAL después de esa venta.
+       if (selectedSale.balance_cuenta !== undefined && selectedSale.balance_cuenta !== null) {
+           currentClientBalance = selectedSale.balance_cuenta;
+       } else {
+           // Si balance_cuenta no está en la tabla ventas, tendrás que calcularlo sumando movimientos
+            const { data: balanceData, error: balanceError } = await supabase
+                .from('movimientos_cuenta_clientes')
+                .select('monto')
+                .eq('cliente_id', clienteActual.id);
 
-      if (balanceError) {
-          console.error("Error loading client balance for HTML ticket:", balanceError);
-          toast.error("No se pudo cargar el balance del cliente para el ticket.");
-          // Continuar con balance 0 si hay error, o detener? Decidimos continuar.
-      } else {
-          currentClientBalance = (balanceData || []).reduce((sum, mov) => sum + (parseFloat(mov.monto) || 0), 0);
-      }
+            if (balanceError) {
+                console.error("Error loading client balance for HTML ticket:", balanceError);
+                 toast.error("No se pudo cargar el balance del cliente para el ticket.");
+            } else {
+                currentClientBalance = (balanceData || []).reduce((sum, mov) => sum + (parseFloat(mov.monto) || 0), 0);
+            }
+       }
 
 
        const now = selectedSale.fecha || selectedSale.created_at ? new Date(selectedSale.fecha || selectedSale.created_at) : new Date();
        // Formatear la fecha a dd/mm/aa HH:MM
        const formattedDate = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getFullYear()).slice(-2)} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+       // Asumiendo que 'enganche' está disponible en el objeto 'selectedSale'
+       const enganchePagado = selectedSale.enganche ?? 0;
 
 
       const ticketData = {
@@ -291,10 +569,13 @@ const handleCancelSale = async () => {
                id: clienteActual.id,
                nombre: clienteActual.nombre,
                telefono: clienteActual.telefono || 'N/A', // Asegúrate de que clienteActual tenga 'telefono'
+                // Puedes añadir más campos del cliente aquí si los cargas en clienteActual
+               // correo: clienteActual.correo || 'N/A',
+               // direccion: clienteActual.direccion || 'N/A',
            },
            vendedor: {
-               // Intentar obtener el nombre del vendedor si lo tuviéramos, sino usar email del currentUser
-               nombre: currentUser?.email || 'N/A', // Aquí podrías necesitar cargar el nombre del vendedor si no está en currentUser
+               // Intentar obtener el nombre del vendedor si lo tuviéramos (requeriría cargar su info), sino usar email del currentUser
+               nombre: currentUser?.email || 'N/A', // Mejora: Cargar el nombre del vendedor real si es posible
            },
            fecha: formattedDate,
            productosVenta: selectedSaleDetails.map(item => ({ // Mapear los detalles de venta cargados
@@ -302,14 +583,14 @@ const handleCancelSale = async () => {
                nombre: item.nombreProducto, // Usar el nombre del producto obtenido
                cantidad: item.cantidad,
                precio_unitario: item.precio_unitario,
-               total_parcial: item.total_parcial,
+               total_parcial: item.total_parcial, // Total del ítem (cantidad * precio unitario)
            })),
-           originalSubtotal: selectedSale.subtotal, // Usar subtotal de la venta seleccionada
-           discountAmount: selectedSale.valor_descuento, // Usar valor_descuento de la venta seleccionada
+           originalSubtotal: selectedSale.subtotal, // Usar subtotal de la venta seleccionada (antes de descuento general)
+           discountAmount: selectedSale.valor_descuento, // Usar valor_descuento de la venta seleccionada (descuento general)
            forma_pago: selectedSale.forma_pago, // Usar forma_pago de la venta seleccionada
-           enganche: selectedSale.enganche || 0, // Usar enganche de la venta seleccionada
-           total: selectedSale.total, // Usar total de la venta seleccionada
-           balance_cuenta: currentClientBalance, // Usar el balance de cuenta obtenido
+           enganche: enganchePagado, // Usar el enganche de la venta seleccionada
+           total: selectedSale.total, // Usar total de la venta seleccionada (después de descuento general)
+           balance_cuenta: currentClientBalance, // Usar el balance de cuenta obtenido/calculado
        };
 
        setHtmlTicketData(ticketData); // Guardar los datos para el ticket HTML
@@ -317,12 +598,11 @@ const handleCancelSale = async () => {
        // No cerramos el modal de detalle de venta aquí, solo mostramos el ticket HTML encima
   };
 
-   // >>> Función para cerrar el modal del ticket HTML <<<
+   // Función para cerrar el modal del ticket HTML
     const closeHtmlTicket = () => {
         setShowHtmlTicket(false);
         setHtmlTicketData(null); // Limpiar datos del ticket al cerrar
     };
-  // --------------------------------------------------
 
 
   // Handler cuando se guarda (nuevo o editado)
@@ -496,7 +776,7 @@ const handleCancelSale = async () => {
   </table>
 </div>
 
-      {/* === REINSERTANDO: Historial de ventas === */}
+      {/* Historial de ventas */}
       {clienteActual && (
         <div className="bg-white shadow-lg rounded-lg p-6 mb-6">
           <h2 className="text-xl font-bold text-gray-800 mb-4">
@@ -563,7 +843,7 @@ const handleCancelSale = async () => {
         cliente={editingClient}
       />
 
-      {/* === Modal de Detalle de Venta === */}
+      {/* Modal de Detalle de Venta */}
       {showSaleDetailModal && selectedSale && (
           <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50 flex justify-center items-center p-4">
               <div className="relative p-8 bg-white w-full max-w-md mx-auto rounded-lg shadow-lg max-h-[95vh] overflow-y-auto">
@@ -621,16 +901,16 @@ const handleCancelSale = async () => {
                             </div>
 
                           <div className="flex flex-wrap justify-end space-x-2 mt-4">
-                                {/* >>> Botón "Ver ticket" <<< */}
+                                {/* Botón "Ver ticket" */}
                                 <button
-                                    onClick={handleShowHtmlTicket} // Llama a la nueva función
+                                    onClick={handleShowHtmlTicket} // Llama a la función para mostrar el ticket HTML
                                     className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition duration-200 ease-in-out text-sm"
                                 >
                                     Ver ticket
                                 </button>
-                                {/* ------------------------- */}
+                                {/* Botón "Ver PDF" - Ahora con el nuevo diseño */}
                                 <button
-                                    onClick={generarPDF}
+                                    onClick={generarPDF} // Llama a la función para generar el PDF
                                     className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition duration-200 ease-in-out text-sm"
                                 >
                                     Ver PDF
@@ -655,11 +935,10 @@ const handleCancelSale = async () => {
           </div>
       )}
 
-      {/* >>> Componente para mostrar el ticket HTML <<< */}
+      {/* Componente para mostrar el ticket HTML */}
       {showHtmlTicket && htmlTicketData && (
           <HtmlTicketDisplay saleData={htmlTicketData} onClose={closeHtmlTicket} />
       )}
-      {/* ------------------------------------------ */}
 
     </div>
   );

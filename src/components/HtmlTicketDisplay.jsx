@@ -1,5 +1,9 @@
 // src/components/HtmlTicketDisplay.jsx
-import React from 'react';
+import React, { useRef } from 'react'; // Importar useRef para referenciar el elemento del ticket
+// Importar html2canvas desde CDN
+// <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+// Se añadirá la etiqueta script en el return del componente para que esté disponible
+
 
 // Helper simple para formatear moneda (si no está global)
 // Asegúrate de que esta función esté disponible o la copies aquí si no está en un archivo compartido
@@ -24,6 +28,10 @@ export default function HtmlTicketDisplay({ saleData, onClose }) {
         return null; // O un mensaje como <p>Cargando ticket...</p>
     }
 
+    // Referencia al elemento HTML del ticket que queremos convertir a imagen
+    const ticketRef = useRef(null);
+
+
     // Desestructurar los datos de venta para facilitar el acceso
     const {
         codigo_venta,
@@ -47,15 +55,67 @@ export default function HtmlTicketDisplay({ saleData, onClose }) {
         : '(Saldo negativo indica crédito a favor del cliente)';
 
 
+    // >>> Función para descargar el ticket como imagen JPG <<<
+    const handleDownloadTicket = async () => {
+        if (!ticketRef.current) {
+            console.error("Elemento del ticket no encontrado.");
+            return;
+        }
+
+        // Añadir temporalmente la librería html2canvas si no está cargada
+        if (typeof html2canvas === 'undefined') {
+             const script = document.createElement('script');
+             script.src = 'https://html2canvas.hertzen.com/dist/html2canvas.min.js';
+             script.onload = () => captureAndDownload(); // Ejecutar después de cargar
+             script.onerror = () => console.error('Error loading html2canvas script.');
+             document.body.appendChild(script);
+        } else {
+             captureAndDownload(); // Si ya está cargada, ejecutar directamente
+        }
+
+        async function captureAndDownload() {
+             try {
+                 // Capturar el contenido del ticket como un canvas
+                 // >>> Capturar solo el elemento referenciado por ticketRef <<<
+                 const canvas = await html2canvas(ticketRef.current, {
+                     scale: 2, // Aumentar la escala para mejor resolución
+                     logging: true, // Habilitar logs para depuración
+                     useCORS: true // Intentar usar CORS para imágenes (como el logo)
+                 });
+
+                 // Convertir el canvas a una URL de datos (JPG)
+                 const image = canvas.toDataURL('image/jpeg', 0.9); // Formato JPG con calidad 90%
+
+                 // Crear un enlace temporal para la descarga
+                 const link = document.createElement('a');
+                 link.href = image;
+                 // Nombre del archivo: ticket_venta_VTXXXXX.jpg
+                 link.download = `ticket_venta_${codigo_venta || 'sin_codigo'}.jpg`;
+
+                 // Simular un clic en el enlace para iniciar la descarga
+                 document.body.appendChild(link);
+                 link.click();
+
+                 // Limpiar el enlace temporal
+                 document.body.removeChild(link);
+
+             } catch (error) {
+                 console.error("Error al generar o descargar la imagen del ticket:", error);
+                 alert("No se pudo descargar el ticket como imagen. Intenta de nuevo.");
+             }
+        }
+    };
+    // --------------------------------------------------------
+
+
     return (
         // Overlay del modal - Cubre toda la pantalla con un fondo semi-transparente
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2" onClick={onClose}>
-            {/* Contenedor principal del ticket - Simula el diseño HTML ajustado */}
-            {/* Usamos estilos inline y clases de Tailwind para el contenedor principal */}
-            {/* El ancho se ajusta al 100% del padre (flex item) pero con un max-width */}
+            {/* Contenedor principal del modal - Tiene el fondo blanco y sombra */}
+            {/* Este div ahora NO tiene la referencia ticketRef */}
             <div
-                className="bg-white rounded-lg shadow-xl overflow-y-auto max-h-[95vh] w-full" // Ajustado max-h y padding
-                style={{ maxWidth: '400px', padding: '15px', borderRadius: '8px', boxShadow: '0 2px 6px rgba(0, 0, 0, 0.08)' }}
+                className="bg-white rounded-lg shadow-xl overflow-y-auto max-h-[95vh] w-full"
+                style={{ maxWidth: '400px', borderRadius: '8px', boxShadow: '0 2px 6px rgba(0, 0, 0, 0.08)' }}
                 onClick={(e) => e.stopPropagation()} // Evita que el clic en el ticket cierre el modal
             >
                  {/* Los estilos CSS se colocan dentro de una etiqueta <style> */}
@@ -63,10 +123,10 @@ export default function HtmlTicketDisplay({ saleData, onClose }) {
                     <style>
                         {`
                         /* Estilos para ajustar el ticket a la pantalla del móvil */
-                        .ticket-content {
+                        .ticket-content-printable { /* Nuevo nombre para el contenedor que se imprimirá */
                             font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
                             color: #4a4a4a; /* Color de texto general */
-                            padding: 0 5px; /* Padding horizontal interno para el contenido */
+                            padding: 15px; /* Padding interno movido aquí */
                         }
                         .divider {
                             border-top: 1px solid #e0e0e0; /* Línea divisoria sutil */
@@ -202,23 +262,22 @@ export default function HtmlTicketDisplay({ saleData, onClose }) {
                         `}
                     </style>
 
-                {/* Contenido del ticket con clases para el diseño ajustado */}
-                <div className="ticket-content">
+                {/* >>> Nuevo contenedor para el contenido del ticket que SÍ se descargará <<< */}
+                {/* Este div ahora tiene la referencia ticketRef y el padding interno */}
+                <div className="ticket-content-printable" ref={ticketRef}>
                     {/* Encabezado con Logo a la Izquierda y Contacto Abajo */}
                     <div className="ticket-header">
                         {/* Contenedor para Logo y Título/Código */}
                         <div className="header-top">
                             {/* Asegúrate de que la ruta del logo sea accesible desde el frontend */}
-                            {/* >>> Ruta del logo corregida <<< */}
                             <img src="/images/PERFUMESELISAwhite.jpg" alt="Logo Perfumes Elisa" className="h-auto w-14" />
                             <div className="ticket-title-block">
                                 <h2>Ticket</h2>
                                 <p>#{saleData?.codigo_venta || 'N/A'}</p> {/* Usar código de venta dinámico */}
                             </div>
                         </div>
-                        {/* >>> Texto del teléfono y ciudad (fuera del ticket-title-block) <<< */}
+                        {/* Texto del teléfono y ciudad (fuera del ticket-title-block) */}
                         <p className="contact-info">81 3080 4010 - Ciudad Apodaca</p>
-                        {/* ----------------------------------------------------------------- */}
                     </div>
                     {/* Fin Encabezado */}
 
@@ -236,7 +295,7 @@ export default function HtmlTicketDisplay({ saleData, onClose }) {
                     <div className="divider"></div>
 
                     {/* Lista de Productos */}
-                    <div className="mb-4"> {/* Ajustado mb de 3 a 4 */}
+                    <div className="mb-4">
                         <h3 className="text-sm font-semibold text-gray-800 mb-2">Detalle de Venta:</h3>
                         {saleData?.productosVenta && saleData.productosVenta.length > 0 ? (
                             saleData.productosVenta.map(p => (
@@ -302,8 +361,19 @@ export default function HtmlTicketDisplay({ saleData, onClose }) {
                         <p>Visítanos de nuevo pronto.</p>
                     </div>
                 </div>
-                 {/* Botón para cerrar el modal */}
-                <div className="p-4 text-center">
+                 {/* --- Fin del contenedor que se descargará --- */}
+
+
+                 {/* Contenedor de botones al pie del modal - FUERA del div referenciado */}
+                <div className="p-4 text-center flex justify-center space-x-4"> {/* Usar flex y space-x para los botones */}
+                    {/* Botón para descargar como JPG */}
+                    <button
+                        onClick={handleDownloadTicket}
+                        className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition duration-200"
+                    >
+                        Descargar Ticket (JPG)
+                    </button>
+                    {/* Botón para cerrar el modal */}
                     <button
                         onClick={onClose}
                         className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition duration-200"
