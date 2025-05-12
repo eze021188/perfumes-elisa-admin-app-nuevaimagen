@@ -530,14 +530,14 @@ const handleCancelSale = async () => {
                                     onClick={generarPDF}
                                     className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition duration-200 ease-in-out text-sm"
                                 >
-                                    Ver PDF Ticket
+                                    Ver PDF
                                 </button>
                                  <button
                                     onClick={handleCancelSale}
                                     className={`px-4 py-2 rounded-md transition duration-200 ease-in-out text-sm ${cancelLoading ? 'bg-gray-400 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700 text-white'}`}
                                     disabled={cancelLoading}
                                 >
-                                    {cancelLoading ? 'Cancelando...' : 'Eliminar venta'}
+                                    {cancelLoading ? 'Cancelando...' : 'Eliminar'}
                                 </button>
                                <button
                                     onClick={handleCloseSaleDetailModal}
