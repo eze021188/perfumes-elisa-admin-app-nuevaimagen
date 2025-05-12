@@ -627,7 +627,7 @@ export default function Checkout() {
 
         {/* Aquí tu título */}
         <h1 className="text-3xl font-bold text-gray-800 text-center w-full md:w-auto">
-          Gesti\u00f3n de Ventas
+          Gestión de Ventas
         </h1>
 
         {/* Spacer para md+ */}

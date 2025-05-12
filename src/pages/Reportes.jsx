@@ -710,10 +710,6 @@ export default function Reportes() {
             {/* Mensaje de error */}
             {reportError && <p className="text-center text-red-600">{reportError}</p>}
 
-            {/* Mensaje inicial */}
-            {!selectedReport && !loadingReport && !reportData && !reportError && (
-                 <p className="text-center text-gray-500">Selecciona un reporte y haz clic en "Generar Reporte".</p>
-            )}
 
             {/* Contenido del reporte (renderizado condicional por selectedReport) */}
 
