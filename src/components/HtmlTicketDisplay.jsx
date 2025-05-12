@@ -210,7 +210,7 @@ export default function HtmlTicketDisplay({ saleData, onClose }) {
                         <div className="header-top">
                             {/* Asegúrate de que la ruta del logo sea accesible desde el frontend */}
                             {/* >>> Ruta del logo corregida <<< */}
-                            <img src="/imagen/PERFUMESELISAwhite.jpg" alt="Logo Perfumes Elisa" className="h-auto w-14" />
+                            <img src="/images/PERFUMESELISAwhite.jpg" alt="Logo Perfumes Elisa" className="h-auto w-14" />
                             <div className="ticket-title-block">
                                 <h2>Ticket</h2>
                                 <p>#{saleData?.codigo_venta || 'N/A'}</p> {/* Usar código de venta dinámico */}

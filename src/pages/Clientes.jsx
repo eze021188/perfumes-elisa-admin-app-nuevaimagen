@@ -7,10 +7,32 @@ import NewClientModal from '../components/NewClientModal';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import toast from 'react-hot-toast';
+// >>> Importar el componente HtmlTicketDisplay <<<
+import HtmlTicketDisplay from '../components/HtmlTicketDisplay';
+// >>> Importar useAuth para obtener info del vendedor <<<
+import { useAuth } from '../contexts/AuthContext';
+
+
+// Helper simple para formatear moneda (si no está global)
+const formatCurrency = (amount) => {
+     const numericAmount = parseFloat(amount);
+     if (isNaN(numericAmount)) {
+         return '$0.00';
+     }
+     return numericAmount.toLocaleString('en-US', {
+        style: 'currency',
+        currency: 'USD', // Ajusta según tu moneda
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+    });
+};
+
 
 export default function Clientes() {
   const navigate = useNavigate();
   const { clientes, loading: clientesLoading, actualizarCliente, eliminarCliente } = useClientes();
+  // >>> Obtener usuario logueado (vendedor) del contexto <<<
+  const { user: currentUser } = useAuth();
 
   const [busqueda, setBusqueda] = useState('');
   const [selectedIds, setSelectedIds] = useState([]);
@@ -27,6 +49,11 @@ export default function Clientes() {
   const [cancelLoading, setCancelLoading] = useState(false);
   const [clientSalesLoading, setClientSalesLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
+
+  // >>> Estados para mostrar el ticket HTML <<<
+   const [showHtmlTicket, setShowHtmlTicket] = useState(false);
+   const [htmlTicketData, setHtmlTicketData] = useState(null);
+  // ------------------------------------------
 
   const filtrados = clientes.filter(c => (c.nombre || '').toLowerCase().includes(busqueda.toLowerCase()));
   const inicio = (pagina - 1) * porPagina;
@@ -59,6 +86,7 @@ export default function Clientes() {
   const handlePaginaSiguiente = () => {
     if (pagina < totalPaginas) setPagina(pagina + 1);
   };
+
   // --- Funciones de detalle de venta (para el modal) ---
   const handleSelectSale = async (venta) => {
     setSelectedSale(venta);
@@ -66,9 +94,10 @@ export default function Clientes() {
     setSelectedSaleDetails([]); // Limpiar detalles anteriores
 
     console.log(`[handleSelectSale] Fetching details for venta ID: ${venta.id}`);
+    // >>> Seleccionar también el nombre del producto desde la tabla productos <<<
     const { data: detalle, error } = await supabase
         .from('detalle_venta')
-        .select('*, productos(nombre)')
+        .select('*, productos(nombre)') // Asegúrate de que 'productos' es el nombre correcto de tu tabla de productos
         .eq('venta_id', venta.id);
 
     setDetailLoading(false);
@@ -80,6 +109,7 @@ export default function Clientes() {
     } else {
         const mappedDetails = (detalle || []).map(item => ({
             ...item,
+            // Acceder al nombre del producto a través de la relación
             nombreProducto: item.productos ? item.productos.nombre : 'Producto desconocido'
         }));
         setSelectedSaleDetails(mappedDetails);
@@ -91,9 +121,12 @@ const handleCloseSaleDetailModal = () => {
     setShowSaleDetailModal(false);
     setSelectedSale(null);
     setSelectedSaleDetails([]);
+    // Asegurarse de cerrar también el modal HTML si estuviera abierto
+    closeHtmlTicket();
 };
 
 // --- Función para cancelar/eliminar venta ---
+// (Se mantiene la lógica de cancelación, no se modifica para el ticket HTML)
 const handleCancelSale = async () => {
     if (cancelLoading || !selectedSale) return;
 
@@ -108,7 +141,6 @@ const handleCancelSale = async () => {
                 continue;
             }
 
-            // === CORRECCIÓN: Obtener el stock actual y calcular el nuevo stock ===
             const { data: producto, error: errorGetProduct } = await supabase
                 .from('productos')
                 .select('id, stock')
@@ -118,15 +150,14 @@ const handleCancelSale = async () => {
             if (errorGetProduct) {
                 console.error(`Error al obtener stock para producto ${item.producto_id}:`, errorGetProduct.message);
                 toast.error(`Error al obtener stock del producto. La cancelación podría ser parcial.`, { duration: 6000 });
-                continue; // Continuar con otros ítems a pesar de este error
+                continue;
             }
 
-            const nuevoStock = (producto?.stock ?? 0) + (item.cantidad ?? 0); // Calcular el nuevo stock numérico
+            const nuevoStock = (producto?.stock ?? 0) + (item.cantidad ?? 0);
 
-            // === CORRECCIÓN: Actualizar la base de datos con el valor numérico calculado ===
              const { error: errorUpdateStock } = await supabase
                 .from('productos')
-                .update({ stock: nuevoStock }) // Enviar el valor numérico
+                .update({ stock: nuevoStock })
                 .eq('id', item.producto_id);
 
 
@@ -135,14 +166,8 @@ const handleCancelSale = async () => {
                 toast.error(`Error actualizando stock del producto. La cancelación podría ser parcial.`, { duration: 6000 });
                 continue;
             }
+        }
 
-            // === Lógica de inserción en movimientos_inventario ELIMINADA (para confiar en el Trigger de DB) ===
-            // === Se asume que un trigger de base de datos o lógica de backend lo maneja ===
-            // const { error: errorMovimiento } = await supabase.from('movimientos_inventario').insert({...});
-            // if (errorMovimiento) { ... }
-        } // Fin del bucle for...of
-
-        // Eliminar detalles de venta (esto activará un trigger en detalle_venta si existe)
         const { error: errorDeleteDetails } = await supabase.from('detalle_venta').delete().eq('venta_id', selectedSale.id);
         if (errorDeleteDetails) {
              console.error('Error eliminando detalles de venta:', errorDeleteDetails.message);
@@ -150,7 +175,6 @@ const handleCancelSale = async () => {
              throw new Error('Error al eliminar detalles de la venta.');
         }
 
-        // Eliminar venta principal (esto activará un trigger en ventas si existe)
         const { error: errorDeleteSale } = await supabase.from('ventas').delete().eq('id', selectedSale.id);
          if (errorDeleteSale) {
             console.error('Error eliminando venta principal:', errorDeleteSale.message);
@@ -158,7 +182,6 @@ const handleCancelSale = async () => {
              throw new Error('Error al eliminar la venta principal.');
          }
 
-        // Actualizar estado local después de la eliminación exitosa en la BD
         setVentasCliente(prev => prev.filter(v => v.id !== selectedSale.id));
         handleCloseSaleDetailModal();
 
@@ -170,7 +193,8 @@ const handleCancelSale = async () => {
         setCancelLoading(false);
     }
 };
-  // Generar PDF del ticket de venta seleccionado
+
+  // Generar PDF del ticket de venta seleccionado (Se mantiene por si se necesita)
   const generarPDF = () => {
     if (!selectedSale || !selectedSaleDetails.length) {
         toast.error("No hay datos de venta para generar el PDF.");
@@ -229,6 +253,77 @@ const handleCancelSale = async () => {
 
     doc.output('dataurlnewwindow');
   };
+
+  // >>> Función para preparar datos y mostrar el ticket HTML <<<
+  const handleShowHtmlTicket = async () => {
+      if (!selectedSale || !selectedSaleDetails.length || !clienteActual || !currentUser) {
+          toast.error("Datos incompletos para mostrar el ticket HTML.");
+          return;
+      }
+
+      // Necesitamos obtener el balance de cuenta del cliente en este punto
+      // Ya lo tenemos en el estado clienteBalance en la página Checkout,
+      // pero aquí en Clientes no lo cargamos al seleccionar la venta.
+      // Vamos a hacer una consulta rápida para obtenerlo.
+      let currentClientBalance = 0;
+      const { data: balanceData, error: balanceError } = await supabase
+          .from('movimientos_cuenta_clientes')
+          .select('monto')
+          .eq('cliente_id', clienteActual.id); // Usamos clienteActual que ya está cargado
+
+      if (balanceError) {
+          console.error("Error loading client balance for HTML ticket:", balanceError);
+          toast.error("No se pudo cargar el balance del cliente para el ticket.");
+          // Continuar con balance 0 si hay error, o detener? Decidimos continuar.
+      } else {
+          currentClientBalance = (balanceData || []).reduce((sum, mov) => sum + (parseFloat(mov.monto) || 0), 0);
+      }
+
+
+       const now = selectedSale.fecha || selectedSale.created_at ? new Date(selectedSale.fecha || selectedSale.created_at) : new Date();
+       // Formatear la fecha a dd/mm/aa HH:MM
+       const formattedDate = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getFullYear()).slice(-2)} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+
+      const ticketData = {
+           codigo_venta: selectedSale.codigo_venta,
+           cliente: {
+               id: clienteActual.id,
+               nombre: clienteActual.nombre,
+               telefono: clienteActual.telefono || 'N/A', // Asegúrate de que clienteActual tenga 'telefono'
+           },
+           vendedor: {
+               // Intentar obtener el nombre del vendedor si lo tuviéramos, sino usar email del currentUser
+               nombre: currentUser?.email || 'N/A', // Aquí podrías necesitar cargar el nombre del vendedor si no está en currentUser
+           },
+           fecha: formattedDate,
+           productosVenta: selectedSaleDetails.map(item => ({ // Mapear los detalles de venta cargados
+               id: item.producto_id,
+               nombre: item.nombreProducto, // Usar el nombre del producto obtenido
+               cantidad: item.cantidad,
+               precio_unitario: item.precio_unitario,
+               total_parcial: item.total_parcial,
+           })),
+           originalSubtotal: selectedSale.subtotal, // Usar subtotal de la venta seleccionada
+           discountAmount: selectedSale.valor_descuento, // Usar valor_descuento de la venta seleccionada
+           forma_pago: selectedSale.forma_pago, // Usar forma_pago de la venta seleccionada
+           enganche: selectedSale.enganche || 0, // Usar enganche de la venta seleccionada
+           total: selectedSale.total, // Usar total de la venta seleccionada
+           balance_cuenta: currentClientBalance, // Usar el balance de cuenta obtenido
+       };
+
+       setHtmlTicketData(ticketData); // Guardar los datos para el ticket HTML
+       setShowHtmlTicket(true); // Mostrar el modal del ticket HTML
+       // No cerramos el modal de detalle de venta aquí, solo mostramos el ticket HTML encima
+  };
+
+   // >>> Función para cerrar el modal del ticket HTML <<<
+    const closeHtmlTicket = () => {
+        setShowHtmlTicket(false);
+        setHtmlTicketData(null); // Limpiar datos del ticket al cerrar
+    };
+  // --------------------------------------------------
+
 
   // Handler cuando se guarda (nuevo o editado)
   const onClientSaved = async clienteData => {
@@ -468,7 +563,7 @@ const handleCancelSale = async () => {
         cliente={editingClient}
       />
 
-      {/* === REINSERTANDO: Modal de Detalle de Venta === */}
+      {/* === Modal de Detalle de Venta === */}
       {showSaleDetailModal && selectedSale && (
           <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50 flex justify-center items-center p-4">
               <div className="relative p-8 bg-white w-full max-w-md mx-auto rounded-lg shadow-lg max-h-[95vh] overflow-y-auto">
@@ -526,6 +621,14 @@ const handleCancelSale = async () => {
                             </div>
 
                           <div className="flex flex-wrap justify-end space-x-2 mt-4">
+                                {/* >>> Botón "Ver ticket" <<< */}
+                                <button
+                                    onClick={handleShowHtmlTicket} // Llama a la nueva función
+                                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition duration-200 ease-in-out text-sm"
+                                >
+                                    Ver ticket
+                                </button>
+                                {/* ------------------------- */}
                                 <button
                                     onClick={generarPDF}
                                     className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition duration-200 ease-in-out text-sm"
@@ -551,6 +654,13 @@ const handleCancelSale = async () => {
               </div>
           </div>
       )}
+
+      {/* >>> Componente para mostrar el ticket HTML <<< */}
+      {showHtmlTicket && htmlTicketData && (
+          <HtmlTicketDisplay saleData={htmlTicketData} onClose={closeHtmlTicket} />
+      )}
+      {/* ------------------------------------------ */}
+
     </div>
   );
 }
