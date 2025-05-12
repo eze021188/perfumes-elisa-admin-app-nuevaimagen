@@ -74,9 +74,10 @@ export default function Ventas() {
   // --- TU FUNCIÓN CARGARVENTAS ORIGINAL (NO MODIFICADA EN ESTE PASO) ---
   const cargarVentas = async () => {
     setLoading(true);
+    // >>> Incluir 'enganche' y 'gastos_envio' en la consulta de ventas <<<
     const { data, error } = await supabase
       .from('ventas')
-      .select('*')
+      .select('*, enganche, gastos_envio') // Seleccionar todas las columnas de ventas + enganche y gastos_envio
       .order('fecha', { ascending: false });
     if (error) {
       console.error('❌ Error al cargar ventas:', error.message);
@@ -128,7 +129,7 @@ export default function Ventas() {
           toast.error(`Error al obtener stock del producto ${item.producto_id}.`);
           continue;
         }
-        const nuevoStock = (prodActual?.stock || 0) + item.cantidad;
+        const nuevoStock = (prodActual?.stock || 0) + (item.cantidad ?? 0); // Asegurar que cantidad sea un número
         const { error: errUpd } = await supabase
           .from('productos')
           .update({ stock: nuevoStock })
@@ -177,8 +178,19 @@ export default function Ventas() {
   // >>> Función para generar el PDF en formato Carta (con diseño más completo) <<<
   // Ajustada para usar los estados existentes: ventaSeleccionada, clienteInfoTicket, vendedorInfoTicket, clienteBalanceTicket, logoBase64
   const generarPDF = async () => {
-      if (!ventaSeleccionada || !ventaSeleccionada.productos || ventaSeleccionada.productos.length === 0 || !clienteInfoTicket || !vendedorInfoTicket) {
+      // >>> DEBUG LOGS <<<
+      console.log("Datos para generar PDF:");
+      console.log("ventaSeleccionada:", ventaSeleccionada); // Ahora incluye enganche y gastos_envio
+      console.log("ventaSeleccionada.productos:", ventaSeleccionada?.productos); // Asegurarse de que productos está cargado
+      console.log("clienteInfoTicket:", clienteInfoTicket);
+      console.log("vendedorInfoTicket:", vendedorInfoTicket);
+      console.log("clienteBalanceTicket:", clienteBalanceTicket);
+      // >>> FIN DEBUG LOGS <<<
+
+      // >>> CORRECCIÓN: Verificar que ventaSeleccionada.productos exista y tenga elementos <<<
+      if (!ventaSeleccionada || !ventaSeleccionada.productos || ventaSeleccionada.productos.length === 0 || !clienteInfoTicket || !vendedorInfoTicket || ventaSeleccionada.enganche === undefined || ventaSeleccionada.gastos_envio === undefined) {
           toast.error("Datos incompletos para generar el PDF.");
+          console.error("Datos incompletos para generar PDF. Check logs above.");
           return;
       }
 
@@ -250,7 +262,7 @@ export default function Ventas() {
 
        yOffset += infoLineHeight;
       doc.setFontSize(infoLabelFontSize); doc.setFont(undefined, 'bold'); doc.text('DIRECCIÓN:', margin, yOffset);
-       // Nota: Si tienes la dirección del cliente en clienteActual, úsala aquí
+       // Nota: Si tienes la dirección del cliente en clienteActual, úsalo aquí
       doc.setFontSize(infoValueFontSize); doc.setFont(undefined, 'normal');
       const direccionCliente = clienteInfoTicket?.direccion || 'N/A';
        // Autoajustar texto si la dirección es larga
@@ -265,7 +277,7 @@ export default function Ventas() {
 
       yOffset += infoLineHeight;
       doc.setFontSize(infoLabelFontSize); doc.setFont(undefined, 'bold'); doc.text('VENDEDOR:', margin, yOffset);
-       // Nota: Obtener el nombre completo del vendedor aquí requeriría cargar su info desde la tabla 'usuarios'
+       // >>> USAR vendedorInfoTicket.nombre <<<
       doc.setFontSize(infoValueFontSize); doc.setFont(undefined, 'normal'); doc.text(vendedorInfoTicket?.nombre || 'N/A', margin + doc.getTextWidth('VENDEDOR:') + 5, yOffset);
 
 
@@ -273,11 +285,8 @@ export default function Ventas() {
 
 
       // --- Tabla de Productos ---
-      const productsHead = [['Producto', 'Cant.', 'P. Unitario', 'Desc. Item', 'Total Item']]; // Columnas más detalladas
+      const productsHead = [['Producto', 'Cant.', 'P. Unitario', 'Total Item']]; // Columnas ajustadas (sin Desc. Item)
       const productsRows = ventaSeleccionada.productos.map(p => {
-          // Aquí necesitarías calcular el descuento por ítem si lo aplicas de forma individual
-          // Como la lógica actual aplica el descuento al total, mostraremos 0 o N/A para Desc. Item
-          // y el Total Item será solo Cant * P. Unitario si no hay descuento por ítem
           const unitPrice = parseFloat(p.precio ?? 0); // Usar p.precio del detalle de venta
           const quantity = parseFloat(p.cantidad ?? 0);
           const totalItem = parseFloat(p.subtotal ?? 0); // Usar p.subtotal del detalle de venta
@@ -286,7 +295,6 @@ export default function Ventas() {
               p.nombre || '–',
               quantity.toString(),
               formatCurrency(unitPrice),
-              formatCurrency(0), // Simulación: Descuento por ítem (ajustar si aplicas descuento por ítem)
               formatCurrency(totalItem) // Total del ítem sin considerar el descuento general
           ];
       });
@@ -299,11 +307,10 @@ export default function Ventas() {
           styles: { fontSize: 9, cellPadding: 3, overflow: 'linebreak' },
           headStyles: { fillColor: [220, 220, 220], textColor: [0, 0, 0], fontStyle: 'bold' },
           columnStyles: {
-              0: { cellWidth: 60 }, // Ancho para nombre producto
+              0: { cellWidth: 80 }, // Ancho para nombre producto
               1: { cellWidth: 15, halign: 'center' }, // Cantidad
               2: { cellWidth: 25, halign: 'right' }, // P. Unitario
-              3: { cellWidth: 25, halign: 'right' }, // Desc. Item (ajustar si es real)
-              4: { cellWidth: 30, halign: 'right' }, // Total Item
+              3: { cellWidth: 30, halign: 'right' }, // Total Item
           },
           margin: { left: margin, right: margin },
           didDrawPage: function (data) {
@@ -325,6 +332,21 @@ export default function Ventas() {
 
       doc.setFontSize(totalsFontSize);
       doc.setFont(undefined, 'normal');
+
+      // >>> Mostrar Enganche si es Crédito cliente Y hubo enganche > 0 (Antes del subtotal) <<<
+      if (ventaSeleccionada.forma_pago === 'Crédito cliente' && (ventaSeleccionada.enganche ?? 0) > 0) {
+           doc.text('Enganche:', totalsValueStartX - totalsLabelWidth, yOffset, { align: 'right' });
+           doc.text(formatCurrency(ventaSeleccionada.enganche ?? 0), totalsValueStartX, yOffset, { align: 'right' });
+           yOffset += totalsLineHeight;
+       }
+
+       // >>> Mostrar Gastos de Envío si son > 0 (Antes del subtotal) <<<
+       if ((ventaSeleccionada.gastos_envio ?? 0) > 0) {
+            doc.text('Gastos de Envío:', totalsValueStartX - totalsLabelWidth, yOffset, { align: 'right' });
+            doc.text(formatCurrency(ventaSeleccionada.gastos_envio ?? 0), totalsValueStartX, yOffset, { align: 'right' });
+            yOffset += totalsLineHeight;
+        }
+
 
       doc.text('Subtotal:', totalsValueStartX - totalsLabelWidth, yOffset, { align: 'right' });
       doc.text(formatCurrency(ventaSeleccionada.subtotal ?? 0), totalsValueStartX, yOffset, { align: 'right' });
@@ -357,12 +379,6 @@ export default function Ventas() {
       doc.text(ventaSeleccionada.forma_pago || 'Desconocida', totalsValueStartX, yOffset, { align: 'right' });
       yOffset += totalsLineHeight;
 
-       // Enganche (solo si es Crédito cliente Y hubo enganche > 0)
-      if (ventaSeleccionada.forma_pago === 'Crédito cliente' && (ventaSeleccionada.enganche ?? 0) > 0) {
-          doc.text('Enganche:', totalsValueStartX - totalsLabelWidth, yOffset, { align: 'right' });
-          doc.text(formatCurrency(ventaSeleccionada.enganche ?? 0), totalsValueStartX, yOffset, { align: 'right' });
-          yOffset += totalsLineHeight;
-      }
 
        // Impuestos (simulación si aplica)
        // doc.text('Impuestos (IVA):', totalsValueStartX - totalsLabelWidth, yOffset, { align: 'right' });
@@ -477,7 +493,18 @@ export default function Ventas() {
 
     // >>> Función para preparar datos y mostrar el ticket HTML (necesario para el botón "Ver ticket") <<<
     const handleShowHtmlTicket = async () => {
+        // >>> DEBUG LOGS <<<
+        console.log("Datos para mostrar Ticket HTML:");
+        console.log("ventaSeleccionada:", ventaSeleccionada); // Usar ventaSeleccionada
+        console.log("productos de la venta seleccionada:", ventaSeleccionada?.productos); // Usar ventaSeleccionada.productos
+        console.log("clienteInfoTicket:", clienteInfoTicket);
+        console.log("vendedorInfoTicket:", vendedorInfoTicket);
+        console.log("clienteBalanceTicket:", clienteBalanceTicket);
+        // >>> FIN DEBUG LOGS <<<
+
+        // >>> CORRECCIÓN: Usar ventaSeleccionada y ventaSeleccionada.productos en la verificación <<<
         if (!ventaSeleccionada || !ventaSeleccionada.productos || ventaSeleccionada.productos.length === 0 || !clienteInfoTicket || !vendedorInfoTicket) {
+            console.error("Datos incompletos para mostrar el ticket HTML. Check logs above."); // Log adicional para depuración
             toast.error("Datos incompletos para mostrar el ticket HTML.");
             return;
         }
@@ -489,48 +516,57 @@ export default function Ventas() {
          // Formatear la fecha a dd/mm/aa HH:MM
          const formattedDate = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getFullYear()).slice(-2)} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
+       // Asumiendo que 'enganche' y 'gastos_envio' están disponibles en el objeto 'ventaSeleccionada'
+       const enganchePagado = ventaSeleccionada.enganche ?? 0;
+       const gastosEnvioVenta = ventaSeleccionada.gastos_envio ?? 0; // <<< Obtener gastos_envio
+
 
         const ticketData = {
              codigo_venta: ventaSeleccionada.codigo_venta,
              cliente: {
                  id: clienteInfoTicket.id,
                  nombre: clienteInfoTicket.nombre,
-                 telefono: clienteInfoTicket.telefono || 'N/A',
+                 telefono: clienteInfoTicket.telefono || 'N/A', // Asegúrate de que clienteInfoTicket tenga 'telefono'
+                // Puedes añadir más campos del cliente aquí si los cargas en clienteInfoTicket
+               // correo: clienteInfoTicket.correo || 'N/A',
+               // direccion: clienteInfoTicket.direccion || 'N/A',
              },
              vendedor: {
-                 nombre: vendedorInfoTicket.nombre || 'N/A',
+                 // Usar el nombre del vendedor cargado en vendedorInfoTicket
+                 nombre: vendedorInfoTicket?.nombre || 'N/A',
              },
              fecha: formattedDate,
-             productosVenta: ventaSeleccionada.productos.map(item => ({ // Mapear los detalles de venta cargados
-                 id: item.producto_id, // Asumiendo que el detalle tiene producto_id
-                 nombre: item.nombre, // Usar el nombre del producto obtenido en la carga del detalle
+             productosVenta: ventaSeleccionada.productos.map(item => ({ // Mapear los detalles de venta cargados (ahora en ventaSeleccionada.productos)
+                 id: item.producto_id,
+                 nombre: item.producto?.nombre || '–', // Usar el nombre del producto obtenido de la relación
                  cantidad: item.cantidad,
-                 precio_unitario: item.precio, // Usar el precio unitario del detalle
-                 total_parcial: item.subtotal, // Usar el subtotal por ítem del detalle
+                 precio_unitario: item.precio_unitario, // Usar el precio unitario del detalle
+                 total_parcial: item.total_parcial, // Usar el subtotal por ítem del detalle
              })),
              originalSubtotal: ventaSeleccionada.subtotal, // Usar subtotal de la venta seleccionada (antes de descuento general)
              discountAmount: ventaSeleccionada.valor_descuento, // Usar valor_descuento de la venta seleccionada (descuento general)
              forma_pago: ventaSeleccionada.forma_pago, // Usar forma_pago de la venta seleccionada
-             enganche: ventaSeleccionada.enganche || 0, // Usar enganche de la venta seleccionada
-             total: ventaSeleccionada.total, // Usar total de la venta seleccionada (después de descuento general)
-             balance_cuenta: clienteBalanceTicket, // Usar el balance de cuenta cargado
+             enganche: enganchePagado, // Usar el enganche de la venta seleccionada
+             gastos_envio: gastosEnvioVenta, // <<< Incluir gastos_envio en los datos del ticket
+             total: ventaSeleccionada.total, // Usar total de la venta seleccionada (después de descuento general, que ahora es el total final)
+             total_final: ventaSeleccionada.total, // <<< Usar total de la venta seleccionada (que es el total final)
+             balance_cuenta: clienteBalanceTicket, // Usar el balance de cuenta obtenido/calculado
          };
 
-         setHtmlTicketData(ticketData); // Guardar los datos para el ticket HTML
+         setHtmlTicketData(ticketData); // Guardar los datos del ticket
          setShowHtmlTicket(true); // Mostrar el modal del ticket HTML
          // No cerramos el modal de detalle de venta aquí, solo mostramos el ticket HTML encima
     };
 
-     // >>> Función para cerrar el modal del ticket HTML (necesario para el botón "Ver ticket") <<<
-      const closeHtmlTicket = () => {
-          setShowHtmlTicket(false);
-          setHtmlTicketData(null); // Limpiar datos del ticket al cerrar
-      };
-    // --------------------------------------------------
+     // Función para cerrar el modal del ticket HTML
+    const closeHtmlTicket = () => {
+        setShowHtmlTicket(false);
+        setHtmlTicketData(null); // Limpiar datos del ticket al cerrar
+    };
+
 
     // --- Modificar la lógica de selección de venta para cargar datos adicionales ---
     const handleSelectSale = async (venta) => {
-        // >>> CORRECCIÓN: Usar setVentaSeleccionada en lugar de setSelectedSale <<<
         setVentaSeleccionada(venta); // Establecer la venta seleccionada para mostrar el modal
         setDetailLoading(true); // Iniciar carga de detalle del modal
         setClienteInfoTicket(null); // Limpiar info cliente previa
@@ -539,7 +575,7 @@ export default function Ventas() {
 
         console.log(`[handleSelectSale] Fetching details for venta ID: ${venta.id}`);
 
-        // 1. Cargar detalles de la venta (ya lo haces)
+        // 1. Cargar detalles de la venta CON la relación a productos para obtener el nombre
         const { data: dets = [], error: errDet } = await supabase
             .from('detalle_venta')
             .select(`
@@ -547,7 +583,7 @@ export default function Ventas() {
               cantidad,
               precio_unitario,
               total_parcial,
-              producto:productos(nombre)
+              producto:productos(nombre) // >>> Cargar el nombre del producto relacionado <<<
             `)
             .eq('venta_id', venta.id);
 
@@ -562,10 +598,10 @@ export default function Ventas() {
         const productosMapeados = dets.map(d => ({
             // Mapear a una estructura compatible con el PDF y el ticket HTML
             producto_id: d.producto_id,
-            nombre: d.producto?.nombre || '–',
+            nombre: d.producto?.nombre || '–', // Usar el nombre del producto de la relación
             cantidad: d.cantidad ?? 0,
-            precio: d.precio_unitario ?? 0, // Precio unitario
-            subtotal: d.total_parcial ?? 0 // Total por ítem
+            precio_unitario: d.precio_unitario ?? 0, // Precio unitario
+            total_parcial: d.total_parcial ?? 0 // Total por ítem
         }));
 
 
@@ -641,14 +677,15 @@ export default function Ventas() {
         // Ya establecimos ventaSeleccionada al inicio, ahora solo actualizamos sus propiedades
         // con los datos cargados.
         setVentaSeleccionada(prev => ({
-            ...prev, // Mantener propiedades de la venta original
+            ...prev, // Mantener propiedades de la venta original (incluyendo enganche y gastos_envio cargados en cargarVentas)
             productos: productosMapeados, // Usar los productos mapeados
-            // Asegurarse de que los totales, descuento y enganche estén presentes
+            // Asegurarse de que los totales, descuento, enganche y gastos_envio estén presentes
             subtotal: venta.subtotal ?? 0, // Subtotal original antes del descuento general
-            total: venta.total ?? 0, // Total final después del descuento general
+            total: venta.total ?? 0, // Total final de la venta (subtotal - descuento + gastos_envio)
             valor_descuento: venta.valor_descuento ?? 0, // Monto del descuento general
             tipo_descuento: venta.tipo_descuento || 'fijo', // Tipo de descuento general
-            enganche: venta.enganche ?? 0, // Enganche
+            enganche: venta.enganche ?? 0, // Enganche (ya cargado en cargarVentas)
+            gastos_envio: venta.gastos_envio ?? 0, // Gastos de envío (ya cargado en cargarVentas)
             // Los datos de cliente, vendedor y balance se guardan en sus propios estados
             // y se usan directamente desde ellos en el JSX del modal.
         }));
@@ -700,38 +737,38 @@ export default function Ventas() {
       ) : (
         <div className="bg-white shadow-lg rounded-lg overflow-hidden mb-6">
           <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-200">
-              <tr>
-                  <th className="p-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Código</th>
-                  <th className="p-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Cliente</th>
-                  <th className="p-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider hidden md:table-cell">Fecha</th>
-                  <th className="p-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider hidden sm:table-cell">Pago</th>
-                  <th className="p-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Total</th>
-                  <th className="p-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Acciones</th> {/* Columna de acciones */}
+            {/* Eliminando espacios innecesarios alrededor de thead */}
+            <thead className="bg-gray-200"><tr>
+              <th className="p-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Código</th>
+              <th className="p-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Cliente</th>
+              <th className="p-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider hidden md:table-cell">Fecha</th>
+              <th className="p-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider hidden sm:table-cell">Pago</th>
+              <th className="p-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Total</th>
+              <th className="p-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Acciones</th> {/* Columna de acciones */}
+            </tr></thead>
+            {/* Eliminando espacios innecesarios alrededor de tbody */}
+            <tbody>{ventasFiltradas.map(venta => (
+              // Eliminando espacios innecesarios alrededor de tr
+              <tr key={venta.id} className="border-b hover:bg-gray-50 transition duration-150 ease-in-out cursor-pointer">
+                {/* Eliminando espacios innecesarios alrededor de td */}
+                <td className="p-4 whitespace-nowrap text-sm font-medium text-gray-900">{venta.codigo_venta}</td>
+                <td className="p-4 whitespace-nowrap text-sm text-gray-700">{venta.cliente_nombre}</td>
+                <td className="p-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">{venta.fecha ? new Date(venta.fecha).toLocaleString() : 'Fecha desconocida'}</td>
+                <td className="p-4 whitespace-nowrap text-sm text-gray-500 hidden sm:table-cell">{venta.forma_pago}</td>
+                {/* Mostrar el total final de la venta (que incluye gastos de envío y enganche) */}
+                <td className="p-4 whitespace-nowrap text-sm font-semibold text-gray-900 text-right">{formatCurrency(venta.total ?? 0)}</td>
+                 {/* Celda de acciones */}
+                 <td className="p-4 whitespace-nowrap text-center text-sm font-medium">
+                      <button
+                          onClick={(e) => { e.stopPropagation(); handleSelectSale(venta); }}
+                          className="px-3 py-1 bg-blue-600 text-white rounded-md shadow-sm hover:bg-blue-700 transition duration-200 ease-in-out text-xs"
+                      >
+                          Ver Detalle
+                      </button>
+                 </td>
               </tr>
-            </thead>
-            <tbody>
-              {ventasFiltradas.map(venta => (
-                // >>> CORRECCIÓN: Eliminar espacios en blanco entre <tr> y <td> <<<
-                <tr key={venta.id} className="border-b hover:bg-gray-50 transition duration-150 ease-in-out cursor-pointer">
-                  <td className="p-4 whitespace-nowrap text-sm font-medium text-gray-900">{venta.codigo_venta}</td>
-                  <td className="p-4 whitespace-nowrap text-sm text-gray-700">{venta.cliente_nombre}</td>
-                  <td className="p-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">{venta.fecha ? new Date(venta.fecha).toLocaleString() : 'Fecha desconocida'}</td>
-                  <td className="p-4 whitespace-nowrap text-sm text-gray-500 hidden sm:table-cell">{venta.forma_pago}</td>
-                  <td className="p-4 whitespace-nowrap text-sm font-semibold text-gray-900 text-right">{formatCurrency(venta.total ?? 0)}</td>
-                   {/* Celda de acciones */}
-                   <td className="p-4 whitespace-nowrap text-center text-sm font-medium">
-                        <button
-                            onClick={(e) => { e.stopPropagation(); handleSelectSale(venta); }}
-                            className="px-3 py-1 bg-blue-600 text-white rounded-md shadow-sm hover:bg-blue-700 transition duration-200 ease-in-out text-xs"
-                        >
-                            Ver Detalle
-                        </button>
-                   </td>
-                </tr>
-                // >>> CORRECCIÓN: Eliminar espacios en blanco entre </td> y </tr> <<<
-              ))}
-            </tbody>
+              // Eliminando espacios innecesarios alrededor de tr
+            ))}</tbody>
           </table>
         </div>
       )}
@@ -759,62 +796,79 @@ export default function Ventas() {
                    {/* Usar la info del vendedor cargada para el ticket */}
                    <p><strong>Vendedor:</strong> {vendedorInfoTicket?.nombre || 'N/A'}</p>
                   <p><strong>Forma de Pago:</strong> {ventaSeleccionada.forma_pago}</p>
-                   {/* Mostrar enganche si es Crédito cliente y > 0 */}
-                   {ventaSeleccionada.forma_pago === 'Crédito cliente' && (ventaSeleccionada.enganche ?? 0) > 0 && (
-                       <p><strong>Enganche:</strong> {formatCurrency(ventaSeleccionada.enganche ?? 0)}</p>
-                   )}
                 </div>
                 <hr className="my-6 border-gray-200" />
                 <h3 className="text-xl font-semibold text-gray-800 mb-4">Productos:</h3>
                 <div className="overflow-x-auto shadow-sm rounded-md mb-6">
                   <table className="w-full text-sm border-collapse">
-                    <thead className="bg-gray-100">
-                      <tr>
-                          <th className="p-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Producto</th>
-                          <th className="p-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Cantidad</th>
-                          <th className="p-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Precio</th>
-                          <th className="p-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Subtotal</th>
+                    {/* Eliminando espacios innecesarios alrededor de thead */}
+                    <thead className="bg-gray-100"><tr>
+                      <th className="p-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Producto</th>
+                      <th className="p-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Cantidad</th>
+                      <th className="p-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Precio</th>
+                      <th className="p-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Subtotal</th>
+                    </tr></thead>
+                    {/* Eliminando espacios innecesarios alrededor de tbody */}
+                    <tbody>{ventaSeleccionada.productos.map((p, i) => (
+                      // Eliminando espacios innecesarios alrededor de tr
+                      <tr key={i} className="border-b hover:bg-gray-50">
+                        {/* Eliminando espacios innecesarios alrededor de td */}
+                        <td className="p-3">{p.nombre}</td>
+                        <td className="p-3 text-center">{p.cantidad}</td>
+                        <td className="p-3 text-right">{formatCurrency(p.precio_unitario ?? 0)}</td> {/* Usar formatCurrency */}
+                        <td className="p-3 text-right">{formatCurrency(p.total_parcial ?? 0)}</td> {/* Usar formatCurrency */}
                       </tr>
-                    </thead>
-                    <tbody>
-                      {ventaSeleccionada.productos.map((p, i) => (
-                        <tr key={i} className="border-b hover:bg-gray-50">
-                            <td className="p-3">{p.nombre}</td>
-                            <td className="p-3 text-center">{p.cantidad}</td>
-                            <td className="p-3 text-right">{formatCurrency(p.precio ?? 0)}</td> {/* Usar formatCurrency */}
-                            <td className="p-3 text-right">{formatCurrency(p.subtotal ?? 0)}</td> {/* Usar formatCurrency */}
-                        </tr>
-                      ))}
-                    </tbody>
+                      // Eliminando espacios innecesarios alrededor de tr
+                    ))}</tbody>
                   </table>
                 </div>
-                <div className="text-right text-gray-800 space-y-1 mb-6">
-                  <p className="font-semibold">Subtotal: {formatCurrency(ventaSeleccionada.subtotal ?? 0)}</p> {/* Usar formatCurrency */}
-                  {((ventaSeleccionada.tipo_descuento === 'porcentaje' && (ventaSeleccionada.valor_descuento ?? 0) > 0) || (ventaSeleccionada.tipo_descuento === 'fijo' && (ventaSeleccionada.valor_descuento ?? 0) > 0)) && (
-                    <p className="font-semibold text-red-600">
-                      Descuento:{' '}
-                      {ventaSeleccionada.tipo_descuento === 'porcentaje'
-                        ? `-${ventaSeleccionada.valor_descuento}%`
-                        : `- ${formatCurrency(ventaSeleccionada.valor_descuento ?? 0)}`} {/* Usar formatCurrency */}
-                    </p>
-                  )}
-                  <p className="font-bold text-xl text-green-700 mt-2 pt-2 border-t border-gray-300">Total: {formatCurrency(ventaSeleccionada.total ?? 0)}</p> {/* Usar formatCurrency */}
-                </div>
-                 {/* Sección de Balance de Cuenta (solo si es Crédito cliente) */}
-                 {ventaSeleccionada.forma_pago === 'Crédito cliente' && (
-                      <div className="text-center text-gray-800 mb-6">
-                         <p className="font-semibold mb-1">Balance de Cuenta:</p>
-                         {/* Aplicar clase condicional para el color */}
-                         <p className={`text-xl font-bold ${clienteBalanceTicket > 0 ? 'text-red-600' : 'text-green-700'}`}>
-                             {formatCurrency(Math.abs(clienteBalanceTicket ?? 0))} {/* Mostrar valor absoluto */}
+                 {/* >>> Sección de Totales en el Modal de Detalle de Venta <<< */}
+                 <div className="text-right text-gray-800 space-y-1 mb-6">
+                     {/* Mostrar Enganche si es Crédito cliente y > 0 (Antes del subtotal) */}
+                     {ventaSeleccionada.forma_pago === 'Crédito cliente' && (ventaSeleccionada.enganche ?? 0) > 0 && (
+                         <p className="font-semibold">Enganche: {formatCurrency(ventaSeleccionada.enganche ?? 0)}</p>
+                     )}
+                      {/* Mostrar Gastos de Envío si son > 0 (Antes del subtotal) */}
+                     {(ventaSeleccionada.gastos_envio ?? 0) > 0 && (
+                         <p className="font-semibold">Gastos de Envío: {formatCurrency(ventaSeleccionada.gastos_envio ?? 0)}</p>
+                     )}
+                     {/* Mostrar Subtotal original */}
+                     <p className="font-semibold">Subtotal: {formatCurrency(ventaSeleccionada.subtotal ?? 0)}</p>
+                     {/* Mostrar Descuento si aplica */}
+                     {((ventaSeleccionada.tipo_descuento === 'porcentaje' && (ventaSeleccionada.valor_descuento ?? 0) > 0) || (ventaSeleccionada.tipo_descuento === 'fijo' && (ventaSeleccionada.valor_descuento ?? 0) > 0)) && (
+                         <p className="font-semibold text-red-600">
+                             Descuento:{' '}
+                             {ventaSeleccionada.tipo_descuento === 'porcentaje'
+                                 ? `-${ventaSeleccionada.valor_descuento}%`
+                                 : `- ${formatCurrency(ventaSeleccionada.valor_descuento ?? 0)}`}
                          </p>
-                         <p className="text-xs text-gray-500 mt-1">
-                             {(clienteBalanceTicket ?? 0) > 0
-                                 ? '(Saldo positivo indica deuda del cliente)'
-                                 : '(Saldo negativo indica crédito a favor del cliente)'}
-                         </p>
-                     </div>
-                 )}
+                     )}
+                      {/* Mostrar Subtotal con descuento si aplica */}
+                      {/* Solo mostrar si hay descuento aplicado, para evitar duplicar el subtotal original */}
+                      {((ventaSeleccionada.tipo_descuento === 'porcentaje' && (ventaSeleccionada.valor_descuento ?? 0) > 0) || (ventaSeleccionada.tipo_descuento === 'fijo' && (ventaSeleccionada.valor_descuento ?? 0) > 0)) && (
+                           <p className="font-semibold">Subtotal (con descuento): {formatCurrency((ventaSeleccionada.subtotal ?? 0) - (ventaSeleccionada.valor_descuento ?? 0))}</p>
+                      )}
+
+                     {/* Mostrar Total Final */}
+                     <p className="font-bold text-xl text-green-700 mt-2 pt-2 border-t border-gray-300">Total Venta: {formatCurrency(ventaSeleccionada.total ?? 0)}</p> {/* ventaSeleccionada.total ya es el total final */}
+                 </div>
+                  {/* Fin Sección de Totales en el Modal de Detalle de Venta */}
+
+                           {/* Sección de Balance de Cuenta (solo si es Crédito cliente) */}
+                           {ventaSeleccionada.forma_pago === 'Crédito cliente' && (
+                                <div className="text-center text-gray-800 mb-6">
+                                   <p className="font-semibold mb-1">Balance de Cuenta:</p>
+                                   {/* Aplicar clase condicional para el color */}
+                                   <p className={`text-xl font-bold ${clienteBalanceTicket > 0 ? 'text-red-600' : 'text-green-700'}`}>
+                                       {formatCurrency(Math.abs(clienteBalanceTicket ?? 0))} {/* Mostrar valor absoluto */}
+                                   </p>
+                                   <p className="text-xs text-gray-500 mt-1">
+                                       {(clienteBalanceTicket ?? 0) > 0
+                                           ? '(Saldo positivo indica deuda del cliente)'
+                                           : '(Saldo negativo indica crédito a favor del cliente)'}
+                                   </p>
+                               </div>
+                           )}
 
                 <div className="flex flex-wrap justify-end gap-3">
                     {/* >>> Botón "Ver ticket" <<< */}

@@ -105,9 +105,10 @@ export default function Clientes() {
     setClienteActual(c); // Establecer el cliente seleccionado en la lista
     setVentasCliente([]);
     setClientSalesLoading(true);
+    // >>> Incluir 'enganche' y 'gastos_envio' en la consulta de ventas <<<
     const { data, error } = await supabase
       .from('ventas')
-      .select('*') // Cargar todas las columnas de ventas
+      .select('*, enganche, gastos_envio') // Seleccionar todas las columnas de ventas + enganche y gastos_envio
       .eq('cliente_id', c.id)
       .order('fecha', { ascending: false });
     if (error) {
@@ -231,19 +232,18 @@ export default function Clientes() {
 
 
     // 5. Actualizar el estado selectedSale con los detalles mapeados
-    // y asegurar que los campos de totales, descuento y enganche estén presentes,
+    // y asegurar que los campos de totales, descuento, enganche y gastos_envio estén presentes,
     // además de incluir el balance de cuenta (balance_cuenta) de la venta si existe, o el balance actual calculado si no.
     setSelectedSale(prev => ({
-        ...prev, // Mantener propiedades de la venta original
+        ...prev, // Mantener propiedades de la venta original (incluyendo enganche y gastos_envio cargados en handleVerCompras)
         productos: mappedDetails, // Usar los detalles mapeados para la propiedad 'productos'
-        // Asegurarse de que los totales, descuento y enganche estén presentes
+        // Asegurarse de que los totales, descuento, enganche y gastos_envio estén presentes
         subtotal: venta.subtotal ?? 0, // Subtotal original antes del descuento general
-        total: venta.total ?? 0, // Total final después del descuento general
+        total: venta.total ?? 0, // Total final de la venta (subtotal - descuento + gastos_envio)
         valor_descuento: venta.valor_descuento ?? 0, // Monto del descuento general
         tipo_descuento: venta.tipo_descuento || 'fijo', // Tipo de descuento general
-        enganche: venta.enganche ?? 0, // Enganche
-        // Los datos de cliente, vendedor y balance se guardan en sus propios estados
-        // y se usan directamente desde ellos en el JSX del modal y en las funciones PDF/HTML.
+        enganche: venta.enganche ?? 0, // Enganche (ya cargado en handleVerCompras)
+        gastos_envio: venta.gastos_envio ?? 0, // Gastos de envío (ya cargado en handleVerCompras)
         // Si selectedSale.balance_cuenta existe en la venta original, úsalo, sino, el balance calculado
         balance_cuenta: venta.balance_cuenta ?? currentClientBalance, // Usar el balance de la venta si existe, sino el calculado
     }));
@@ -338,14 +338,15 @@ const handleCancelSale = async () => {
   const generarPDF = async () => {
       // >>> DEBUG LOGS <<<
       console.log("Datos para generar PDF:");
-      console.log("selectedSale:", selectedSale);
+      console.log("selectedSale:", selectedSale); // Ahora incluye enganche y gastos_envio
       console.log("selectedSaleDetails:", selectedSaleDetails);
       console.log("clienteInfoTicket:", clienteInfoTicket);
       console.log("vendedorInfoTicket:", vendedorInfoTicket);
       console.log("clienteBalanceTicket:", clienteBalanceTicket);
       // >>> FIN DEBUG LOGS <<<
 
-      if (!selectedSale || !selectedSaleDetails.length || !clienteInfoTicket || !vendedorInfoTicket) {
+      // >>> CORRECCIÓN: Verificar también gastos_envio en selectedSale <<<
+      if (!selectedSale || !selectedSaleDetails.length || !clienteInfoTicket || !vendedorInfoTicket || selectedSale.enganche === undefined || selectedSale.gastos_envio === undefined) {
           toast.error("Datos incompletos para generar el PDF.");
           return;
       }
@@ -441,11 +442,8 @@ const handleCancelSale = async () => {
 
 
       // --- Tabla de Productos ---
-      const productsHead = [['Producto', 'Cant.', 'P. Unitario', 'Desc. Item', 'Total Item']]; // Columnas más detalladas
+      const productsHead = [['Producto', 'Cant.', 'P. Unitario', 'Total Item']]; // Columnas ajustadas (sin Desc. Item)
       const productsRows = selectedSaleDetails.map(p => {
-          // Aquí necesitarías calcular el descuento por ítem si lo aplicas de forma individual
-          // Como la lógica actual aplica el descuento al total, mostraremos 0 o N/A para Desc. Item
-          // y el Total Item será solo Cant * P. Unitario si no hay descuento por ítem
           const unitPrice = parseFloat(p.precio_unitario ?? 0);
           const quantity = parseFloat(p.cantidad ?? 0);
           const totalItem = parseFloat(p.total_parcial ?? 0); // Usar p.total_parcial del detalle de venta
@@ -454,7 +452,6 @@ const handleCancelSale = async () => {
               p.nombreProducto || '–',
               quantity.toString(),
               formatCurrency(unitPrice),
-              formatCurrency(0), // Simulación: Descuento por ítem (ajustar si aplicas descuento por ítem)
               formatCurrency(totalItem) // Total del ítem sin considerar el descuento general
           ];
       });
@@ -467,11 +464,10 @@ const handleCancelSale = async () => {
           styles: { fontSize: 9, cellPadding: 3, overflow: 'linebreak' },
           headStyles: { fillColor: [220, 220, 220], textColor: [0, 0, 0], fontStyle: 'bold' },
           columnStyles: {
-              0: { cellWidth: 60 }, // Ancho para nombre producto
+              0: { cellWidth: 80 }, // Ancho para nombre producto
               1: { cellWidth: 15, halign: 'center' }, // Cantidad
               2: { cellWidth: 25, halign: 'right' }, // P. Unitario
-              3: { cellWidth: 25, halign: 'right' }, // Desc. Item (ajustar si es real)
-              4: { cellWidth: 30, halign: 'right' }, // Total Item
+              3: { cellWidth: 30, halign: 'right' }, // Total Item
           },
           margin: { left: margin, right: margin },
           didDrawPage: function (data) {
@@ -493,6 +489,21 @@ const handleCancelSale = async () => {
 
       doc.setFontSize(totalsFontSize);
       doc.setFont(undefined, 'normal');
+
+      // >>> Mostrar Enganche si es Crédito cliente Y hubo enganche > 0 (Antes del subtotal) <<<
+      if (selectedSale.forma_pago === 'Crédito cliente' && (selectedSale.enganche ?? 0) > 0) {
+           doc.text('Enganche:', totalsValueStartX - totalsLabelWidth, yOffset, { align: 'right' });
+           doc.text(formatCurrency(selectedSale.enganche ?? 0), totalsValueStartX, yOffset, { align: 'right' });
+           yOffset += totalsLineHeight;
+       }
+
+       // >>> Mostrar Gastos de Envío si son > 0 (Antes del subtotal) <<<
+       if ((selectedSale.gastos_envio ?? 0) > 0) {
+            doc.text('Gastos de Envío:', totalsValueStartX - totalsLabelWidth, yOffset, { align: 'right' });
+            doc.text(formatCurrency(selectedSale.gastos_envio ?? 0), totalsValueStartX, yOffset, { align: 'right' });
+            yOffset += totalsLineHeight;
+        }
+
 
       doc.text('Subtotal:', totalsValueStartX - totalsLabelWidth, yOffset, { align: 'right' });
       doc.text(formatCurrency(selectedSale.subtotal ?? 0), totalsValueStartX, yOffset, { align: 'right' });
@@ -525,12 +536,6 @@ const handleCancelSale = async () => {
       doc.text(selectedSale.forma_pago || 'Desconocida', totalsValueStartX, yOffset, { align: 'right' });
       yOffset += totalsLineHeight;
 
-       // Enganche (solo si es Crédito cliente Y hubo enganche > 0)
-      if (selectedSale.forma_pago === 'Crédito cliente' && (selectedSale.enganche ?? 0) > 0) {
-          doc.text('Enganche:', totalsValueStartX - totalsLabelWidth, yOffset, { align: 'right' });
-          doc.text(formatCurrency(selectedSale.enganche ?? 0), totalsValueStartX, yOffset, { align: 'right' });
-          yOffset += totalsLineHeight;
-      }
 
        // Impuestos (simulación si aplica)
        // doc.text('Impuestos (IVA):', totalsValueStartX - totalsLabelWidth, yOffset, { align: 'right' });
@@ -545,6 +550,7 @@ const handleCancelSale = async () => {
       doc.setFont(undefined, 'bold');
       doc.text('TOTAL:', totalsValueStartX - totalsLabelWidth, yOffset, { align: 'right' });
       doc.setTextColor(40, 167, 69); // Verde para total
+      // >>> CORRECCIÓN: Usar selectedSale.total (que ahora es el total final) <<<
       doc.text(formatCurrency(selectedSale.total ?? 0), totalsValueStartX, yOffset, { align: 'right' });
       doc.setTextColor(0, 0, 0); // Resetear color a negro
       yOffset += finalTotalFontSize + 15;
@@ -561,7 +567,8 @@ const handleCancelSale = async () => {
            // Balance Anterior = Balance Actual - Total de Venta (si la venta es un cargo) + Enganche (si fue un abono)
            // Usamos el balance_cuenta calculado en handleSelectSale (clienteBalanceTicket)
            const currentBalance = (clienteBalanceTicket ?? 0);
-           // Para obtener el balance anterior, restamos el efecto de ESTA venta (total) y sumamos el enganche (que fue un abono)
+           // Para obtener el balance anterior, restamos el efecto de ESTA venta (total_final) y sumamos el enganche (que fue un abono)
+           // >>> CORRECCIÓN: Usar selectedSale.total (el total final) para el cálculo del balance anterior <<<
            const previousBalance = currentBalance - (selectedSale.total ?? 0) + (selectedSale.enganche ?? 0);
 
 
@@ -580,6 +587,7 @@ const handleCancelSale = async () => {
 
            // Cargo por Venta Actual
            doc.text('Venta Actual:', margin + 10, yOffset);
+            // >>> CORRECCIÓN: Usar selectedSale.total (el total final) para el cargo <<<
            doc.text(formatCurrency(selectedSale.total ?? 0), doc.internal.pageSize.getWidth() - margin, yOffset, { align: 'right' });
            yOffset += balanceLineHeight;
 
@@ -668,8 +676,9 @@ const handleCancelSale = async () => {
          // Formatear la fecha a dd/mm/aa HH:MM
          const formattedDate = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getFullYear()).slice(-2)} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
-       // Asumiendo que 'enganche' está disponible en el objeto 'selectedSale'
+       // Asumiendo que 'enganche' y 'gastos_envio' están disponibles en el objeto 'selectedSale'
        const enganchePagado = selectedSale.enganche ?? 0;
+       const gastosEnvioVenta = selectedSale.gastos_envio ?? 0; // <<< Obtener gastos_envio
 
 
         const ticketData = {
@@ -698,7 +707,9 @@ const handleCancelSale = async () => {
              discountAmount: selectedSale.valor_descuento, // Usar valor_descuento de la venta seleccionada (descuento general)
              forma_pago: selectedSale.forma_pago, // Usar forma_pago de la venta seleccionada
              enganche: enganchePagado, // Usar el enganche de la venta seleccionada
-             total: selectedSale.total, // Usar total de la venta seleccionada (después de descuento general)
+             gastos_envio: gastosEnvioVenta, // <<< Incluir gastos_envio en los datos del ticket
+             total: selectedSale.total, // Usar total de la venta seleccionada (después de descuento general, que ahora es el total final)
+             total_final: selectedSale.total, // <<< Usar total de la venta seleccionada (que es el total final)
              balance_cuenta: clienteBalanceTicket, // Usar el balance de cuenta obtenido/calculado
          };
 
@@ -941,6 +952,7 @@ const handleCancelSale = async () => {
                                           <td className="p-3 whitespace-nowrap text-sm font-medium text-gray-900">{venta.codigo_venta}</td>
                                           <td className="p-3 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">{venta.fecha ? new Date(venta.fecha).toLocaleString() : 'Fecha desconocida'}</td>
                                           <td className="p-3 whitespace-nowrap text-sm text-gray-500 hidden sm:table-cell">{venta.forma_pago}</td>
+                                          {/* Mostrar el total final de la venta (que incluye gastos de envío y enganche) */}
                                           <td className="p-3 whitespace-nowrap text-sm font-semibold text-gray-900 text-right">{formatCurrency(venta.total ?? 0)}</td>
                                           <td className="p-3 whitespace-nowrap text-center text-sm font-medium">
                                               <button
@@ -979,10 +991,6 @@ const handleCancelSale = async () => {
                               <p><strong>Fecha:</strong> {selectedSale.fecha ? new Date(selectedSale.fecha).toLocaleString() : 'Fecha desconocida'}</p>
                               <p><strong>Vendedor:</strong> {vendedorInfoTicket?.nombre || 'N/A'}</p> {/* Usar vendedorInfoTicket */}
                               <p><strong>Forma de Pago:</strong> {selectedSale.forma_pago}</p>
-                               {/* Mostrar enganche si es Crédito cliente y > 0 */}
-                              {selectedSale.forma_pago === 'Crédito cliente' && (selectedSale.enganche ?? 0) > 0 && (
-                                  <p><strong>Enganche:</strong> {formatCurrency(selectedSale.enganche ?? 0)}</p>
-                              )}
                           </div>
                           <hr className="my-6 border-gray-200" />
                           <h3 className="text-xl font-semibold text-gray-800 mb-4">Productos:</h3>
@@ -1008,18 +1016,38 @@ const handleCancelSale = async () => {
                                   </tbody>
                               </table>
                           </div>
+                          {/* >>> Sección de Totales en el Modal de Detalle de Venta <<< */}
                           <div className="text-right text-gray-800 space-y-1 mb-6">
-                              <p className="font-semibold">Subtotal: {formatCurrency(selectedSale.subtotal ?? 0)}</p> {/* Usar selectedSale.subtotal */}
-                              {((selectedSale.tipo_descuento === 'porcentaje' && (selectedSale.valor_descuento ?? 0) > 0) || (selectedSale.tipo_descuento === 'fijo' && (selectedSale.valor_descuento ?? 0) > 0)) && (
-                                  <p className="font-semibold text-red-600">
-                                      Descuento:{' '}
-                                      {selectedSale.tipo_descuento === 'porcentaje'
-                                          ? `-${selectedSale.valor_descuento}%`
-                                          : `- ${formatCurrency(selectedSale.valor_descuento ?? 0)}`} {/* Usar selectedSale.valor_descuento */}
-                                  </p>
-                              )}
-                              <p className="font-bold text-xl text-green-700 mt-2 pt-2 border-t border-gray-300">Total: {formatCurrency(selectedSale.total ?? 0)}</p> {/* Usar selectedSale.total */}
+                                {/* Mostrar Enganche si es Crédito cliente y > 0 (Antes del subtotal) */}
+                               {selectedSale.forma_pago === 'Crédito cliente' && (selectedSale.enganche ?? 0) > 0 && (
+                                   <p className="font-semibold">Enganche: {formatCurrency(selectedSale.enganche ?? 0)}</p>
+                               )}
+                               {/* Mostrar Gastos de Envío si son > 0 (Antes del subtotal) */}
+                               {(selectedSale.gastos_envio ?? 0) > 0 && (
+                                   <p className="font-semibold">Gastos de Envío: {formatCurrency(selectedSale.gastos_envio ?? 0)}</p>
+                               )}
+                               {/* Mostrar Subtotal original */}
+                               <p className="font-semibold">Subtotal Original: {formatCurrency(selectedSale.originalSubtotal ?? 0)}</p>
+                               {/* Mostrar Descuento si aplica */}
+                               {((selectedSale.tipo_descuento === 'porcentaje' && (selectedSale.valor_descuento ?? 0) > 0) || (selectedSale.tipo_descuento === 'fijo' && (selectedSale.valor_descuento ?? 0) > 0)) && (
+                                   <p className="font-semibold text-red-600">
+                                       Descuento:{' '}
+                                       {selectedSale.tipo_descuento === 'porcentaje'
+                                           ? `-${selectedSale.valor_descuento}%`
+                                           : `- ${formatCurrency(selectedSale.valor_descuento ?? 0)}`}
+                                   </p>
+                               )}
+                               {/* Mostrar Subtotal con descuento si aplica */}
+                               {/* Solo mostrar si hay descuento aplicado, para evitar duplicar el subtotal original */}
+                               {((selectedSale.tipo_descuento === 'porcentaje' && (selectedSale.valor_descuento ?? 0) > 0) || (selectedSale.tipo_descuento === 'fijo' && (selectedSale.valor_descuento ?? 0) > 0)) && (
+                                    <p className="font-semibold">Subtotal (con descuento): {formatCurrency((selectedSale.originalSubtotal ?? 0) - (selectedSale.valor_descuento ?? 0))}</p>
+                               )}
+
+                              {/* Mostrar Total Final */}
+                              <p className="font-bold text-xl text-green-700 mt-2 pt-2 border-t border-gray-300">Total Venta: {formatCurrency(selectedSale.total ?? 0)}</p> {/* selectedSale.total ya es el total final */}
                           </div>
+                           {/* Fin Sección de Totales en el Modal de Detalle de Venta */}
+
                            {/* Sección de Balance de Cuenta (solo si es Crédito cliente) */}
                            {selectedSale.forma_pago === 'Crédito cliente' && (
                                 <div className="text-center text-gray-800 mb-6">
@@ -1071,3 +1099,4 @@ const handleCancelSale = async () => {
     </div>
   );
 }
+
