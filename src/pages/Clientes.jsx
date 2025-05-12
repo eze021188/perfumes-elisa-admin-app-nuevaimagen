@@ -1,5 +1,5 @@
 // src/pages/Clientes.jsx
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react'; // Importar useMemo
 import { supabase } from '../supabase';
 import { useNavigate } from 'react-router-dom';
 import { useClientes } from '../contexts/ClientesContext';
@@ -84,11 +84,65 @@ export default function Clientes() {
     const [vendedorInfoTicket, setVendedorInfoTicket] = useState(null); // Información del vendedor de la venta seleccionada
     const [clienteBalanceTicket, setClienteBalanceTicket] = useState(0); // Balance del cliente de la venta seleccionada
 
+    // --- Estados para el ordenamiento ---
+    const [sortColumn, setSortColumn] = useState('nombre'); // Columna por defecto para ordenar
+    const [sortDirection, setSortDirection] = useState('asc'); // Dirección por defecto (ascendente)
 
-  const filtrados = clientes.filter(c => (c.nombre || '').toLowerCase().includes(busqueda.toLowerCase()));
-  const inicio = (pagina - 1) * porPagina;
-  const clientesPag = filtrados.slice(inicio, inicio + porPagina);
-  const totalPaginas = Math.ceil(filtrados.length / porPagina);
+    // Función para manejar el cambio de ordenamiento
+    const handleSort = (column) => {
+        if (sortColumn === column) {
+            // Si es la misma columna, cambiar la dirección
+            setSortDirection(prevDirection => (prevDirection === 'asc' ? 'desc' : 'asc'));
+        } else {
+            // Si es una nueva columna, establecerla y ordenar ascendente por defecto
+            setSortColumn(column);
+            setSortDirection('asc');
+        }
+        setPagina(1); // Volver a la primera página al cambiar el ordenamiento
+    };
+
+    // Lógica de filtrado y ordenamiento usando useMemo para optimizar
+    const clientesFiltradosYOrdenados = useMemo(() => {
+        let clientesTrabajo = [...clientes]; // Copia para no mutar el estado original
+
+        // 1. Filtrar por búsqueda
+        if (busqueda) {
+            clientesTrabajo = clientesTrabajo.filter(c =>
+                (c.nombre || '').toLowerCase().includes(busqueda.toLowerCase()) ||
+                (c.telefono || '').toLowerCase().includes(busqueda.toLowerCase()) ||
+                (c.correo || '').toLowerCase().includes(busqueda.toLowerCase()) ||
+                (c.direccion || '').toLowerCase().includes(busqueda.toLowerCase())
+            );
+        }
+
+        // 2. Ordenar
+        if (sortColumn) {
+            clientesTrabajo.sort((a, b) => {
+                const aValue = a[sortColumn] || '';
+                const bValue = b[sortColumn] || '';
+
+                // Manejar ordenamiento numérico si la columna es numérica (ej: total_ventas_historicas si la añades)
+                // Por ahora, todas las columnas ordenables son texto, así que la comparación de strings es suficiente.
+                // Si añades columnas numéricas, necesitarías lógica adicional aquí.
+
+                if (aValue < bValue) {
+                    return sortDirection === 'asc' ? -1 : 1;
+                }
+                if (aValue > bValue) {
+                    return sortDirection === 'asc' ? 1 : -1;
+                }
+                return 0; // Son iguales
+            });
+        }
+
+        return clientesTrabajo;
+    }, [clientes, busqueda, sortColumn, sortDirection]); // Dependencias del useMemo
+
+    // Calcular paginación basada en la lista filtrada y ordenada
+    const inicio = (pagina - 1) * porPagina;
+    const clientesPag = clientesFiltradosYOrdenados.slice(inicio, inicio + porPagina);
+    const totalPaginas = Math.ceil(clientesFiltradosYOrdenados.length / porPagina);
+
 
   // Cargar logo al iniciar
   useEffect(() => {
@@ -582,7 +636,7 @@ const handleCancelSale = async () => {
 
            // Balance Anterior
            doc.text('Saldo Anterior:', margin + 10, yOffset);
-           doc.text(formatCurrency(previousBalance), doc.internal.pageSize.getWidth() - margin, yOffset, { align: 'right' });
+           doc.text(formatCurrency(previousBalance), doc.internal.pageSize.pageSize.getWidth() - margin, yOffset, { align: 'right' });
            yOffset += balanceLineHeight;
 
            // Cargo por Venta Actual
@@ -849,10 +903,54 @@ const handleCancelSale = async () => {
                   className="rounded text-blue-600 focus:ring-blue-500"
                 />
               </th>
-              <th className="p-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Nombre</th>
-              <th className="p-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider hidden sm:table-cell">Teléfono</th>
-              <th className="p-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider hidden md:table-cell">Correo</th>
-              <th className="p-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider hidden lg:table-cell">Dirección</th>
+              {/* Encabezado Nombre con ordenamiento */}
+              <th
+                className="p-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-800"
+                onClick={() => handleSort('nombre')}
+              >
+                Nombre
+                {sortColumn === 'nombre' && (
+                  <span className="ml-1">
+                    {sortDirection === 'asc' ? '▲' : '▼'}
+                  </span>
+                )}
+              </th>
+              {/* Encabezado Teléfono con ordenamiento */}
+              <th
+                className="p-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider hidden sm:table-cell cursor-pointer hover:text-gray-800"
+                onClick={() => handleSort('telefono')}
+              >
+                Teléfono
+                 {sortColumn === 'telefono' && (
+                  <span className="ml-1">
+                    {sortDirection === 'asc' ? '▲' : '▼'}
+                  </span>
+                )}
+              </th>
+              {/* Encabezado Correo con ordenamiento */}
+              <th
+                className="p-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider hidden md:table-cell cursor-pointer hover:text-gray-800"
+                onClick={() => handleSort('correo')}
+              >
+                Correo
+                 {sortColumn === 'correo' && (
+                  <span className="ml-1">
+                    {sortDirection === 'asc' ? '▲' : '▼'}
+                  </span>
+                )}
+              </th>
+              {/* Encabezado Dirección con ordenamiento */}
+              <th
+                className="p-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider hidden lg:table-cell cursor-pointer hover:text-gray-800"
+                onClick={() => handleSort('direccion')}
+              >
+                Dirección
+                 {sortColumn === 'direccion' && (
+                  <span className="ml-1">
+                    {sortDirection === 'asc' ? '▲' : '▼'}
+                  </span>
+                )}
+              </th>
               <th className="p-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Acciones</th>
             </tr>
           </thead>
@@ -903,21 +1001,23 @@ const handleCancelSale = async () => {
         </table>
       </div>
 
-      {/* Modal de Edici\u00f3n/Nuevo Cliente */}
+      {/* Modal de Edición/Nuevo Cliente */}
       <NewClientModal
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
         onClientAdded={(newClient) => {
              // Si se añade un nuevo cliente, lo agregamos a la lista local
              if (newClient) {
-                 setClientes(prev => [...prev, newClient]);
+                 // No necesitamos actualizar el estado local aquí si useClientes ya lo hace
+                 // setClientes(prev => [...prev, newClient]);
              }
             setModalOpen(false);
         }}
          onClientUpdated={(updatedClient) => {
              // Si se actualiza un cliente, actualizamos la lista local
              if (updatedClient) {
-                 setClientes(prev => prev.map(c => c.id === updatedClient.id ? updatedClient : c));
+                 // No necesitamos actualizar el estado local aquí si useClientes ya lo hace
+                 // setClientes(prev => prev.map(c => c.id === updatedClient.id ? updatedClient : c));
              }
              setModalOpen(false);
          }}
@@ -1099,4 +1199,3 @@ const handleCancelSale = async () => {
     </div>
   );
 }
-

@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 // Asegúrate de que la ruta a supabase.js sea correcta y que el archivo exporte 'supabase'
-import { supabase } from '../supabase';
+import { supabase } from '../supabase'; // Esta ruta '../supabase' debería ser correcta si supabase.js está en src/
 import toast from 'react-hot-toast';
 // Asegúrate de tener jspdf instalado: npm install jspdf
 import jsPDF from 'jspdf';
@@ -171,9 +171,60 @@ export default function Reportes() {
              }
              break;
 
+         case 'ventas_por_cliente':
+             // Consulta a Supabase para obtener clientes con sus ventas históricas y actuales
+             // Primero, obtener todos los clientes con su total_ventas_historicas
+             const { data: clientesData, error: clientesError } = await supabase
+                 .from('clientes')
+                 .select('id, nombre, total_ventas_historicas'); // Selecciona el nuevo campo
+
+             if (clientesError) {
+                 error = clientesError;
+                 console.error("Error fetching clients for Ventas por Cliente:", clientesError.message);
+             } else {
+                 // Obtener todas las ventas para sumar los totales actuales
+                 const { data: ventasData, error: ventasError } = await supabase
+                     .from('ventas')
+                     .select('cliente_id, total'); // Solo necesitamos el cliente_id y el total
+
+                 if (ventasError) {
+                     error = ventasError; // Propagar el error si falla la consulta de ventas
+                     console.error("Error fetching sales for Ventas por Cliente:", ventasError.message);
+                 } else {
+                      // Crear un mapa para sumar las ventas actuales por cliente_id
+                      const ventasActualesPorCliente = {};
+                      (ventasData || []).forEach(venta => {
+                          const clienteId = venta.cliente_id;
+                          const totalVenta = parseFloat(venta.total) || 0;
+                          if (ventasActualesPorCliente[clienteId]) {
+                              ventasActualesPorCliente[clienteId] += totalVenta;
+                          } else {
+                              ventasActualesPorCliente[clienteId] = totalVenta;
+                          }
+                      });
+
+                      // Combinar datos históricos y actuales, y formatear para el reporte
+                      data = (clientesData || []).map(cliente => {
+                          const totalHistoricas = parseFloat(cliente.total_ventas_historicas) || 0;
+                          const totalActuales = ventasActualesPorCliente[cliente.id] || 0;
+                          const totalGeneralVentas = totalHistoricas + totalActuales;
+
+                          return {
+                              id: cliente.id,
+                              nombre: cliente.nombre,
+                              totalVentas: totalGeneralVentas // Este es el total combinado
+                          };
+                      }).filter(c => c.totalVentas > 0); // Opcional: solo mostrar clientes con ventas > 0
+
+                      // Ordenar por nombre del cliente
+                      data.sort((a, b) => a.nombre.localeCompare(b.nombre));
+                 }
+             }
+             break;
+
+
         // --- Agrega casos para otros reportes aquí ---
         // case 'ventas_por_producto': break;
-        // case 'ventas_por_cliente': break;
         // case 'ventas_por_forma_pago': break;
         // case 'ventas_por_vendedor': break;
         // case 'movimientos_inventario': break;
@@ -237,7 +288,7 @@ export default function Reportes() {
       let specificReportTitle = ''; // Título específico con filtros
       let head = [];
       let body = [];
-      // No necesitamos filename aquí si solo abrimos en nueva pestaña
+      let filename = 'reporte'; // Nombre base del archivo para descarga
 
       // Configurar contenido del PDF según el reporte seleccionado
       switch (selectedReport) {
@@ -252,6 +303,7 @@ export default function Reportes() {
                   venta.forma_pago,
                   formatCurrency(venta.total)
               ]);
+              filename = `ventas_periodo_${formatDateForFilename(startDate)}_to_${formatDateForFilename(endDate)}.pdf`;
               break;
 
           case 'stock_actual':
@@ -262,6 +314,7 @@ export default function Reportes() {
                   producto.nombre,
                   producto.stock ?? 0
               ]);
+              filename = `stock_actual_${formatDateForFilename(new Date())}.pdf`;
               break;
 
           case 'saldos_clientes':
@@ -272,12 +325,30 @@ export default function Reportes() {
                   cliente.nombre,
                   formatCurrency(cliente.saldo)
               ]);
+              filename = `saldos_clientes_${formatDateForFilename(new Date())}.pdf`;
               break;
 
-          // --- Agregar casos para otros reportes ---
-          // case 'ventas_por_producto': ...
-          // case 'movimientos_inventario': ...
-          // etc.
+          case 'ventas_por_cliente':
+               reportCategory = 'Reporte de Ventas';
+               specificReportTitle = 'por Cliente (Incluye Histórico)'; // Actualizado el título
+               head = [['Cliente', 'Total de Ventas']];
+               body = reportData.map(cliente => [
+                   cliente.nombre,
+                   formatCurrency(cliente.totalVentas)
+               ]);
+               filename = `ventas_por_cliente_${formatDateForFilename(new Date())}.pdf`;
+               break;
+
+
+          // --- Agrega casos para otros reportes aquí ---
+          // case 'ventas_por_producto': break;
+          // case 'ventas_por_forma_pago': break;
+          // case 'ventas_por_vendedor': break;
+          // case 'movimientos_inventario': break;
+          // case 'valoracion_inventario': break;
+          // case 'clientes_mas_compras': break;
+          // case 'descuentos_aplicados': break;
+          // case 'gastos_envio': break;
 
           default:
               // Si no se reconoce el reporte, usar un título genérico
@@ -285,12 +356,20 @@ export default function Reportes() {
               specificReportTitle = '';
               // Intentar generar una tabla básica con los datos si existen
               if (reportData.length > 0) {
-                  head = [Object.keys(reportData[0])]; // Usar las claves del primer objeto como encabezados
-                  body = reportData.map(row => Object.values(row).map(value => String(value))); // Convertir todos los valores a string
+                   // Usar las claves del primer objeto como encabezados
+                  head = [Object.keys(reportData[0]).map(key => key.replace(/_/g, ' ').toUpperCase())]; // Formatear encabezados
+                  body = reportData.map(row => Object.values(row).map(value => {
+                       // Intenta formatear valores numéricos como moneda si parecen ser totales
+                       if (typeof value === 'number' || (typeof value === 'string' && !isNaN(parseFloat(value)))) {
+                            return formatCurrency(value);
+                       }
+                       return String(value); // Convertir otros valores a string
+                   }));
               } else {
                    toast('No hay datos o el reporte no es válido para exportar a PDF.', { icon: 'ℹ️' });
                    return;
-              }
+               }
+               filename = `reporte_desconocido_${formatDateForFilename(new Date())}.pdf`;
               break;
       }
 
@@ -421,10 +500,30 @@ export default function Reportes() {
                filename = `saldos_clientes_${formatDateForFilename(new Date())}.csv`;
               break;
 
-          // --- Agregar casos para otros reportes ---
-          // case 'ventas_por_producto': ...
-          // case 'movimientos_inventario': ...
-          // etc.
+          case 'ventas_por_cliente':
+               // Encabezados CSV
+               csvContent += 'Cliente,Total de Ventas (Incluye Histórico)\n'; // Actualizado el encabezado
+               // Datos CSV
+               reportData.forEach(cliente => {
+                   const row = [
+                       `"${cliente.nombre}"`, // Encerrar nombres con comillas
+                       cliente.totalVentas ?? 0 // Valor numérico sin formato de moneda
+                   ];
+                   csvContent += row.join(',') + '\n';
+               });
+               filename = `ventas_por_cliente_${formatDateForFilename(new Date())}.csv`;
+               break;
+
+
+          // --- Agrega casos para otros reportes ---
+          // case 'ventas_por_producto': break;
+          // case 'ventas_por_forma_pago': break;
+          // case 'ventas_por_vendedor': break;
+          // case 'movimientos_inventario': break;
+          // case 'valoracion_inventario': break;
+          // case 'clientes_mas_compras': break;
+          // case 'descuentos_aplicados': break;
+          // case 'gastos_envio': break;
 
           default:
                // Si no se reconoce el reporte, intentar generar un CSV básico
@@ -505,7 +604,6 @@ export default function Reportes() {
                     <option value="ventas_por_periodo">Ventas por Período</option>
                     {/* Agrega más opciones de reportes de ventas */}
                     {/* <option value="ventas_por_producto">Ventas por Producto</option> */}
-                    {/* <option value="ventas_por_cliente">Ventas por Cliente</option> */}
                     {/* <option value="ventas_por_forma_pago">Ventas por Forma de Pago</option> */}
                     {/* <option value="ventas_por_vendedor">Ventas por Vendedor</option> */}
                 </optgroup>
@@ -517,6 +615,7 @@ export default function Reportes() {
                 </optgroup>
                  <optgroup label="Reportes de Clientes">
                     <option value="saldos_clientes">Saldos de Clientes</option>
+                    <option value="ventas_por_cliente">Ventas por Cliente (Incluye Histórico)</option> {/* Nuevo reporte */}
                     {/* Agrega más opciones de reportes de clientes */}
                     {/* <option value="clientes_mas_compras">Clientes con Más Compras</option> */}
                 </optgroup>
@@ -569,10 +668,20 @@ export default function Reportes() {
                   // Puedes añadir un checkbox para "Solo mostrar clientes con saldo > 0"
              )}
 
+            {/* Filtros para Ventas por Cliente (Este reporte no necesita filtros de fecha por ahora) */}
+{selectedReport === 'ventas_por_cliente' && (
+  <div>
+    <p className="text-gray-700">
+      Este reporte muestra el total de ventas por cliente, incluyendo datos históricos.
+    </p>
+    {/* Puedes añadir filtros por cliente específico o rango de fechas si lo necesitas */}
+  </div>
+)}
+
 
             {/* Mensaje si no hay reporte seleccionado o no tiene filtros */}
              {!selectedReport ? (
-                 <p className="text-gray-500">Selecciona un reporte para ver los filtros disponibles.</p>
+                 <p className="text-center text-gray-500">Selecciona un reporte y haz clic en "Generar Reporte".</p>
              ) : (
                  // Puedes añadir un else if para mensajes de reportes sin filtros específicos
                  null
@@ -694,6 +803,36 @@ export default function Reportes() {
                                              <span className={cliente.saldo > 0 ? 'text-red-600 font-semibold' : 'text-green-700 font-semibold'}>
                                                 {formatCurrency(cliente.saldo)}
                                              </span>
+                                         </td>
+                                     </tr>
+                                 ))}
+                             </tbody>
+                         </table>
+                     )}
+                 </div>
+             )}
+
+             {/* Tabla para Reporte de Ventas por Cliente (Nuevo) */}
+             {reportData && selectedReport === 'ventas_por_cliente' && (
+                 <div className="overflow-x-auto">
+                     <h3 className="text-xl font-semibold mb-4">Resultados: Ventas por Cliente (Incluye Histórico)</h3> {/* Actualizado el título */}
+                      {reportData.length === 0 ? (
+                         <p className="text-center text-gray-500 italic mt-4">No hay ventas registradas para clientes.</p>
+                     ) : (
+                         <table className="min-w-full divide-y divide-gray-200">
+                             <thead>
+                                 <tr className="bg-gray-200">
+                                     <th className="p-3 text-left text-xs font-semibold text-gray-600 uppercase">Cliente</th>
+                                     <th className="p-3 text-right text-xs font-semibold text-gray-600 uppercase">Total de Ventas</th>
+                                 </tr>
+                             </thead>
+                             <tbody>
+                                 {reportData.map((cliente) => (
+                                     // Usar cliente.id como key si está disponible, de lo contrario, usar nombre + index
+                                     <tr key={cliente.id || `${cliente.nombre}-${Math.random()}`} className="border-b">
+                                         <td className="p-3 text-sm text-gray-800">{cliente.nombre}</td>
+                                         <td className="p-3 text-sm text-gray-800 text-right">
+                                             {formatCurrency(cliente.totalVentas)}
                                          </td>
                                      </tr>
                                  ))}
