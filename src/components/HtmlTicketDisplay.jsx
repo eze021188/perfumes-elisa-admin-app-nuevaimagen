@@ -72,9 +72,16 @@ export default function HtmlTicketDisplay({ saleData, onClose }) {
                         }
                         .ticket-header {
                              display: flex;
-                             align-items: center; /* Centra verticalmente el logo y el texto */
-                             justify-content: center; /* Centra el bloque completo si es más estrecho que el ticket */
+                             flex-direction: column; /* Apila los elementos verticalmente */
+                             align-items: center; /* Centra horizontalmente los elementos hijos */
                              margin-bottom: 15px; /* Espacio debajo del encabezado reducido */
+                             text-align: center; /* Centra el texto dentro del header */
+                         }
+                         .ticket-header .header-top {
+                             display: flex; /* Permite que logo y título estén en línea */
+                             align-items: center; /* Centra verticalmente logo y título */
+                             justify-content: center; /* Centra el bloque de logo+título */
+                             margin-bottom: 5px; /* Espacio entre la línea superior y la info de contacto */
                          }
                          .ticket-header img {
                              margin-right: 10px; /* Espacio a la derecha del logo reducido */
@@ -83,7 +90,7 @@ export default function HtmlTicketDisplay({ saleData, onClose }) {
                          }
                          .ticket-title-block {
                              text-align: left; /* Alinea el texto del título a la izquierda */
-                             flex-grow: 1; /* Permite que el bloque de título ocupe espacio */
+                             /* flex-grow: 1; Eliminamos flex-grow aquí ya que el header es column */
                          }
                          .ticket-title-block h2 {
                              font-size: 1.1rem; /* Tamaño del título ligeramente reducido */
@@ -97,6 +104,15 @@ export default function HtmlTicketDisplay({ saleData, onClose }) {
                              margin-top: 2px; /* Margen superior reducido */
                              line-height: 1.2;
                          }
+
+                         /* Estilo para el texto del teléfono y ciudad - Ajustado para estar centrado bajo el header-top */
+                        .contact-info {
+                            font-size: 0.75rem; /* Tamaño de fuente pequeño */
+                            color: #6b7280; /* Color gris sutil */
+                            margin-top: 0; /* Eliminar margen superior ya que el padre controla el espacio */
+                            text-align: center; /* Centrado bajo el logo/título */
+                        }
+
 
                          /* Estilos para la información del cliente/vendedor en 2 columnas */
                          .info-columns {
@@ -186,18 +202,23 @@ export default function HtmlTicketDisplay({ saleData, onClose }) {
 
                 {/* Contenido del ticket con clases para el diseño ajustado */}
                 <div className="ticket-content">
-                    {/* Encabezado con Logo a la Izquierda */}
+                    {/* Encabezado con Logo a la Izquierda y Contacto Abajo */}
                     <div className="ticket-header">
-                        {/* Asegúrate de que la ruta del logo sea accesible desde el frontend */}
-                        {/* >>> CORREGIDO: Etiqueta img autocerrada correctamente <<< */}
-                        {/* Usamos la ruta del logo que mencionaste anteriormente */}
-                        <img src="/imagen/PERFUMESELISA.jpg" alt="Logo Perfumes Elisa" className="h-auto w-14" />
-                        <div className="ticket-title-block">
-                            <h2>Ticket</h2>
-                            <p>#{saleData?.codigo_venta || 'N/A'}</p> {/* Usar código de venta dinámico */}
+                        {/* Contenedor para Logo y Título/Código */}
+                        <div className="header-top">
+                            {/* Asegúrate de que la ruta del logo sea accesible desde el frontend */}
+                            {/* >>> Ruta del logo corregida <<< */}
+                            <img src="/images/PERFUMESELISAwhite.jpg" alt="Logo Perfumes Elisa" className="h-auto w-14" />
+                            <div className="ticket-title-block">
+                                <h2>Ticket</h2>
+                                <p>#{saleData?.codigo_venta || 'N/A'}</p> {/* Usar código de venta dinámico */}
+                            </div>
                         </div>
+                        {/* >>> Texto del teléfono y ciudad (fuera del ticket-title-block) <<< */}
+                        <p className="contact-info">81 3080 4010 - Ciudad Apodaca</p>
+                        {/* ----------------------------------------------------------------- */}
                     </div>
-                    {/* Fin Encabezado con Logo a la Izquierda */}
+                    {/* Fin Encabezado */}
 
 
                     <div className="divider"></div>
@@ -218,11 +239,7 @@ export default function HtmlTicketDisplay({ saleData, onClose }) {
                         {saleData?.productosVenta && saleData.productosVenta.length > 0 ? (
                             saleData.productosVenta.map(p => (
                                 <div className="product-item" key={p.id}> {/* Usar ID del producto como key */}
-                                    {/* Lógica para salto de línea en nombre largo si es necesario (más compleja con datos dinámicos) */}
-                                    {/* Por ahora, solo mostramos el nombre */}
                                     <span>{p.nombre}</span> {/* Usar nombre producto dinámico */}
-                                    {/* Formato: Cantidad x Precio Unitario = Total Parcial */}
-                                    {/* CORRECCIÓN: Mostrar Cantidad x Precio Unitario = Total Parcial */}
                                     <span>{p.cantidad} x {formatCurrency(p.precio_unitario)} = {formatCurrency(p.total_parcial)}</span>
                                 </div>
                             ))
