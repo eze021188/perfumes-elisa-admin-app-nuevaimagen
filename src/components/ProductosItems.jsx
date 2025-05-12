@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react'; // Importar useMemo
 import { supabase } from '../supabase';
 import ModalEditarProducto from './ModalEditarProducto';
 import toast from 'react-hot-toast';
@@ -12,12 +12,17 @@ export default function ProductosItems() {
   const [seleccionados, setSeleccionados] = useState(new Set());
   const [mostrarSinStock, setMostrarSinStock] = useState(false); // Nuevo estado para controlar la visibilidad de productos sin stock
 
+  // --- Estados para el ordenamiento ---
+  const [sortColumn, setSortColumn] = useState('nombre'); // Columna por defecto para ordenar (por nombre)
+  const [sortDirection, setSortDirection] = useState('asc'); // Dirección por defecto (ascendente)
+
   useEffect(() => {
     cargarProductos();
   }, []);
 
   const cargarProductos = async () => {
-    const { data, error } = await supabase.from('productos').select('*').order('id', { ascending: true });
+    // Al cargar, no aplicamos ordenamiento aquí, lo haremos en el useMemo
+    const { data, error } = await supabase.from('productos').select('*');
     if (error) {
       console.error('Error al cargar productos:', error.message);
       toast.error('Error al cargar productos.');
@@ -26,11 +31,85 @@ export default function ProductosItems() {
     }
   };
 
+  // --- Función para manejar el cambio de ordenamiento ---
+  const handleSort = (column) => {
+      if (sortColumn === column) {
+          // Si es la misma columna, cambiar la dirección
+          setSortDirection(prevDirection => (prevDirection === 'asc' ? 'desc' : 'asc'));
+      } else {
+          // Si es una nueva columna, establecerla y ordenar ascendente por defecto
+          setSortColumn(column);
+          setSortDirection('asc');
+      }
+      // No hay paginación en este componente, así que no necesitamos resetear la página
+  };
+
+
+  // Lógica de filtrado y ordenamiento usando useMemo para optimizar
+  const productosFiltradosYOrdenados = useMemo(() => {
+      let productosTrabajo = [...productos]; // Copia para no mutar el estado original
+
+      // 1. Filtrar por búsqueda
+      if (busqueda) {
+          productosTrabajo = productosTrabajo.filter(p =>
+              (p.nombre || '').toLowerCase().includes(busqueda.toLowerCase()) ||
+              (p.codigo || '').toLowerCase().includes(busqueda.toLowerCase()) || // Asumiendo que tienes columna 'codigo'
+              (p.categoria || '').toLowerCase().includes(busqueda.toLowerCase()) // Asumiendo que tienes columna 'categoria'
+              // Agrega otros campos buscables aquí si es necesario
+          );
+      }
+
+      // 2. Filtrar por stock (si mostrarSinStock es false)
+      if (!mostrarSinStock) {
+          productosTrabajo = productosTrabajo.filter(p => p.stock && parseFloat(p.stock) > 0);
+      }
+
+      // 3. Ordenar
+      if (sortColumn) {
+          productosTrabajo.sort((a, b) => {
+              const aValue = a[sortColumn];
+              const bValue = b[sortColumn];
+
+              // Manejar valores nulos o indefinidos: los ponemos al final en orden ascendente
+              if (aValue == null && bValue == null) return 0;
+              if (aValue == null) return sortDirection === 'asc' ? 1 : -1;
+              if (bValue == null) return sortDirection === 'asc' ? -1 : 1;
+
+              // Manejar ordenamiento numérico (para 'stock', 'promocion', 'precio_normal', 'costo_final_usd', 'costo_final_mxn')
+              // Convertir a número para comparación numérica, usando 0 como fallback si no es un número válido
+              const aNum = parseFloat(aValue) || 0;
+              const bNum = parseFloat(bValue) || 0;
+
+              if (sortColumn === 'stock' || sortColumn === 'promocion' || sortColumn === 'precio_normal' || sortColumn === 'costo_final_usd' || sortColumn === 'costo_final_mxn') {
+                   if (aNum < bNum) return sortDirection === 'asc' ? -1 : 1;
+                   if (aNum > bNum) return sortDirection === 'asc' ? 1 : -1;
+                   return 0;
+              }
+
+              // Ordenamiento por defecto para texto (para 'nombre', 'codigo', 'categoria', 'imagen_url')
+              const aString = String(aValue).toLowerCase();
+              const bString = String(bValue).toLowerCase();
+
+              if (aString < bString) {
+                  return sortDirection === 'asc' ? -1 : 1;
+              }
+              if (aString > bString) {
+                  return sortDirection === 'asc' ? 1 : -1;
+              }
+              return 0; // Son iguales
+          });
+      }
+
+      return productosTrabajo;
+  }, [productos, busqueda, mostrarSinStock, sortColumn, sortDirection]); // Dependencias del useMemo
+
+
   const toggleSeleccionarTodos = () => {
-    if (seleccionados.size === productosFiltrados.length && productosFiltrados.length > 0) { // Ajustado para usar productosFiltrados
+    // Ahora usamos productosFiltradosYOrdenados para la selección
+    if (seleccionados.size === productosFiltradosYOrdenados.length && productosFiltradosYOrdenados.length > 0) {
       setSeleccionados(new Set());
     } else {
-      setSeleccionados(new Set(productosFiltrados.map(p => p.id))); // Ajustado para usar productosFiltrados
+      setSeleccionados(new Set(productosFiltradosYOrdenados.map(p => p.id)));
     }
   };
 
@@ -51,131 +130,80 @@ export default function ProductosItems() {
         return;
     }
 
-    console.log(`Attempting to delete from registros_inventario for IDs: ${ids.join(', ')}`);
-    const { error: errReg } = await supabase
-      .from('registros_inventario')
-      .delete()
-      .in('producto_id', ids);
-    if (errReg) {
-      console.error('Error al borrar registros_inventario:', errReg.message);
-    } else {
-        console.log(`Deleted from registros_inventario for IDs: ${ids.join(', ')}`);
-    }
+    // >>> Importante: Eliminar en cascada en la BD es más eficiente y seguro si está configurado <<<
+    // Si no tienes cascada configurada, el orden de eliminación es importante:
+    // Primero tablas que referencian a 'productos' (registros_inventario, movimientos_inventario, detalle_venta, compra_items)
+    // Luego la tabla 'productos'
 
-    console.log(`Attempting to delete from movimientos_inventario for IDs: ${ids.join(', ')}`);
-    const { error: errMov } = await supabase
-      .from('movimientos_inventario')
-      .delete()
-      .in('producto_id', ids);
-    if (errMov) {
-      console.error('Error al borrar movimientos_inventario:', errMov.message);
-      toast.error('Error al eliminar movimientos de inventario.');
-      return;
-    } else {
-        console.log(`Deleted from movimientos_inventario for IDs: ${ids.join(', ')}`);
-    }
+    console.log(`Attempting to delete related records for product IDs: ${ids.join(', ')}`);
 
-     console.log(`Attempting to delete from detalle_venta for IDs: ${ids.join(', ')}`);
-     const { error: errDetalleVenta } = await supabase
-       .from('detalle_venta')
-       .delete()
-       .in('producto_id', ids);
-     if (errDetalleVenta) {
-       console.error('Error al borrar detalle_venta:', errDetalleVenta.message);
-     } else {
-        console.log(`Deleted from detalle_venta for IDs: ${ids.join(', ')}`);
-     }
+    // Eliminar registros_inventario
+    const { error: errReg } = await supabase.from('registros_inventario').delete().in('producto_id', ids);
+    if (errReg) console.error('Error al borrar registros_inventario:', errReg.message);
 
-     console.log(`Attempting to delete from compra_items for IDs: ${ids.join(', ')}`);
-     const { error: errCompraItems } = await supabase
-       .from('compra_items')
-       .delete()
-       .in('producto_id', ids);
-     if (errCompraItems) {
-       console.error('Error al borrar compra_items:', errCompraItems.message);
-     } else {
-        console.log(`Deleted from compra_items for IDs: ${ids.join(', ')}`);
-     }
+    // Eliminar movimientos_inventario
+    const { error: errMov } = await supabase.from('movimientos_inventario').delete().in('producto_id', ids);
+    if (errMov) console.error('Error al borrar movimientos_inventario:', errMov.message);
 
-    console.log(`Attempting to delete from productos for IDs: ${ids.join(', ')}`);
+     // Eliminar detalle_venta
+     const { error: errDetalleVenta } = await supabase.from('detalle_venta').delete().in('producto_id', ids);
+     if (errDetalleVenta) console.error('Error al borrar detalle_venta:', errDetalleVenta.message);
+
+     // Eliminar compra_items
+     const { error: errCompraItems } = await supabase.from('compra_items').delete().in('producto_id', ids);
+     if (errCompraItems) console.error('Error al borrar compra_items:', errCompraItems.message);
+
+
+    // Finalmente, eliminar los productos
+    console.log(`Attempting to delete products for IDs: ${ids.join(', ')}`);
     const { error: errProd } = await supabase
       .from('productos')
       .delete()
       .in('id', ids);
+
     if (errProd) {
       console.error('Error al borrar productos:', errProd.message);
       toast.error('Error al eliminar productos.');
     } else {
-        console.log(`Deleted from productos for IDs: ${ids.join(', ')}`);
+        console.log(`Deleted products for IDs: ${ids.join(', ')}`);
         toast.success(`${ids.length} producto(s) eliminado(s) exitosamente.`);
     }
 
     setSeleccionados(new Set());
-    await cargarProductos();
+    await cargarProductos(); // Recargar la lista después de eliminar
   };
 
-  const handleEditar = (id, campo, valor) => {
+  // Esta función handleEditar ahora solo actualiza el estado local de la lista
+  // para reflejar los cambios hechos en los inputs de la lista.
+  const handleEditarLocal = (id, campo, valor) => {
     setProductos(prev =>
       prev.map(p => (p.id === id ? { ...p, [campo]: valor } : p))
     );
   };
 
-  // eslint-disable-next-line no-unused-vars
-  const actualizarCampo = async (id, cambios) => { // Declarada pero no usada, considera removerla si no es necesaria
-    const { error } = await supabase
-      .from('productos')
-      .update(cambios)
-      .eq('id', id);
-    if (error) {
-      console.error(`Error actualizando producto ${id}:`, error.message);
-      toast.error(`Error al actualizar producto ${id}.`);
-    }
-  };
-
-  const abrirModal = producto => {
-    setProductoEditando(producto);
-    setModalActivo(true);
-  };
-
-  const cerrarModal = () => {
-    setModalActivo(false);
-    setProductoEditando(null);
-    cargarProductos();
-  };
-
-  // Lógica de filtrado actualizada
-  const productosFiltrados = productos
-    .filter(p =>
-      p.nombre?.toLowerCase().includes(busqueda.toLowerCase())
-    )
-    .filter(p => {
-      if (mostrarSinStock) {
-        return true; // Mostrar todos si mostrarSinStock es true
-      }
-      return p.stock && parseFloat(p.stock) > 0; // Por defecto, solo mostrar con stock > 0
-    });
-
-  const costoStock = productos.reduce(
-    (sum, p) => sum + (parseFloat(p.costo_final_mxn || 0) * parseFloat(p.stock || 0)),
-    0
-  );
-
-  const totalStock = productos.reduce(
-    (sum, p) => sum + (parseFloat(p.promocion || 0) * parseFloat(p.stock || 0)),
-    0
-  );
-
-  const ganancias = totalStock - costoStock;
-
-  const handleActualizar = async () => {
+  // La función para actualizar en la BD se llama handleActualizar
+  const handleActualizarPrecios = async () => { // Renombrada para mayor claridad
     setActualizando(true);
-    const updates = productos.map(p => ({
+    // Preparamos solo los campos que pueden ser editados directamente en la lista
+    const updates = productosFiltradosYOrdenados.map(p => ({ // Usar la lista filtrada/ordenada
       id: p.id,
-      promocion: Number(p.promocion) || 0,
-      precio_normal: Number(p.precio_normal) || 0
+      // Asegurarse de que los valores son numéricos o null/undefined si están vacíos
+      promocion: parseFloat(p.promocion) || null, // Usar null si el input está vacío o no es número
+      precio_normal: parseFloat(p.precio_normal) || null // Usar null si el input está vacío o no es número
     }));
 
-    const updatePromises = updates.map(item =>
+    // Filtramos solo los productos que realmente fueron seleccionados para actualizar
+     const updatesToApply = updates.filter(item => seleccionados.has(item.id));
+
+
+     if (updatesToApply.length === 0) {
+         toast.info('No hay productos seleccionados para actualizar precios.');
+         setActualizando(false);
+         return;
+     }
+
+
+    const updatePromises = updatesToApply.map(item =>
         supabase.from('productos')
             .update({ promocion: item.promocion, precio_normal: item.precio_normal })
             .eq('id', item.id)
@@ -185,22 +213,45 @@ export default function ProductosItems() {
     let hasError = false;
     results.forEach((result, index) => {
         if (result.error) {
-            console.error(`Error actualizando producto ${updates[index].id}:`, result.error.message);
-            toast.error(`Error al actualizar producto ${updates[index].id}.`);
+            console.error(`Error actualizando producto ${updatesToApply[index].id}:`, result.error.message);
+            toast.error(`Error al actualizar producto ${updatesToApply[index].id}.`);
             hasError = true;
         }
     });
 
     if (!hasError) {
-         toast.success('Precios actualizados exitosamente.');
+         toast.success(`${updatesToApply.length} precios actualizados exitosamente.`);
     }
 
-    await cargarProductos();
+    // No necesitamos recargar todos los productos si la actualización fue exitosa,
+    // ya que handleEditarLocal ya actualizó el estado local 'productos'.
+    // Pero si hubo errores, una recarga completa podría ser útil para sincronizar.
+    // await cargarProductos(); // Opcional: descomentar si quieres recargar siempre
+
     setActualizando(false);
+    setSeleccionados(new Set()); // Limpiar selección después de actualizar
   };
 
+
+  const abrirModal = producto => {
+    setProductoEditando(producto);
+    setModalActivo(true);
+  };
+
+  const cerrarModal = () => {
+    setModalActivo(false);
+    setProductoEditando(null);
+    cargarProductos(); // Recargar productos después de cerrar el modal de edición
+  };
+
+
   const formatCurrencyMXN = (number) => {
-    return Number(number).toLocaleString('es-MX', {
+    // Asegurarse de que el número sea válido antes de formatear
+    const num = parseFloat(number);
+    if (isNaN(num)) {
+        return '$0.00'; // O algún otro indicador para valores no numéricos
+    }
+    return num.toLocaleString('es-MX', {
       style: 'currency',
       currency: 'MXN',
       minimumFractionDigits: 2,
@@ -208,13 +259,29 @@ export default function ProductosItems() {
     });
   };
 
+    // Calcular totales de stock y ganancias usando la lista COMPLETA de productos (no la filtrada/ordenada)
+    // Esto asegura que los totales reflejen todo el inventario, no solo lo que se muestra en la vista actual.
+  const costoTotalStock = productos.reduce(
+    (sum, p) => sum + (parseFloat(p.costo_final_mxn || 0) * parseFloat(p.stock || 0)),
+    0
+  );
+
+  const totalValorStock = productos.reduce(
+    (sum, p) => sum + (parseFloat(p.promocion || p.precio_normal || 0) * parseFloat(p.stock || 0)), // Usar precio promocional si existe, sino el normal
+    0
+  );
+
+  const gananciasProyectadas = totalValorStock - costoTotalStock;
+
+
   return (
     <div>
       {/* Indicadores y acciones */}
+      {/* Usar los totales calculados sobre la lista completa */}
       <div className="mb-4 p-4 border rounded-lg shadow-sm bg-gray-50 flex flex-wrap gap-x-6 gap-y-2 justify-around items-center text-sm">
-        <div>Costo de stock: <span className="font-semibold">{formatCurrencyMXN(costoStock)}</span></div>
-        <div>Total en stock: <span className="font-semibold">{formatCurrencyMXN(totalStock)}</span></div>
-        <div>Ganancias proyectadas: <span className="font-semibold">{formatCurrencyMXN(ganancias)}</span></div>
+        <div>Costo de stock: <span className="font-semibold">{formatCurrencyMXN(costoTotalStock)}</span></div>
+        <div>Total en stock (Venta): <span className="font-semibold">{formatCurrencyMXN(totalValorStock)}</span></div> {/* Etiqueta más clara */}
+        <div>Ganancias proyectadas: <span className="font-semibold">{formatCurrencyMXN(gananciasProyectadas)}</span></div>
       </div>
 
       <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
@@ -227,11 +294,11 @@ export default function ProductosItems() {
                 Eliminar ({seleccionados.size})
             </button>
             <button
-                onClick={handleActualizar}
-                disabled={actualizando}
+                onClick={handleActualizarPrecios} // Llamar a la función renombrada
+                disabled={actualizando || seleccionados.size === 0} // Deshabilitar si no hay seleccionados
                 className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 text-xs md:text-sm"
             >
-                {actualizando ? 'Actualizando...' : 'Actualizar Precios'}
+                {actualizando ? 'Actualizando...' : 'Actualizar Seleccionados'} {/* Texto más claro */}
             </button>
         </div>
       </div>
@@ -242,19 +309,21 @@ export default function ProductosItems() {
         <label className="inline-flex items-center">
           <input
             type="checkbox"
-            checked={productosFiltrados.length > 0 && seleccionados.size === productosFiltrados.length}
+            // Usar productosFiltradosYOrdenados para el total en la etiqueta
+            checked={productosFiltradosYOrdenados.length > 0 && seleccionados.size === productosFiltradosYOrdenados.length}
             onChange={toggleSeleccionarTodos}
-            disabled={productosFiltrados.length === 0} // Deshabilitar si no hay productos filtrados
+            disabled={productosFiltradosYOrdenados.length === 0} // Deshabilitar si no hay productos filtrados/ordenados
             className="form-checkbox"
           />
-          <span className="ml-2">Seleccionar todos ({seleccionados.size}/{productosFiltrados.length})</span>
+          {/* Usar productosFiltradosYOrdenados para el total en la etiqueta */}
+          <span className="ml-2 text-sm text-gray-700">Seleccionar todos ({seleccionados.size}/{productosFiltradosYOrdenados.length})</span>
         </label>
         <input
           type="text"
           placeholder="Buscar producto..."
           value={busqueda}
           onChange={e => setBusqueda(e.target.value)}
-          className="border border-gray-300 px-3 py-2 rounded w-full md:w-1/3"
+          className="border border-gray-300 px-3 py-2 rounded w-full md:w-1/3 text-sm"
         />
         <button
           onClick={() => setMostrarSinStock(!mostrarSinStock)}
@@ -264,9 +333,55 @@ export default function ProductosItems() {
         </button>
       </div>
 
-      {/* Lista de productos */}
+      {/* Encabezados de la tabla con ordenamiento */}
+      {/* Usamos un div con grid para simular los encabezados de columna clicables */}
+       <div className="grid grid-cols-[auto_60px_1fr_auto_auto_auto] gap-2 items-center border rounded-lg p-2 shadow-sm bg-gray-200 text-xs font-semibold text-gray-600 uppercase tracking-wider mb-2">
+           <div className="p-1"></div> {/* Columna del checkbox */}
+           <div className="p-1">Imagen</div> {/* Columna de la imagen */}
+           {/* Encabezado Nombre con ordenamiento */}
+           <div
+               className="p-1 cursor-pointer hover:text-gray-800"
+               onClick={() => handleSort('nombre')}
+           >
+               Nombre
+               {sortColumn === 'nombre' && (
+                 <span className="ml-1">
+                   {sortDirection === 'asc' ? '▲' : '▼'}
+                 </span>
+               )}
+           </div>
+           {/* Encabezado Promoción con ordenamiento */}
+           <div
+               className="p-1 text-right cursor-pointer hover:text-gray-800"
+               onClick={() => handleSort('promocion')}
+           >
+               Promoción
+               {sortColumn === 'promocion' && (
+                 <span className="ml-1">
+                   {sortDirection === 'asc' ? '▲' : '▼'}
+                 </span>
+               )}
+           </div>
+            {/* Encabezado Precio Normal con ordenamiento */}
+           <div
+               className="p-1 text-right cursor-pointer hover:text-gray-800"
+               onClick={() => handleSort('precio_normal')}
+           >
+               P. Normal
+               {sortColumn === 'precio_normal' && (
+                 <span className="ml-1">
+                   {sortDirection === 'asc' ? '▲' : '▼'}
+                 </span>
+               )}
+           </div>
+            <div className="p-1 text-center">Acciones</div> {/* Columna de acciones */}
+       </div>
+
+
+      {/* Lista de productos (cuerpo de la tabla) */}
       <div className="space-y-2">
-        {productosFiltrados.map(producto => (
+        {/* Usar productosFiltradosYOrdenados para renderizar la lista */}
+        {productosFiltradosYOrdenados.map(producto => (
           <div
             key={producto.id}
             className={`grid grid-cols-[auto_60px_1fr_auto_auto_auto] gap-2 items-center border rounded-lg p-2 shadow-sm hover:shadow transition text-xs ${parseFloat(producto.stock || 0) <= 0 && !mostrarSinStock ? 'opacity-50' : ''}`} // Atenuar si no hay stock y no se están mostrando todos
@@ -295,8 +410,9 @@ export default function ProductosItems() {
               <label className="text-gray-600 mb-1 text-[10px]">Promoción</label>
               <input
                 type="number"
-                value={producto.promocion ?? ''}
-                onChange={e => handleEditar(producto.id, 'promocion', e.target.value)}
+                // Usar .toString() para evitar advertencias de React con valores null/undefined en inputs controlados
+                value={(producto.promocion ?? '').toString()}
+                onChange={e => handleEditarLocal(producto.id, 'promocion', e.target.value)} // Llamar a handleEditarLocal
                 className="w-20 border px-2 py-1 rounded text-right text-xs"
                 placeholder="0.00"
               />
@@ -305,8 +421,9 @@ export default function ProductosItems() {
               <label className="text-gray-600 mb-1 text-[10px]">P. Normal</label>
               <input
                 type="number"
-                value={producto.precio_normal ?? ''}
-                onChange={e => handleEditar(producto.id, 'precio_normal', e.target.value)}
+                 // Usar .toString() para evitar advertencias de React con valores null/undefined en inputs controlados
+                value={(producto.precio_normal ?? '').toString()}
+                onChange={e => handleEditarLocal(producto.id, 'precio_normal', e.target.value)} // Llamar a handleEditarLocal
                 className="w-20 border px-2 py-1 rounded text-right text-xs"
                 placeholder="0.00"
               />
@@ -321,9 +438,17 @@ export default function ProductosItems() {
             </div>
           </div>
         ))}
-        {productosFiltrados.length === 0 && (
+        {/* Mensaje cuando no hay productos filtrados/ordenados */}
+        {productosFiltradosYOrdenados.length === 0 && (
           <div className="text-center text-gray-500 py-4">
-            {busqueda && productos.filter(p => p.stock && parseFloat(p.stock) > 0).length > 0 && !mostrarSinStock ? 'No se encontraron productos con stock para tu búsqueda. Prueba "Mostrar todos los productos".' : 'No se encontraron productos.'}
+            {busqueda && productos.length > 0 ?
+                 'No se encontraron productos que coincidan con tu búsqueda.'
+                 : mostrarSinStock && productos.length > 0 ?
+                 'No se encontraron productos (mostrando todos, incluyendo sin stock).'
+                 : !mostrarSinStock && productos.length > 0 ?
+                 'No se encontraron productos con stock (prueba "Mostrar todos los productos").'
+                 : 'No hay productos disponibles.'
+            }
           </div>
         )}
       </div>
@@ -332,7 +457,7 @@ export default function ProductosItems() {
         <ModalEditarProducto
           producto={productoEditando}
           onClose={cerrarModal}
-          onGuardado={cerrarModal}
+          onGuardado={cerrarModal} // Al guardar en el modal, cerramos y recargamos la lista
         />
       )}
     </div>

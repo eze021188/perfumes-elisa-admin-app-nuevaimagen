@@ -1,5 +1,5 @@
 // src/pages/ProductosStock.jsx
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react'; // Importar useMemo
 import { supabase } from '../supabase';
 import toast from 'react-hot-toast'; // Asegúrate de tener react-hot-toast instalado
 
@@ -11,14 +11,18 @@ export default function ProductosStock() {
   const [productoActual, setProductoActual] = useState(null);
   const [loading, setLoading] = useState(true); // Estado de carga añadido
 
+  // --- Estados para el ordenamiento ---
+  const [sortColumn, setSortColumn] = useState('nombre'); // Columna por defecto para ordenar
+  const [sortDirection, setSortDirection] = useState('asc'); // Dirección por defecto (ascendente)
+
   useEffect(() => {
     cargarProductos();
   }, []);
 
   const cargarProductos = async () => {
     setLoading(true); // Establecer loading a true antes de cargar
-    // Se añadió ordenamiento por nombre
-    const { data, error } = await supabase.from('productos').select('*').order('nombre', { ascending: true });
+    // Se añadió ordenamiento por nombre - Eliminamos el ordenamiento aquí para hacerlo en useMemo
+    const { data, error } = await supabase.from('productos').select('*');
     if (error) {
       console.error('Error al cargar productos:', error.message);
       toast.error('Error al cargar productos.'); // Mostrar un mensaje toast
@@ -28,6 +32,75 @@ export default function ProductosStock() {
     }
     setLoading(false); // Establecer loading a false después de cargar
   };
+
+  // --- Función para manejar el cambio de ordenamiento ---
+  const handleSort = (column) => {
+      if (sortColumn === column) {
+          // Si es la misma columna, cambiar la dirección
+          setSortDirection(prevDirection => (prevDirection === 'asc' ? 'desc' : 'asc'));
+      } else {
+          // Si es una nueva columna, establecerla y ordenar ascendente por defecto
+          setSortColumn(column);
+          setSortDirection('asc');
+      }
+      // No hay paginación en este componente, así que no necesitamos resetear la página
+  };
+
+
+  // Lógica de filtrado y ordenamiento usando useMemo para optimizar
+  const productosFiltradosYOrdenados = useMemo(() => {
+      let productosTrabajo = [...productos]; // Copia para no mutar el estado original
+
+      // 1. Filtrar por búsqueda
+      if (busqueda) {
+          productosTrabajo = productosTrabajo.filter(p =>
+              (p.nombre || '').toLowerCase().includes(busqueda.toLowerCase()) ||
+              (p.codigo || '').toLowerCase().includes(busqueda.toLowerCase()) || // Asumiendo que tienes columna 'codigo'
+              (p.categoria || '').toLowerCase().includes(busqueda.toLowerCase()) // Asumiendo que tienes columna 'categoria'
+              // Agrega otros campos buscables aquí si es necesario
+          );
+      }
+
+      // 2. Ordenar
+      if (sortColumn) {
+          productosTrabajo.sort((a, b) => {
+              const aValue = a[sortColumn];
+              const bValue = b[sortColumn];
+
+              // Manejar valores nulos o indefinidos: los ponemos al final en orden ascendente
+              if (aValue == null && bValue == null) return 0;
+              if (aValue == null) return sortDirection === 'asc' ? 1 : -1;
+              if (bValue == null) return sortDirection === 'asc' ? -1 : 1;
+
+
+              // Manejar ordenamiento numérico (para 'stock', 'promocion', 'precio_normal', 'costo_final_usd', 'costo_final_mxn')
+              // Convertir a número para comparación numérica, usando 0 como fallback si no es un número válido
+              const aNum = parseFloat(aValue) || 0;
+              const bNum = parseFloat(bValue) || 0;
+
+              if (sortColumn === 'stock' || sortColumn === 'promocion' || sortColumn === 'precio_normal' || sortColumn === 'costo_final_usd' || sortColumn === 'costo_final_mxn') {
+                   if (aNum < bNum) return sortDirection === 'asc' ? -1 : 1;
+                   if (aNum > bNum) return sortDirection === 'asc' ? 1 : -1;
+                   return 0;
+              }
+
+              // Ordenamiento por defecto para texto (para 'nombre', 'codigo', 'categoria', 'imagen_url')
+              const aString = String(aValue).toLowerCase();
+              const bString = String(bValue).toLowerCase();
+
+              if (aString < bString) {
+                  return sortDirection === 'asc' ? -1 : 1;
+              }
+              if (aString > bString) {
+                  return sortDirection === 'asc' ? 1 : -1;
+              }
+              return 0; // Son iguales
+          });
+      }
+
+      return productosTrabajo;
+  }, [productos, busqueda, sortColumn, sortDirection]); // Dependencias del useMemo
+
 
   const verMovimientos = async (producto) => {
     setProductoActual(producto);
@@ -50,7 +123,7 @@ export default function ProductosStock() {
     const formateados = (data || []).map((m) => {
       const cantidadMostrada = Math.abs(m.cantidad || 0);
       let descripcion = 'Unknown movement';
-    
+
       if (m.tipo === 'SALIDA') {
         descripcion = `Sales Out: -${cantidadMostrada}`;
       } else if (m.tipo === 'ENTRADA') {
@@ -62,9 +135,9 @@ export default function ProductosStock() {
       } else if (m.tipo === 'DEVOLUCIÓN VENTA') {
         descripcion = `Return In: ${cantidadMostrada}`;
       }
-    
+
       const movimientoFecha = m.fecha ? new Date(m.fecha) : null;
-    
+
       return {
         ...m,
         fecha: movimientoFecha instanceof Date && !isNaN(movimientoFecha.getTime()) ? movimientoFecha : 'Invalid Date',
@@ -72,15 +145,12 @@ export default function ProductosStock() {
         referencia: m.referencia || '-',
       };
     });
-    
+
 
     setMovimientos(formateados);
     setModalActivo(true);
   };
 
-  const productosFiltrados = productos.filter((p) =>
-    p.nombre?.toLowerCase().includes(busqueda.toLowerCase())
-  );
 
   return (
     <div className="container mx-auto p-4"> {/* Contenedor añadido y padding */}
@@ -96,12 +166,45 @@ export default function ProductosStock() {
         />
       </div>
 
+      {/* Encabezados de la lista con ordenamiento */}
+      {/* Usamos un div con grid para simular los encabezados de columna clicables */}
+       <div className="grid grid-cols-[60px_1fr_minmax(80px,100px)_minmax(80px,100px)] gap-4 items-center border rounded-lg p-3 shadow-sm bg-gray-200 text-sm font-semibold text-gray-600 uppercase tracking-wider mb-2">
+           <div className="p-1">Imagen</div> {/* Columna de la imagen */}
+           {/* Encabezado Nombre con ordenamiento */}
+           <div
+               className="p-1 cursor-pointer hover:text-gray-800"
+               onClick={() => handleSort('nombre')}
+           >
+               Nombre
+               {sortColumn === 'nombre' && (
+                 <span className="ml-1">
+                   {sortDirection === 'asc' ? '▲' : '▼'}
+                 </span>
+               )}
+           </div>
+            {/* Encabezado Stock con ordenamiento */}
+           <div
+               className="p-1 text-right cursor-pointer hover:text-gray-800"
+               onClick={() => handleSort('stock')}
+           >
+               Stock
+               {sortColumn === 'stock' && (
+                 <span className="ml-1">
+                   {sortDirection === 'asc' ? '▲' : '▼'}
+                 </span>
+               )}
+           </div>
+            <div className="p-1 text-center">Movimientos</div> {/* Columna de movimientos */}
+       </div>
+
+
       {/* Lista de productos con stock */}
       {loading ? (
         <div className="text-center text-gray-500">Cargando productos...</div>
       ) : (
         <div className="space-y-2">
-          {productosFiltrados.map((producto) => (
+          {/* Usar productosFiltradosYOrdenados para renderizar la lista */}
+          {productosFiltradosYOrdenados.map((producto) => (
             <div
               key={producto.id} // Asegurarse de que cada elemento tenga una clave única
               // Columnas de la cuadrícula ajustadas, padding, sombra, cursor, tamaño de texto
@@ -141,7 +244,7 @@ export default function ProductosStock() {
             </div>
           ))}
           {/* Mensaje si no hay productos filtrados */}
-          {!loading && productosFiltrados.length === 0 && (
+          {!loading && productosFiltradosYOrdenados.length === 0 && (
               <div className="text-center text-gray-500 mt-4">
                   No se encontraron productos.
               </div>
