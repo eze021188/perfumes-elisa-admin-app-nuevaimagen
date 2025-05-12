@@ -71,6 +71,8 @@ export default function Checkout() {
     const [clienteBalance, setClienteBalance] = useState(0);
     // Estado para el enganche ingresado en el modal de checkout
     const [enganche, setEnganche] = useState(0);
+    // >>> Estado para los gastos de envío <<<
+    const [gastosEnvio, setGastosEnvio] = useState(0);
 
 
   const [showQuickSale, setShowQuickSale] = useState(false);
@@ -202,8 +204,8 @@ export default function Checkout() {
   }, [productos, filtro, busqueda]);
 
 
-   // Cálculos de totales y descuento
-  const { totalItems, originalSubtotal, subtotal, discountAmount } = useMemo(() => {
+   // Cálculos de totales, descuento y AHORA GASTOS DE ENVÍO
+  const { totalItems, originalSubtotal, subtotal, discountAmount, totalFinal } = useMemo(() => {
       // Calcular el subtotal original basado en la cantidad y precio de promoción
       const calculatedOriginalSubtotal = productosVenta.reduce((sum, p) => {
           // Asegurarse de que p.cantidad y p.promocion son números válidos
@@ -231,13 +233,19 @@ export default function Checkout() {
       }
       // Si discountType es 'Sin descuento', discountAmount es 0 y subtotal es originalSubtotal
 
+      // >>> Calcular el total final incluyendo el subtotal (después de descuento) y los gastos de envío <<<
+      const calculatedGastosEnvio = parseFloat(gastosEnvio) || 0;
+      const calculatedTotalFinal = calculatedSubtotal + calculatedGastosEnvio;
+
+
       return {
           totalItems: calculatedTotalItems,
           originalSubtotal: calculatedOriginalSubtotal,
-          subtotal: calculatedSubtotal,
-          discountAmount: calculatedDiscountAmount
+          subtotal: calculatedSubtotal, // Subtotal después del descuento
+          discountAmount: calculatedDiscountAmount,
+          totalFinal: calculatedTotalFinal // <<< Nuevo total final
       };
-  }, [productosVenta, discountType, discountValue]);
+  }, [productosVenta, discountType, discountValue, gastosEnvio]); // <<< Añadir gastosEnvio como dependencia
 
 
   // Función para agregar producto al carrito
@@ -328,8 +336,9 @@ export default function Checkout() {
       }
       return;
     }
-    // Resetear enganche al abrir el modal para una nueva venta
+    // Resetear enganche y gastos de envío al abrir el modal para una nueva venta
     setEnganche(0);
+    setGastosEnvio(0); // <<< Resetear gastos de envío
     setShowSaleModal(true);
   };
 
@@ -365,6 +374,12 @@ export default function Checkout() {
          setProcessing(false);
          return;
     }
+     // Validar gastos de envío (no pueden ser negativos)
+     if (gastosEnvio < 0) {
+         toast.error('Los gastos de envío no pueden ser negativos.');
+         setProcessing(false);
+         return;
+     }
 
 
     try {
@@ -401,8 +416,8 @@ export default function Checkout() {
 
       // >>> Calcular el nuevo balance de cuenta del cliente <<<
       // El balance actual se carga en el estado clienteBalance
-      // El nuevo balance es el balance actual + el total de la venta - el enganche
-      const nuevoClienteBalance = (parseFloat(clienteBalance) || 0) + subtotal - (parseFloat(enganche) || 0);
+      // El nuevo balance es el balance actual + el total FINAL de la venta - el enganche
+      const nuevoClienteBalance = (parseFloat(clienteBalance) || 0) + totalFinal - (parseFloat(enganche) || 0);
 
 
       // Insertar cabecera de venta
@@ -412,12 +427,15 @@ export default function Checkout() {
           codigo_venta: codigo,
           cliente_id: clienteSeleccionado.id,
            vendedor_id: currentUser.id,
-          subtotal: originalSubtotal,
+          subtotal: originalSubtotal, // Subtotal antes del descuento
           forma_pago: paymentType,
           tipo_descuento: discountType,
-          valor_descuento: discountAmount,
-          total: subtotal,
-           enganche: parseFloat(enganche) || 0 // <<< Guardar el enganche ingresado
+          valor_descuento: discountAmount, // Monto del descuento
+          // >>> CORRECCIÓN: Usar totalFinal para la columna 'total' <<<
+          total: totalFinal, // Guardar el total final (subtotal - descuento + gastos_envio) en la columna 'total'
+           enganche: parseFloat(enganche) || 0, // Guardar el enganche
+           gastos_envio: parseFloat(gastosEnvio) || 0, // Guardar los gastos de envío
+           // Eliminamos la referencia a 'total_final' aquí
         }])
         .select('id')
         .single();
@@ -439,7 +457,7 @@ export default function Checkout() {
         const movimientos = [{
                 cliente_id: clienteSeleccionado.id,
                 tipo_movimiento: 'CARGO_VENTA',
-                monto: subtotal,
+                monto: totalFinal, // <<< El cargo a la cuenta es el TOTAL FINAL
                 referencia_venta_id: ventaId,
                 descripcion: `Venta ${codigo}`,
             }];
@@ -554,7 +572,9 @@ export default function Checkout() {
            discountAmount: discountAmount,
            forma_pago: paymentType,
            enganche: parseFloat(enganche) || 0, // Usar el estado enganche
-           total: subtotal, // Total final de la venta
+           gastos_envio: parseFloat(gastosEnvio) || 0, // <<< Incluir gastos de envío en los datos del ticket
+           total: subtotal, // Total antes de gastos de envío (Subtotal - Descuento) - Mantener para claridad si se necesita
+           total_final: totalFinal, // <<< Incluir total final en los datos del ticket
            balance_cuenta: nuevoClienteBalance, // El balance calculado después de la venta y enganche
        };
 
@@ -569,6 +589,7 @@ export default function Checkout() {
       setDiscountType('Sin descuento');
       setDiscountValue(0);
        setEnganche(0); // Resetear enganche después de la venta
+       setGastosEnvio(0); // <<< Resetear gastos de envío después de la venta
        setClienteBalance(nuevoClienteBalance); // Actualizar el balance del cliente en el estado
 
 
@@ -606,7 +627,7 @@ export default function Checkout() {
 
         {/* Aquí tu título */}
         <h1 className="text-3xl font-bold text-gray-800 text-center w-full md:w-auto">
-          Gestión de Ventas
+          Gesti\u00f3n de Ventas
         </h1>
 
         {/* Spacer para md+ */}
@@ -688,7 +709,7 @@ export default function Checkout() {
              )}
         </div>
          <div className="flex-1 text-right">
-             <span className="font-bold text-xl">{formatCurrency(subtotal)}</span>
+             <span className="font-bold text-xl">{formatCurrency(totalFinal)}</span> {/* Usar totalFinal en el footer */}
          </div>
          {processing && (
              <div className="ml-4 text-sm font-semibold">Procesando\u2026</div>
@@ -710,7 +731,7 @@ export default function Checkout() {
             </button>
             <button
               onClick={handleFinalize} // Llama a handleFinalize para procesar y mostrar ticket HTML
-              disabled={!paymentType || processing}
+              disabled={!paymentType || processing || totalFinal <= 0} // Deshabilitar si totalFinal es 0 o menos
               className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition duration-200 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
             >
               {processing ? 'Confirmando…' : 'Confirmar'}
@@ -718,7 +739,7 @@ export default function Checkout() {
           </>
         }
       >
-        {/* Contenido del Modal de Checkout (detalle de venta, pago, descuento) */}
+        {/* Contenido del Modal de Checkout (detalle de venta, pago, descuento, gastos de envío) */}
         <div className="mb-4 max-h-80 overflow-y-auto pr-2">
             <h4 className="text-md font-semibold mb-2">Productos:</h4>
             {productosVenta.length === 0 ? (
@@ -756,14 +777,35 @@ export default function Checkout() {
 
             <hr className="my-4" />
 
+            {/* >>> Sección de Totales con Gastos de Envío <<< */}
             <div className="text-right text-sm space-y-1">
                 <p>Subtotal original: <span className="font-medium">{formatCurrency(originalSubtotal)}</span></p>
                 <p className="text-red-600">Descuento: <span className="font-medium">- {formatCurrency(discountAmount)}</span></p>
-                <p className="text-lg font-bold mt-2">Total: <span className="text-green-700">{formatCurrency(subtotal)}</span></p>
+                {/* Mostrar subtotal después del descuento */}
+                 <p>Subtotal (con descuento): <span className="font-medium">{formatCurrency(subtotal)}</span></p>
+                 {/* Campo para Gastos de Envío */}
+                 <div className="flex justify-end items-center mt-2">
+                     <label htmlFor="gastosEnvio" className="text-sm font-medium text-gray-700 mr-2">Gastos de Envío:</label>
+                     <input
+                         id="gastosEnvio"
+                         type="number"
+                         step="0.01"
+                         min="0"
+                         value={gastosEnvio}
+                         onChange={e => setGastosEnvio(parseFloat(e.target.value) || 0)}
+                         className="w-24 text-right border rounded-md text-sm py-1"
+                         disabled={processing}
+                     />
+                 </div>
+                 {/* Total Final */}
+                <p className="text-lg font-bold mt-2 pt-2 border-t border-gray-300">Total Final: <span className="text-green-700">{formatCurrency(totalFinal)}</span></p>
             </div>
+             {/* ------------------------------------------------ */}
+
 
             <hr className="my-4" />
 
+            {/* Sección de Forma de Pago, Descuento y Enganche */}
             <div className="space-y-4">
                  <div>
                     <label htmlFor="paymentType" className="block text-sm font-medium text-gray-700 mb-1">Forma de Pago:</label>
@@ -808,7 +850,7 @@ export default function Checkout() {
                          <input
                             id="discountValue"
                             type="number"
-                            step={discountType === 'Por porcentaje' ? "1" : "0.01"}
+                            step={discountType === 'Porcentaje' ? "1" : "0.01"}
                             min={discountType === 'Porcentaje' ? "0" : "0"}
                             max={discountType === 'Porcentaje' ? "100" : undefined}
                             value={discountValue}
@@ -818,7 +860,7 @@ export default function Checkout() {
                          />
                     </div>
                 )}
-                 {/* >>> Input para Enganche si es Crédito Cliente <<< */}
+                 {/* Input para Enganche si es Crédito Cliente */}
                  {paymentType === 'Crédito cliente' && (
                     <div>
                          <label htmlFor="enganche" className="block text-sm font-medium text-gray-700 mb-1">
@@ -836,8 +878,6 @@ export default function Checkout() {
                          />
                     </div>
                  )}
-                 {/* ---------------------------------------------------- */}
-
             </div>
         </div>
       </ModalCheckout>

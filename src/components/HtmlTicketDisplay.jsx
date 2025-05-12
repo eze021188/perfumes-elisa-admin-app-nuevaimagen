@@ -43,7 +43,9 @@ export default function HtmlTicketDisplay({ saleData, onClose }) {
         discountAmount,
         forma_pago,
         enganche,
-        total, // Total final de la venta
+        total, // Este 'total' ahora es el subtotal con descuento (antes de gastos de envío)
+        gastos_envio, // >>> Obtener gastos_envio <<<
+        total_final, // >>> Obtener total_final <<<
         balance_cuenta // Balance de cuenta del cliente después de la venta
     } = saleData;
 
@@ -321,10 +323,20 @@ export default function HtmlTicketDisplay({ saleData, onClose }) {
                              <span>Descuento:</span>
                              <span>- {formatCurrency(saleData?.discountAmount || 0)}</span> {/* Usar descuento dinámico */}
                         </div>
-                         <div className="totals-row">
-                             <span>Forma de Pago:</span>
-                             <span>{saleData?.forma_pago || 'N/A'}</span> {/* Usar forma de pago dinámico */}
-                        </div>
+                         {/* Mostrar subtotal con descuento si aplica */}
+                         {(saleData?.discountAmount || 0) > 0 && (
+                             <div className="totals-row">
+                                 <span>Subtotal (con descuento):</span>
+                                 <span>{formatCurrency(saleData?.total || 0)}</span> {/* 'total' es subtotal - descuento */}
+                             </div>
+                         )}
+                         {/* >>> Mostrar Gastos de Envío si son > 0 <<< */}
+                         {(saleData?.gastos_envio || 0) > 0 && (
+                             <div className="totals-row">
+                                 <span>Gastos de Envío:</span>
+                                 <span>{formatCurrency(saleData?.gastos_envio || 0)}</span> {/* Usar gastos_envio dinámico */}
+                             </div>
+                         )}
                          {/* Solo mostrar Enganche si la forma de pago es Crédito cliente Y hubo enganche > 0 */}
                          {saleData?.forma_pago === 'Crédito cliente' && (saleData?.enganche || 0) > 0 && (
                              <div className="totals-row">
@@ -333,8 +345,8 @@ export default function HtmlTicketDisplay({ saleData, onClose }) {
                              </div>
                          )}
                         <div className="totals-row total">
-                             <span>Total Venta:</span>
-                             <span>{formatCurrency(saleData?.total || 0)}</span> {/* Usar total venta dinámico */}
+                             <span>Total Venta:</span> {/* Etiquetar como Total Venta */}
+                             <span>{formatCurrency(saleData?.total_final || 0)}</span> {/* >>> Usar total_final <<< */}
                         </div>
                     </div>
 
@@ -347,7 +359,8 @@ export default function HtmlTicketDisplay({ saleData, onClose }) {
                             <p className="font-semibold text-gray-800 mb-1">Balance de Cuenta:</p>
                             {/* Aplicar clase condicional para el color */}
                             <p className={`balance-value ${balanceClass}`}>
-                                {formatCurrency(Math.abs(saleData.balance_cuenta))} {/* Mostrar valor absoluto y el signo en la nota */}
+                                {/* Mostrar valor absoluto y el signo en la nota */}
+                                {formatCurrency(Math.abs(saleData.balance_cuenta))}
                             </p>
                             <p className="text-xs text-gray-500 mt-1">{balanceNote}</p> {/* Nota aclaratoria dinámica */}
                         </div>
