@@ -342,7 +342,7 @@ export default function CrearPresupuesto() {
 
         // Generar Código de Presupuesto (P#aaaammddhhmmss)
         const now = new Date();
-        const codigoPresupuesto = `P#${formatDateTimeForCode(now)}`;
+        const codigoPresupuesto = `${formatDateTimeForCode(now)}`;
 
         // 1. Preparar datos para la tabla 'presupuestos'
         const nuevoPresupuestoData = {
@@ -528,8 +528,8 @@ export default function CrearPresupuesto() {
 
         ticketElement.innerHTML = `
             <div style="text-align: center; margin-bottom: 20px;">
-                <img src="/images/PERFUMESELISAwhite.jpg" alt="Logo Empresa" style="width: 80px; margin-bottom: 10px;">
-                <h3 style="margin: 0;">Ticket / Presupuesto</h3>
+                <img src="/images/PERFUMESELISAwhite.jpg" alt="Logo Empresa" style="width: 80px; margin: 0 auto; display: block; margin-bottom: 10px;">
+                <h3 style="margin: 0;">Presupuesto</h3>
                 <p style="margin: 5px 0;">#${budgetData.numero_presupuesto}</p>
                 <p style="margin: 2px 0; font-size: 10px;">81 3080 4010 - Ciudad Apodaca</p>
                 <hr style="margin: 10px 0; border-top: 1px dashed #000;">

@@ -2,9 +2,9 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { supabase } from '../supabase';
 import { useNavigate, useLocation } from 'react-router-dom'; // Importa useLocation
-import jsPDF from 'jspdf';
+import jsPDF from 'jspdf'; // Mantenemos la importación por si acaso, pero no la usaremos para el ticket HTML
 import toast from 'react-hot-toast';
-import 'jspdf-autotable';
+import 'jspdf-autotable'; // Mantenemos la importación por si acaso
 import QuickEntryBar from '../components/QuickEntryBar';
 import QuickSaleModal from '../components/QuickSaleModal';
 import ClientSelector from '../components/ClientSelector';
@@ -12,15 +12,17 @@ import NewClientModal from '../components/NewClientModal';
 import FilterTabs from '../components/FilterTabs';
 import ProductGrid from '../components/ProductGrid';
 import ModalCheckout from '../components/ModalCheckout';
+// >>> Importamos el nuevo componente para mostrar el ticket HTML <<<
 import HtmlTicketDisplay from '../components/HtmlTicketDisplay';
 import { ChevronRight } from 'lucide-react'; // Importa el icono ChevronRight si lo usas en el footer
 
 
 // Helper simple para formatear moneda (si no está global)
 const formatCurrency = (amount) => {
+     // Asegurarse de que amount sea un número antes de formatear
      const numericAmount = parseFloat(amount);
      if (isNaN(numericAmount)) {
-         return '$0.00';
+         return '$0.00'; // Devolver un valor por defecto si no es un número válido
      }
      // Ajusta según tu moneda y región (asumiendo COP por tu código anterior, cambia a USD si es necesario)
      return numericAmount.toLocaleString('es-CO', {
@@ -42,7 +44,8 @@ const formatDateTimeForCode = (date) => {
     return `${year}${month}${day}${hours}${minutes}${seconds}`; // Formato sin ':' para el código
 };
 
-// Función para cargar una imagen local (mantenida si se usa en otro lugar, no para el ticket HTML)
+// Función para cargar una imagen local y convertirla a Base64 (ya no necesaria para el ticket HTML, pero se mantiene si se usa en otro lugar)
+// Aunque no la usamos para el ticket HTML, la mantenemos si piensas generar PDFs en otros lados
 const getBase64Image = async (url) => {
     try {
         const response = await fetch(url);
@@ -88,8 +91,8 @@ export default function Checkout() {
     const [processing, setProcessing] = useState(false);
 
     const [paymentType, setPaymentType] = useState('');
-    const [discountType, setDiscountType] = useState('Sin descuento');
-    const [discountValue, setDiscountValue] = useState(0);
+    const [discountType, setDiscountType] = useState('Sin descuento'); // 'Sin descuento', 'Por importe', 'Por porcentaje'
+    const [discountValue, setDiscountValue] = useState(0); // Valor numérico del descuento
 
     // >>> Nuevo estado para el ID del presupuesto origen <<<
     const [budgetSourceId, setBudgetSourceId] = useState(null);
@@ -97,43 +100,45 @@ export default function Checkout() {
     // Estados para mostrar el ticket HTML
     const [showHtmlTicket, setShowHtmlTicket] = useState(false);
     const [htmlTicketData, setHtmlTicketData] = useState(null);
+    // ------------------------------------------
 
 
-    // Carga inicial de clientes, productos, usuario logueado y vendedor
+    // Carga inicial de clientes, productos, usuario logueado (auth y tabla) y logo (si aún se usa)
     useEffect(() => {
         async function loadData() {
             // 1. Obtener el usuario logueado de Supabase Auth
             const { data: { user }, error: authError } = await supabase.auth.getUser();
             if (authError) {
                 console.error("Error getting auth user:", authError);
-                // toast.error("Error de autenticación."); // Puedes añadir un toast si lo deseas
+                // Manejar error de autenticación si es necesario
             }
 
             if (user) {
                 setCurrentUser(user);
 
-                // 2. Obtener información del vendedor de la tabla 'usuarios'
+                // 2. Si hay un usuario logueado, obtener su información de la tabla 'usuarios'
+                // Asumimos que el ID del usuario en auth.users coincide con el ID en la tabla 'usuarios'
                 const { data: vendedorData, error: vendedorError } = await supabase
                     .from('usuarios')
                     .select('nombre') // Selecciona solo el campo 'nombre'
-                    .eq('id', user.id)
-                    .single();
+                    .eq('id', user.id) // Filtra por el ID del usuario logueado
+                    .single(); // Espera un solo resultado
 
                 if (vendedorError) {
                     console.error("Error loading vendedor info from 'usuarios' table:", vendedorError);
-                    setVendedorInfo({ nombre: user.email }); // Usar email como fallback
+                    setVendedorInfo({ nombre: user.email }); // Usar email como fallback si falla la carga del nombre
                 } else {
-                    setVendedorInfo(vendedorData);
+                    setVendedorInfo(vendedorData); // Guarda el objeto { nombre: '...' }
                 }
             } else {
                 console.warn('No hay usuario logueado en Checkout.');
                 setCurrentUser(null);
-                setVendedorInfo(null);
-                 // Si no hay usuario, considera redirigir a login si es necesario
+                setVendedorInfo(null); // No hay vendedor si no hay usuario logueado
             }
 
-            // Cargar clientes (incluir telefono)
-             const { data: cli, error: errorClientes } = await supabase.from('clientes').select('id, nombre, telefono');
+            // Cargar clientes
+            // >>> Incluir 'telefono' y cualquier otro campo necesario para el ticket <<<
+            const { data: cli, error: errorClientes } = await supabase.from('clientes').select('id, nombre, telefono');
             if (errorClientes) {
                 console.error("Error loading clients:", errorClientes);
                 toast.error("Error al cargar clientes.");
@@ -141,31 +146,66 @@ export default function Checkout() {
                 setClientes(cli || []);
             }
 
-            // Cargar productos (incluir stock)
+            // Cargar productos
             const { data: prod, error: errorProductos } = await supabase.from('productos').select('*');
             if (errorProductos) {
                 console.error("Error loading products:", errorProductos);
                 toast.error("Error al cargar productos.");
             } else {
-                 const prodMapped = (prod || []).map(p => {
-                     let imagenUrl = p.imagenUrl || p.imagen_url || p.imagen || '';
-                     if (imagenUrl && !imagenUrl.startsWith('http') && supabase.storage) {
-                         // Ajusta 'productos' al nombre de tu bucket
-                          const { data } = supabase.storage.from('productos').getPublicUrl(p.imagen);
-                          imagenUrl = data.publicUrl;
-                     } else if (imagenUrl && !imagenUrl.startsWith('http')) {
-                         console.warn('Supabase Storage no accesible o bucket "productos" no encontrado.');
-                         imagenUrl = '';
-                     }
-                     // Asegurarse de que el stock es un número
-                     const stockNumerico = parseFloat(p.stock) || 0;
-                     return { ...p, imagenUrl, stock: stockNumerico };
-                 });
-                 setProductos(prodMapped);
+                const prodMapped = (prod || []).map(p => {
+                    let imagenUrl = p.imagenUrl || p.imagen_url || p.imagen || '';
+                    // Supabase Storage URL - Asegúrate de que el bucket se llama 'productos'
+                    if (imagenUrl && !imagenUrl.startsWith('http') && supabase.storage) {
+                        // Verificar si la ruta es correcta dentro del bucket
+                        // Por ejemplo, si 'p.imagen' es solo el nombre del archivo 'mi_imagen.jpg'
+                        const { data } = supabase.storage.from('productos').getPublicUrl(p.imagen);
+                        imagenUrl = data.publicUrl;
+                    } else if (imagenUrl && !imagenUrl.startsWith('http')) {
+                        // Manejar caso si supabase.storage no accesible o bucket no encontrado
+                        console.warn('Supabase Storage no accesible o bucket "productos" no encontrado para obtener URL pública.');
+                        imagenUrl = ''; // O poner una URL de imagen placeholder
+                    }
+
+                    // Asegurarse de que el stock es un número
+                    const stockNumerico = parseFloat(p.stock) || 0;
+                    return { ...p, imagenUrl, stock: stockNumerico };
+                });
+                setProductos(prodMapped);
             }
+
+            // --- Cargar la imagen del logo al iniciar (solo si se usa en PDF o en otro lugar) ---
+            // const logoUrl = '/imagen/PERFUMESELISA.jpg';
+            // const base64 = await getBase64Image(logoUrl);
+            // setLogoBase64(base64);
+            // ------------------------------------------
         }
         loadData();
-    }, []); // Se ejecuta una vez al montar
+    }, []); // Vacío para que solo se ejecute una vez al montar
+
+    // Efecto para cargar el balance del cliente cuando cambia el cliente seleccionado
+    useEffect(() => {
+        async function loadClientBalance() {
+            if (clienteSeleccionado?.id) {
+                // >>> Sumar todos los movimientos para obtener el balance actual <<<
+                const { data, error } = await supabase
+                    .from('movimientos_cuenta_clientes')
+                    .select('monto')
+                    .eq('cliente_id', clienteSeleccionado.id);
+
+                if (error) {
+                    console.error("Error loading client balance:", error);
+                    setClienteBalance(0); // Resetear si hay error
+                    toast.error("No se pudo cargar el balance del cliente.");
+                } else {
+                    const totalBalance = (data || []).reduce((sum, mov) => sum + (parseFloat(mov.monto) || 0), 0);
+                    setClienteBalance(totalBalance);
+                }
+            } else {
+                setClienteBalance(0); // Resetear si no hay cliente seleccionado
+            }
+        }
+        loadClientBalance();
+    }, [clienteSeleccionado]); // Ejecutar cuando clienteSeleccionado cambie
 
 
     // >>> Nuevo Efecto para cargar datos de Presupuesto si existen en el estado de navegación <<<
@@ -179,20 +219,20 @@ export default function Checkout() {
             if (budget.clientes) {
                 setClienteSeleccionado(budget.clientes);
             } else {
-                 toast.warn("Presupuesto sin información de cliente.");
-                 // Si no hay cliente, quizás no deberías continuar? O permitir seleccionarlo?
-                 // Por ahora, si no hay cliente, no cargamos el resto para evitar errores.
-                 return;
+                toast.warn("Presupuesto sin información de cliente.");
+                // Si no hay cliente, quizás no deberías continuar? O permitir seleccionarlo?
+                // Por ahora, si no hay cliente, no cargamos el resto para evitar errores.
+                return;
             }
 
             // 2. Cargar los productos del presupuesto en productosVenta
             if (budget.presupuesto_items && budget.presupuesto_items.length > 0) {
                 // Necesitamos mapear los ítems del presupuesto a la estructura esperada por productosVenta
                 // y obtener el stock actual de esos productos de la lista 'productos' ya cargada.
+                // NOTA: 'productos' se carga asíncronamente. Este useEffect puede correr antes que 'productos' esté listo.
+                // Añadimos 'productos' a la dependencia para que se re-ejecute si los productos se cargan después.
                 const itemsFromBudget = budget.presupuesto_items.map(item => {
                     // Buscar el producto completo en la lista de productos disponibles para obtener stock
-                    // NOTA: 'productos' se carga asíncronamente. Este useEffect puede correr antes que 'productos' esté listo.
-                    // Aseguramos la dependencia a 'productos' en el array de dependencias del useEffect.
                     const fullProductInfo = productos.find(p => p.id === item.producto_id);
 
                     return {
@@ -207,26 +247,26 @@ export default function Checkout() {
                         total: parseFloat(item.subtotal_item) || 0,
                         // Añadir el stock del producto completo para las validaciones del carrito
                         stock: fullProductInfo ? (parseFloat(fullProductInfo.stock) || 0) : 0,
-                         // Mantener otras propiedades del producto si son necesarias (imagen, etc.)
+                        // Mantener otras propiedades del producto si son necesarias (imagen, etc.)
                         imagenUrl: fullProductInfo?.imagenUrl || ''
                     };
                 });
-                 // Filtrar ítems con cantidad > 0
+                // Filtrar ítems con cantidad > 0
                 const validItemsFromBudget = itemsFromBudget.filter(item => item.cantidad > 0);
 
-                if(validItemsFromBudget.length !== itemsFromBudget.length) {
+                if (validItemsFromBudget.length !== itemsFromBudget.length) {
                     toast.warn("Algunos productos del presupuesto tenían cantidad cero y fueron omitidos.");
                 }
 
                 setProductosVenta(validItemsFromBudget);
             } else {
-                 setProductosVenta([]);
-                 toast.warn("El presupuesto no contiene productos.");
+                setProductosVenta([]);
+                toast.warn("El presupuesto no contiene productos.");
             }
 
             // 3. Cargar detalles de descuento, envío y pago
             setDiscountType(budget.tipo_descuento || 'Sin descuento');
-             // Usar valor_descuento que es el porcentaje o importe
+            // Usar valor_descuento que es el porcentaje o importe
             setDiscountValue(parseFloat(budget.valor_descuento) || 0);
             setGastosEnvio(parseFloat(budget.gastos_envio) || 0);
             setPaymentType(budget.forma_pago || ''); // Pre-seleccionar forma de pago del presupuesto
@@ -243,57 +283,32 @@ export default function Checkout() {
             // 6. Abrir el modal de Checkout automáticamente
             // Usamos un setTimeout para asegurar que los estados se actualicen antes de abrir el modal
             // y la UI tenga tiempo de renderizar el footer con los totales calculados.
-             setTimeout(() => {
-                 console.log("Opening sale modal from budget load...");
-                 // Validar que se hayan cargado productos y cliente antes de abrir el modal
-                 if (budget.clientes && budget.presupuesto_items && budget.presupuesto_items.length > 0) {
-                      openSaleModal(); // Llama a la función que abre el modal de confirmación
-                 } else {
-                      toast.error("No se pudo abrir el modal de venta. Asegúrate de que el presupuesto tenga cliente y productos.");
-                 }
-             }, 100); // Pequeño retraso (100ms)
+            setTimeout(() => {
+                console.log("Opening sale modal from budget load...");
+                // Validar que se hayan cargado productos y cliente antes de abrir el modal
+                if (budget.clientes && budget.presupuesto_items && budget.presupuesto_items.length > 0) {
+                    openSaleModal(); // Llama a la función que abre el modal de confirmación
+                } else {
+                    toast.error("No se pudo abrir el modal de venta. Asegúrate de que el presupuesto tenga cliente y productos.");
+                }
+            }, 100); // Pequeño retraso (100ms)
 
         } else {
             console.log("No budget data found in location state. Loading empty checkout.");
             // Asegurarse de que los estados estén limpios si no hay datos de presupuesto
-             setBudgetSourceId(null); // No hay presupuesto origen
-             // Otros estados como productosVenta, clienteSeleccionado, etc. ya están vacíos por defecto.
-             // Si llegaras a re-usar esta lógica para limpiar después de una venta, asegúrate de resetear todos los estados.
+            setBudgetSourceId(null); // No hay presupuesto origen
+            // Otros estados como productosVenta, clienteSeleccionado, etc. ya están vacíos por defecto.
+            // Si llegaras a re-usar esta lógica para limpiar después de una venta, asegúrate de resetear todos los estados.
         }
     }, [location.state, productos]); // Depende de location.state y productos (para buscar stock). ¡Importante añadir 'productos'!
 
 
-    // Efecto para cargar el balance del cliente cuando cambia el cliente seleccionado
-    useEffect(() => {
-        async function loadClientBalance() {
-            if (clienteSeleccionado?.id) {
-                const { data, error } = await supabase
-                    .from('movimientos_cuenta_clientes')
-                    .select('monto')
-                    .eq('cliente_id', clienteSeleccionado.id);
-
-                if (error) {
-                    console.error("Error loading client balance:", error);
-                    setClienteBalance(0);
-                    toast.error("No se pudo cargar el balance del cliente.");
-                } else {
-                    const totalBalance = (data || []).reduce((sum, mov) => sum + (parseFloat(mov.monto) || 0), 0);
-                    setClienteBalance(totalBalance);
-                }
-            } else {
-                setClienteBalance(0);
-            }
-        }
-        loadClientBalance();
-    }, [clienteSeleccionado]);
-
-
     // Filtrado de productos por búsqueda y filtro de categoría
     const productosFiltrados = useMemo(() => {
-       return productos.filter(p =>
-         (filtro === 'All' || p.categoria === filtro) &&
-         p.nombre.toLowerCase().includes(busqueda.toLowerCase())
-       );
+        return productos.filter(p =>
+            (filtro === 'All' || p.categoria === filtro) &&
+            p.nombre.toLowerCase().includes(busqueda.toLowerCase())
+        );
     }, [productos, filtro, busqueda]); // Depende de 'productos', 'filtro' y 'busqueda'
 
 
@@ -345,9 +360,9 @@ export default function Checkout() {
         setProductosVenta(prev => {
             const existe = prev.find(p => p.id === producto.id);
             if (existe) {
-                 // Buscar el producto completo en la lista 'productos' para la validación de stock
-                 const fullProductInfo = productos.find(p => p.id === producto.id);
-                 const productStock = fullProductInfo ? (parseFloat(fullProductInfo.stock) || 0) : 0;
+                // Buscar el producto completo en la lista 'productos' para la validación de stock
+                const fullProductInfo = productos.find(p => p.id === producto.id);
+                const productStock = fullProductInfo ? (parseFloat(fullProductInfo.stock) || 0) : 0;
 
                 if (existe.cantidad + 1 > productStock) {
                     toast.error(`Stock insuficiente. Máximo disponible: ${productStock}`);
@@ -361,7 +376,7 @@ export default function Checkout() {
                 );
             }
             // Añadir nuevo producto con cantidad 1, total parcial inicial, y stock
-             const fullProductInfo = productos.find(p => p.id === producto.id); // Buscar stock al añadir
+            const fullProductInfo = productos.find(p => p.id === producto.id); // Buscar stock al añadir
             return [...prev, { ...producto, cantidad: 1, total: (parseFloat(producto.promocion) || 0), stock: fullProductInfo ? (parseFloat(fullProductInfo.stock) || 0) : 0 }];
         });
     };
@@ -380,16 +395,16 @@ export default function Checkout() {
             if (productoIndex === -1) return prev;
 
             const producto = prev[productoIndex];
-             // Usar el stock guardado en el item de productosVenta (que se obtuvo al añadir/cargar presupuesto)
-             const currentStock = parseFloat(producto.stock) || 0;
+            // Usar el stock guardado en el item de productosVenta (que se obtuvo al añadir/cargar presupuesto)
+            const currentStock = parseFloat(producto.stock) || 0;
 
 
             if (isNaN(quantity) || quantity <= 0) {
                 // Si la cantidad es inválida o 0, eliminar el producto
                 if (window.confirm(`¿Eliminar ${producto.nombre} de la venta?`)) {
-                     return prev.filter(p => p.id !== productoId); // Eliminar si confirma
+                    return prev.filter(p => p.id !== productoId); // Eliminar si confirma
                 }
-                 return prev; // No hacer nada si cancela o la cantidad es 0 inicialmente
+                return prev; // No hacer nada si cancela o la cantidad es 0 inicialmente
             }
 
 
@@ -398,7 +413,7 @@ export default function Checkout() {
                 // Opcional: podrías establecer la cantidad al stock máximo en lugar de no hacer nada
                 // updatedProductos[productoIndex].cantidad = currentStock;
                 // updatedProductos[productoIndex].total = currentStock * (parseFloat(producto.promocion) || 0);
-                 return prev; // No actualizar si excede stock
+                return prev; // No actualizar si excede stock
             }
 
             // Actualizar cantidad y recalcular total parcial
@@ -415,34 +430,34 @@ export default function Checkout() {
 
     // Función para abrir el modal de venta (AHORA USA EL ESTADO ACTUAL DEL CHECKOUT)
     const openSaleModal = () => {
+        // Validación movida dentro del try/catch de handleFinalize para el procesamiento.
+        // Esta validación es solo para abrir el modal.
         if (!currentUser || !currentUser.id) {
-            return;
+            // Mensaje movido a handleFinalize si falla la validación al procesar.
+            // console.error('Debes iniciar sesión como vendedor para registrar una venta.');
+            return; // No abrir el modal si no hay usuario logueado
         }
 
-        // Validar si hay cliente y productos en el carrito actual
+        // Validar si hay cliente y productos en el carrito actual antes de abrir el modal
         if (!clienteSeleccionado || productosVenta.length === 0) {
             if (!clienteSeleccionado) {
                 toast.error('Selecciona un cliente para proceder.');
             } else if (productosVenta.length === 0) {
                 toast.error('Agrega productos a la venta.');
             }
-            return;
+            return; // No abrir el modal si falta cliente o productos
         }
 
         // Validar si hay forma de pago seleccionada antes de abrir el modal
-         // MOVIDO: Esta validación se hace al abrir el modal, no solo al confirmar.
-         if (!paymentType) {
-             // toast.warn('Selecciona una forma de pago.'); // Mejor un toast de advertencia
-             // Permitir abrir el modal para que seleccionen la forma de pago ahí.
-             // PERO el botón Confirmar en el modal estará deshabilitado hasta que seleccionen una forma de pago.
-              console.log("Forma de pago no seleccionada, el botón Confirmar estará deshabilitado.");
-         }
+        if (!paymentType) {
+            // Permitimos abrir el modal, pero el botón Confirmar estará deshabilitado
+            console.log("Forma de pago no seleccionada. Permitiendo abrir modal para selección.");
+        }
 
 
-        // Resetear enganche al abrir el modal (si no es Crédito cliente, o si quieres que siempre empieze en 0)
-        // setEnganche(0); // Puedes comentar esto si quieres que se mantenga el valor si el modal se cierra y reabre.
-        // Resetear gastos de envío al abrir el modal (si no quieres que se mantenga el valor)
-        // setGastosEnvio(0); // Puedes comentar esto si quieres que se mantenga el valor.
+        // Resetear enganche y gastos de envío al abrir el modal para una nueva venta (opcional)
+        // setEnganche(0); // Puedes comentar esto si quieres que se mantenga el valor
+        // setGastosEnvio(0); // Puedes comentar esto si quieres que se mantenga el valor
 
         console.log("Opening sale confirmation modal...");
         setShowSaleModal(true);
@@ -453,7 +468,7 @@ export default function Checkout() {
     const handleFinalize = async () => {
         setProcessing(true);
 
-        // Validaciones finales antes de procesar
+        // Validaciones finales antes de procesar (más estrictas)
         if (!currentUser || !currentUser.id) {
             toast.error('Error de vendedor: Debes iniciar sesión.');
             setProcessing(false);
@@ -482,21 +497,25 @@ export default function Checkout() {
             return;
         }
         // Validar gastos de envío
-         const numericGastosEnvio = parseFloat(gastosEnvio) || 0;
-         if (numericGastosEnvio < 0) {
-             toast.error('Los gastos de envío no pueden ser negativos.');
-             setProcessing(false);
-             return;
-         }
+        const numericGastosEnvio = parseFloat(gastosEnvio) || 0;
+        if (numericGastosEnvio < 0) {
+            toast.error('Los gastos de envío no pueden ser negativos.');
+            setProcessing(false);
+            return;
+        }
         // Validar que totalFinal no sea negativo si no es crédito cliente (o si tu lógica lo requiere)
+        // La validación en el botón ya ayuda, pero una doble verificación aquí es buena.
         if (paymentType !== 'Crédito cliente' && totalFinal < 0) {
-             toast.error('El total final no puede ser negativo para esta forma de pago.');
-             setProcessing(false);
-             return;
+            toast.error('El total final no puede ser negativo para esta forma de pago.');
+            setProcessing(false);
+            return;
         }
 
 
         try {
+            // Declaramos 'now' una sola vez al principio del bloque try
+            const now = new Date(); // <-- Declaración única aquí
+
             // --- Implementación actual (menos robusta sin RPC atómica) ---
             // Si no usas RPC, asegúrate de que tu secuencia de operaciones aquí maneje los errores
             // para intentar revertir las operaciones previas si una falla.
@@ -508,38 +527,45 @@ export default function Checkout() {
             // PERO con las correcciones para usar los nuevos estados (gastosEnvio, totalFinal, enganche)
             // Y AÑADIENDO la actualización del estado del presupuesto si budgetSourceId existe.
 
-             // Obtener el último código de venta para generar el siguiente (Lógica existente)
-             const { data: ventasPrevias, error: errorVentasPrevias } = await supabase
-                 .from('ventas')
-                 .select('codigo_venta')
-                 .order('created_at', { ascending: false })
-                 .limit(1);
+            // Eliminamos la lógica original para obtener ventasPrevias y nextCodigoNumber
+            // si ya no usaremos el número secuencial en favor de la fecha/hora.
+            /*
+            const { data: ventasPrevias, error: errorVentasPrevias } = await supabase
+                .from('ventas')
+                .select('codigo_venta')
+                .order('created_at', { ascending: false })
+                .limit(1);
 
-             let nextCodigoNumber = 1;
-             if (ventasPrevias && ventasPrevias.length > 0 && ventasPrevias[0].codigo_venta) {
-                const lastCodigoVenta = ventasPrevias[0].codigo_venta;
-                const lastNumberMatch = lastCodigoVenta.match(/VT(\d+)/);
-                 if (lastNumberMatch && lastNumberMatch[1]) {
-                     const lastNumber = parseInt(lastNumberMatch[1], 10);
-                     if (!isNaN(lastNumber)) {
-                         nextCodigoNumber = lastNumber + 1;
-                     } else {
-                         console.warn('Código de venta previo no tiene el formato esperado. Iniciando secuencia en 1.');
-                     }
-                 } else {
-                     console.warn('Código de venta previo no tiene el formato esperado. Iniciando secuencia en 1.');
-                 }
-            } else {
-                 console.log('No hay ventas previas. Iniciando secuencia de código de venta en 1.');
-            }
-            const codigo = 'VT' + String(nextCodigoNumber).padStart(5, '0');
+            let nextCodigoNumber = 1;
+            if (ventasPrevias && ventasPrevias.length > 0 && ventasPrevias[0].codigo_venta) {
+               const lastCodigoVenta = ventasPrevias[0].codigo_venta;
+               const lastNumberMatch = lastCodigoVenta.match(/VT(\d+)/);
+                if (lastNumberMatch && lastNumberMatch[1]) {
+                    const lastNumber = parseInt(lastNumberMatch[1], 10);
+                    if (!isNaN(lastNumber)) {
+                        nextCodigoNumber = lastNumber + 1;
+                    } else {
+                        console.warn('Código de venta previo no tiene el formato esperado. Iniciando secuencia en 1.');
+                    }
+                } else {
+                    console.warn('Código de venta previo no tiene el formato esperado. Iniciando secuencia en 1.');
+                }
+           } else {
+                console.log('No hay ventas previas. Iniciando secuencia de código de venta en 1.');
+           }
+           const codigo = '#VT' + String(nextCodigoNumber).padStart(5, '0');
+           */
+
+            // Generar el nuevo código de venta basado en la fecha y hora (VT#aaaammddhhmmss)
+            // Usamos la variable 'now' declarada al principio del try
+            const codigo = `VT${formatDateTimeForCode(now)}`; // <-- Código generado con fecha/hora
 
 
             // Insertar cabecera de venta (Lógica existente con correcciones)
             const { data: ventaInsertada, error: errorVenta } = await supabase
                 .from('ventas') // Nombre exacto de tu tabla de ventas
                 .insert([{
-                    codigo_venta: codigo,
+                    codigo_venta: codigo, // Usar el código de venta generado con fecha/hora
                     cliente_id: clienteSeleccionado.id,
                     vendedor_id: currentUser.id,
                     subtotal: originalSubtotal, // Usar el subtotal original (antes de descuento en checkout)
@@ -556,66 +582,66 @@ export default function Checkout() {
 
             if (errorVenta) {
                 console.error('Error al insertar cabecera de venta:', errorVenta.message);
-                 toast.error(`Error al registrar la venta: ${errorVenta.message}`);
+                toast.error(`Error al registrar la venta: ${errorVenta.message}`);
                 throw errorVenta; // Lanzar error para detener el proceso
             }
             const ventaId = ventaInsertada.id;
 
 
-             // Registrar movimientos de cuenta del cliente si es 'Crédito cliente' (Lógica existente con correcciones)
-             if (paymentType === 'Crédito cliente') {
-                 const movimientos = [{
-                         cliente_id: clienteSeleccionado.id,
-                         tipo_movimiento: 'CARGO_VENTA',
-                         monto: totalFinal, // El cargo a la cuenta es el TOTAL FINAL
-                         referencia_venta_id: ventaId,
-                         descripcion: `Venta ${codigo}`,
-                     }];
-                 if (numericEnganche > 0) {
-                     movimientos.push({
-                         cliente_id: clienteSeleccionado.id,
-                         tipo_movimiento: 'ABONO_ENGANCHE',
-                         monto: -numericEnganche, // Monto negativo para un abono
-                         referencia_venta_id: ventaId,
-                         descripcion: `Enganche Venta ${codigo}`,
-                     });
-                 }
+            // Registrar movimientos de cuenta del cliente si es 'Crédito cliente' (Lógica existente con correcciones)
+            if (paymentType === 'Crédito cliente') {
+                const movimientos = [{
+                    cliente_id: clienteSeleccionado.id,
+                    tipo_movimiento: 'CARGO_VENTA',
+                    monto: totalFinal, // El cargo a la cuenta es el TOTAL FINAL
+                    referencia_venta_id: ventaId,
+                    descripcion: `Venta ${codigo}`,
+                }];
+                if (numericEnganche > 0) {
+                    movimientos.push({
+                        cliente_id: clienteSeleccionado.id,
+                        tipo_movimiento: 'ABONO_ENGANCHE',
+                        monto: -numericEnganche, // Monto negativo para un abono
+                        referencia_venta_id: ventaId,
+                        descripcion: `Enganche Venta ${codigo}`,
+                    });
+                }
 
-                 const { error: errorMovimientos } = await supabase
-                     .from('movimientos_cuenta_clientes')
-                     .insert(movimientos);
+                const { error: errorMovimientos } = await supabase
+                    .from('movimientos_cuenta_clientes')
+                    .insert(movimientos);
 
-                 if (errorMovimientos) {
-                     console.error('Error al registrar movimientos de cuenta del cliente:', errorMovimientos.message);
-                     // CONSIDERAR REVERTIR LA VENTA SI ESTO FALLA
-                      await supabase.from('ventas').delete().eq('id', ventaId); // Intenta revertir
-                      toast.error('Error al registrar los movimientos en la cuenta del cliente. Venta revertida.');
-                     throw errorMovimientos;
-                 }
-             }
+                if (errorMovimientos) {
+                    console.error('Error al registrar movimientos de cuenta del cliente:', errorMovimientos.message);
+                    // CONSIDERAR REVERTIR LA VENTA SI ESTO FALLA
+                    await supabase.from('ventas').delete().eq('id', ventaId); // Intenta revertir
+                    toast.error('Error al registrar los movimientos en la cuenta del cliente. Venta revertida.');
+                    throw errorMovimientos;
+                }
+            }
 
 
             // Insertar detalles de venta y actualizar stock/movimientos (Lógica existente con correcciones)
             for (const p of productosVenta) {
-                 // Re-verificar stock del producto antes de actualizar
-                 const { data: prodCheck, error: errorProdCheck } = await supabase
-                     .from('productos')
-                     .select('stock')
-                     .eq('id', p.id)
-                     .single();
+                // Re-verificar stock del producto antes de actualizar
+                const { data: prodCheck, error: errorProdCheck } = await supabase
+                    .from('productos')
+                    .select('stock')
+                    .eq('id', p.id)
+                    .single();
 
-                 const currentStock = prodCheck?.stock || 0;
-                 const cantidadVendida = parseFloat(p.cantidad) || 0;
+                const currentStock = prodCheck?.stock || 0;
+                const cantidadVendida = parseFloat(p.cantidad) || 0;
 
-                 if (errorProdCheck || currentStock < cantidadVendida) {
-                     console.error(`Error de stock o producto no encontrado para ${p.nombre}. Stock disponible: ${currentStock ?? 'N/A'}`);
-                      // CONSIDERAR REVERTIR LA VENTA Y MOVIMIENTOS SI ESTO FALLA
-                       await supabase.from('detalle_venta').delete().eq('venta_id', ventaId); // Intenta revertir detalles
-                       await supabase.from('movimientos_cuenta_clientes').delete().eq('referencia_venta_id', ventaId); // Intenta revertir movimientos de cuenta
-                       await supabase.from('ventas').delete().eq('id', ventaId); // Intenta revertir cabecera
-                     toast.error(`Stock insuficiente para ${p.nombre}. Venta cancelada.`);
-                     throw new Error(`Stock insuficiente para ${p.nombre}.`);
-                 }
+                if (errorProdCheck || currentStock < cantidadVendida) {
+                    console.error(`Error de stock o producto no encontrado para ${p.nombre}. Stock disponible: ${currentStock ?? 'N/A'}`);
+                    // CONSIDERAR REVERTIR LA VENTA Y MOVIMIENTOS SI ESTO FALLA
+                    await supabase.from('detalle_venta').delete().eq('venta_id', ventaId); // Intenta revertir detalles
+                    await supabase.from('movimientos_cuenta_clientes').delete().eq('referencia_venta_id', ventaId); // Intenta revertir movimientos de cuenta
+                    await supabase.from('ventas').delete().eq('id', ventaId); // Intenta revertir cabecera
+                    toast.error(`Stock insuficiente para ${p.nombre}. Venta cancelada.`);
+                    throw new Error(`Stock insuficiente para ${p.nombre}.`);
+                }
 
 
                 // Insertar detalle de venta
@@ -628,11 +654,11 @@ export default function Checkout() {
                 }]);
                 if (errorDetalle) {
                     console.error(`Error al insertar detalle de venta para producto ${p.nombre}:`, errorDetalle.message);
-                     // CONSIDERAR REVERTIR ANTERIORES SI ESTO FALLA
-                       await supabase.from('detalle_venta').delete().eq('venta_id', ventaId); // Limpiar detalles incompletos
-                       await supabase.from('movimientos_cuenta_clientes').delete().eq('referencia_venta_id', ventaId);
-                       await supabase.from('ventas').delete().eq('id', ventaId);
-                     toast.error(`Error al guardar detalle para ${p.nombre}. Venta cancelada.`);
+                    // CONSIDERAR REVERTIR ANTERIORES SI ESTO FALLA
+                    await supabase.from('detalle_venta').delete().eq('venta_id', ventaId); // Limpiar detalles incompletos
+                    await supabase.from('movimientos_cuenta_clientes').delete().eq('referencia_venta_id', ventaId);
+                    await supabase.from('ventas').delete().eq('id', ventaId);
+                    toast.error(`Error al guardar detalle para ${p.nombre}. Venta cancelada.`);
                     throw errorDetalle;
                 }
 
@@ -641,13 +667,13 @@ export default function Checkout() {
                 const { error: errorUpdateStock } = await supabase.from('productos').update({ stock: nuevoStock }).eq('id', p.id);
                 if (errorUpdateStock) {
                     console.error(`Error al actualizar stock para producto ${p.nombre}:`, errorUpdateStock.message);
-                     // CONSIDERAR REVERTIR ANTERIORES SI ESTO FALLA
-                       await supabase.from('detalle_venta').delete().eq('venta_id', ventaId);
-                       await supabase.from('movimientos_cuenta_clientes').delete().eq('referencia_venta_id', ventaId);
-                       await supabase.from('ventas').delete().eq('id', ventaId);
-                       // Nota: Revertir stock es más complejo si ya se actualizaron algunos productos.
-                       // Por eso la RPC atómica es mejor.
-                     toast.error(`Error al actualizar stock para ${p.nombre}. Venta cancelada.`);
+                    // CONSIDERAR REVERTIR ANTERIORES SI ESTO FALLA
+                    await supabase.from('detalle_venta').delete().eq('venta_id', ventaId);
+                    await supabase.from('movimientos_cuenta_clientes').delete().eq('referencia_venta_id', ventaId);
+                    await supabase.from('ventas').delete().eq('id', ventaId);
+                    // Nota: Revertir stock es más complejo si ya se actualizaron algunos productos.
+                    // Por eso la RPC atómica es mejor.
+                    toast.error(`Error al actualizar stock para ${p.nombre}. Venta cancelada.`);
                     throw errorUpdateStock;
                 }
 
@@ -664,12 +690,12 @@ export default function Checkout() {
                     }]);
                 if (errMov) {
                     console.error('Error mov_inventario (' + p.nombre + '):', errMov.message);
-                     // CONSIDERAR REVERTIR ANTERIORES SI ESTO FALLA
-                       await supabase.from('detalle_venta').delete().eq('venta_id', ventaId);
-                       await supabase.from('movimientos_cuenta_clientes').delete().eq('referencia_venta_id', ventaId);
-                       await supabase.from('ventas').delete().eq('id', ventaId);
-                       // Revertir stock actualizado también sería ideal aquí
-                     toast.error(`Error al registrar movimiento de inventario para ${p.nombre}. Venta cancelada.`);
+                    // CONSIDERAR REVERTIR ANTERIORES SI ESTO FALLA
+                    await supabase.from('detalle_venta').delete().eq('venta_id', ventaId);
+                    await supabase.from('movimientos_cuenta_clientes').delete().eq('referencia_venta_id', ventaId);
+                    await supabase.from('ventas').delete().eq('id', ventaId);
+                    // Revertir stock actualizado también sería ideal aquí
+                    toast.error(`Error al registrar movimiento de inventario para ${p.nombre}. Venta cancelada.`);
                     throw errMov;
                 }
             } // Fin del loop de productosVenta
@@ -685,17 +711,18 @@ export default function Checkout() {
 
                 if (updateBudgetError) {
                     console.error(`Error al actualizar estado del presupuesto ${budgetSourceId}:`, updateBudgetError.message);
-                     // Esto es un error menor, la venta ya se registró, pero el presupuesto no se marcó.
+                    // Esto es un error menor, la venta ya se registró, pero el presupuesto no se marcó.
                     toast.warn('Advertencia: El presupuesto origen no se marcó como "Convertido a Venta".');
                 } else {
-                     console.log(`Presupuesto ${budgetSourceId} marcado como 'Convertido a Venta'.`);
+                    console.log(`Presupuesto ${budgetSourceId} marcado como 'Convertido a Venta'.`);
                 }
             }
 
 
             // Si todo fue bien, preparar datos para el ticket HTML y mostrarlo
-            const now = new Date();
+            // Usamos la variable 'now' declarada al principio del try
             const formattedDate = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getFullYear()).slice(-2)} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
 
             const ticketData = {
                 codigo_venta: codigo, // Usar el código de venta generado
@@ -745,6 +772,8 @@ export default function Checkout() {
 
         } catch (err) {
             console.error('Error general al finalizar venta:', err.message);
+            // Si err es un objeto Error con un mensaje específico, úsalo
+            toast.error(`Error al procesar la venta: ${err.message || 'Error desconocido'}. Por favor, revisa el log de errores.`);
             // No limpiar estados aquí para permitir al usuario revisar qué falló,
             // a menos que decidas revertir completamente la transacción.
         } finally {
@@ -789,11 +818,11 @@ export default function Checkout() {
                     onCreateNew={() => setShowNewClient(true)}
                 />
                 {/* Mostrar balance del cliente si está seleccionado */}
-                 {clienteSeleccionado && (
-                     <p className="mt-2 text-sm text-gray-700">
-                         Balance del cliente: <span className={`font-semibold ${clienteBalance >= 0 ? 'text-green-700' : 'text-red-600'}`}>{formatCurrency(clienteBalance)}</span>
-                     </p>
-                 )}
+                {clienteSeleccionado && (
+                    <p className="mt-2 text-sm text-gray-700">
+                        Balance del cliente: <span className={`font-semibold ${clienteBalance >= 0 ? 'text-green-700' : 'text-red-600'}`}>{formatCurrency(clienteBalance)}</span>
+                    </p>
+                )}
                 <NewClientModal
                     isOpen={showNewClient}
                     onClose={() => setShowNewClient(false)}
@@ -820,7 +849,7 @@ export default function Checkout() {
                     onClose={() => setShowQuickSale(false)}
                     onAdd={onAddToCart}
                     productos={productos} // Pasar la lista completa de productos
-                     // Asegurarse de que este modal usa la validación de stock también
+                    // Asegurarse de que este modal usa la validación de stock también
                 />
             </div>
 
@@ -843,7 +872,7 @@ export default function Checkout() {
 
 
             {/* Footer Fijo con Resumen de Venta y Botón que abre el ModalCheckout */}
-             {/* Este div ahora actúa como el botón verde del footer */}
+            {/* Este div ahora actúa como el botón verde del footer */}
             <div
                 className={`
                     fixed bottom-0 left-0 right-0 p-4 text-center rounded-t-xl shadow-lg
@@ -855,7 +884,7 @@ export default function Checkout() {
                     }
                 `}
                 onClick={openSaleModal} // Llama a openSaleModal
-                 // Deshabilitar si no hay productos, cliente seleccionado, o si está procesando
+                // Deshabilitar si no hay productos, cliente seleccionado, o si está procesando
                 aria-disabled={productosVenta.length === 0 || !clienteSeleccionado || processing}
             >
                 {/* Información del resumen */}
@@ -867,16 +896,16 @@ export default function Checkout() {
                     )}
                 </div>
                 <div className="flex-1 text-right">
-                     {/* Usar totalFinal para el total */}
+                    {/* Usar totalFinal para el total */}
                     <span className="font-bold text-xl">{formatCurrency(totalFinal)}</span>
                 </div>
                 {processing && (
                     <div className="ml-4 text-sm font-semibold">Procesando…</div>
                 )}
                 {/* Opcional: Añadir un icono de flecha aquí si quieres */}
-                 <div className="ml-4">
-                      <ChevronRight className="w-6 h-6" />
-                 </div>
+                <div className="ml-4">
+                    <ChevronRight className="w-6 h-6" />
+                </div>
             </div>
 
             {/* Modal de Checkout (para confirmar la venta) */}
@@ -906,12 +935,12 @@ export default function Checkout() {
             >
                 {/* Contenido del Modal de Checkout (detalle de venta, pago, descuento, gastos de envío) */}
                 {/* Asegúrate de que este contenido refleje fielmente la imagen que mostraste */}
-                 <div className="mb-4 max-h-80 overflow-y-auto pr-2">
+                <div className="mb-4 max-h-80 overflow-y-auto pr-2">
                     <h4 className="text-md font-semibold mb-2">Productos:</h4>
                     {productosVenta.length === 0 ? (
                         <p className="text-gray-600">No hay productos en la venta.</p>
                     ) : (
-                         <ul className="space-y-2">
+                        <ul className="space-y-2">
                             {productosVenta.map(p => (
                                 <li key={p.id} className="flex justify-between items-center text-sm text-gray-800 border-b pb-2 last:border-b-0">
                                     <div className="flex-1 mr-4">
@@ -931,7 +960,7 @@ export default function Checkout() {
                                         <button
                                             onClick={() => onRemoveFromCart(p.id)}
                                             className="ml-2 text-red-600 hover:text-red-800 disabled:opacity-50"
-                                             disabled={processing} // Deshabilitar botón durante procesamiento
+                                            disabled={processing} // Deshabilitar botón durante procesamiento
                                         >
                                             ✕
                                         </button>
@@ -946,7 +975,7 @@ export default function Checkout() {
                     {/* Sección de Totales con Gastos de Envío */}
                     <div className="text-right text-sm space-y-1">
                         {/* Recalcular Subtotal original para mostrar en el modal */}
-                         <p>Subtotal original: <span className="font-medium">{formatCurrency(productosVenta.reduce((sum, p) => sum + (parseFloat(p.cantidad) || 0) * (parseFloat(p.promocion) || 0), 0))}</span></p>
+                        <p>Subtotal original: <span className="font-medium">{formatCurrency(productosVenta.reduce((sum, p) => sum + (parseFloat(p.cantidad) || 0) * (parseFloat(p.promocion) || 0), 0))}</span></p>
                         <p className="text-red-600">Descuento: <span className="font-medium">- {formatCurrency(discountAmount)}</span></p>
                         {/* Mostrar subtotal después del descuento */}
                         <p>Subtotal (con descuento): <span className="font-medium">{formatCurrency(subtotal)}</span></p>
@@ -990,44 +1019,44 @@ export default function Checkout() {
                             </select>
                         </div>
 
-                         {/* El selector de descuento dentro del modal DEBE estar vinculado a los mismos estados
+                        {/* El selector de descuento dentro del modal DEBE estar vinculado a los mismos estados
                             discountType y discountValue para que los cálculos de useMemo funcionen. */}
                         <div>
-                             <label htmlFor="modalDiscountType" className="block text-sm font-medium text-gray-700 mb-1">Descuento:</label> {/* Usar ID único */}
-                             <select
-                                 id="modalDiscountType" // Usar ID único
-                                 value={discountType} // Vincular al estado discountType
-                                 onChange={e => {
-                                     setDiscountType(e.target.value);
-                                     setDiscountValue(0); // Resetear valor al cambiar tipo
-                                 }}
-                                 className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50"
-                                 disabled={processing}
-                             >
-                                 <option value="Sin descuento">Sin descuento</option>
-                                 <option value="Por importe">Por importe ($)</option>
-                                 <option value="Por porcentaje">Por porcentaje (%)</option>
-                             </select>
-                         </div>
+                            <label htmlFor="modalDiscountType" className="block text-sm font-medium text-gray-700 mb-1">Descuento:</label> {/* Usar ID único */}
+                            <select
+                                id="modalDiscountType" // Usar ID único
+                                value={discountType} // Vincular al estado discountType
+                                onChange={e => {
+                                    setDiscountType(e.target.value);
+                                    setDiscountValue(0); // Resetear valor al cambiar tipo
+                                }}
+                                className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50"
+                                disabled={processing}
+                            >
+                                <option value="Sin descuento">Sin descuento</option>
+                                <option value="Por importe">Por importe ($)</option>
+                                <option value="Por porcentaje">Por porcentaje (%)</option>
+                            </select>
+                        </div>
 
-                         {discountType !== 'Sin descuento' && (
-                             <div>
-                                  <label htmlFor="modalDiscountValue" className="block text-sm font-medium text-gray-700 mb-1"> {/* Usar ID único */}
-                                     Valor del Descuento ({discountType === 'Por importe' ? '$' : '%'}):
-                                  </label>
-                                  <input
-                                     id="modalDiscountValue" // Usar ID único
-                                     type="number"
-                                     step={discountType === 'Porcentaje' ? "1" : "0.01"}
-                                     min={discountType === 'Porcentaje' ? "0" : "0"}
-                                     max={discountType === 'Porcentaje' ? "100" : undefined}
-                                     value={discountValue} // Vincular al estado discountValue
-                                     onChange={e => setDiscountValue(parseFloat(e.target.value) || 0)} // Actualizar estado discountValue
-                                     className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50"
-                                     disabled={processing}
-                                  />
-                             </div>
-                         )}
+                        {discountType !== 'Sin descuento' && (
+                            <div>
+                                <label htmlFor="modalDiscountValue" className="block text-sm font-medium text-gray-700 mb-1"> {/* Usar ID único */}
+                                    Valor del Descuento ({discountType === 'Por importe' ? '$' : '%'}):
+                                </label>
+                                <input
+                                    id="modalDiscountValue" // Usar ID único
+                                    type="number"
+                                    step={discountType === 'Porcentaje' ? "1" : "0.01"}
+                                    min={discountType === 'Porcentaje' ? "0" : "0"}
+                                    max={discountType === 'Porcentaje' ? "100" : undefined}
+                                    value={discountValue} // Vincular al estado discountValue
+                                    onChange={e => setDiscountValue(parseFloat(e.target.value) || 0)} // Actualizar estado discountValue
+                                    className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50"
+                                    disabled={processing}
+                                />
+                            </div>
+                        )}
 
                         {/* Input para Enganche si es Crédito Cliente */}
                         {paymentType === 'Crédito cliente' && (
