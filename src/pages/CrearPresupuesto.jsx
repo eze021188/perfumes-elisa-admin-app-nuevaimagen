@@ -11,9 +11,6 @@ import { useClientes } from '../contexts/ClientesContext';
 import { useProductos } from '../contexts/ProductosContext';
 import { supabase } from '../supabase';
 
-// Ya no necesitamos importar HtmlPresupuestoDisplay
-
-
 // Helper simple para formatear moneda (si no está global)
 const formatCurrency = (amount) => {
      const numericAmount = parseFloat(amount);
@@ -112,9 +109,9 @@ export default function CrearPresupuesto() {
   const [presupuestoSeleccionadoHistorial, setPresupuestoSeleccionadoHistorial] = useState(null); // Presupuesto seleccionado en el historial
 
   // >>> Estados para la previsualización del ticket (para presupuesto actual o histórico) <<<
-  const [showPresupuestoPreviewModal, setShowPresupuestoPreviewModal] = useState(false); // Cambiado a PresupuestoPreviewModal
-  const [presupuestoPreviewData, setPresupuestoPreviewData] = useState(null); // Datos del presupuesto para el ticket
-  const ticketContentRef = useRef(null); // Ref para el div que contiene el HTML del ticket (ahora visible en el modal)
+  const [showTicketPreviewModal, setShowTicketPreviewModal] = useState(false);
+  const [ticketPreviewData, setTicketPreviewData] = useState(null); // Datos del presupuesto para el ticket
+  const ticketContentRef = useRef(null); // Ref para el div que contiene el HTML del ticket
 
 
   // >>> Estado para almacenar la imagen del logo en Base64 para el PDF/Imagen <<<
@@ -124,6 +121,7 @@ export default function CrearPresupuesto() {
   useEffect(() => {
     fetchPresupuestosExistentes();
     async function loadLogo() {
+        // Usar la ruta correcta del logo para el ticket (probablemente el blanco)
         const logoUrl = '/images/PERFUMESELISAwhite.jpg'; // Asegúrate que esta ruta sea correcta y accesible públicamente
         const base64 = await getBase64Image(logoUrl);
         setLogoBase64(base64);
@@ -138,30 +136,20 @@ const fetchPresupuestosExistentes = async () => {
   setErrorPresupuestos(null);
 
   try {
-    // 1) Traer los presupuestos con su cliente
-    const { data, error: err1 } = await supabase
+    // 1) Traer los presupuestos con su cliente y el nombre del usuario (vendedor)
+    // >>> CORRECCIÓN: Cambiar 'vendedores(nombre)' a 'usuarios(nombre)' <<<
+    // Esto asume que la clave foránea en 'presupuestos' que apunta a la tabla 'usuarios'
+    // tiene el nombre de relación 'usuarios' en Supabase.
+    const { data: presupuestos, error: err1 } = await supabase
       .from('presupuestos')
-      .select('id, numero_presupuesto, created_at, total, subtotal, descuento_aplicado, gastos_envio, notas, clientes(nombre)') // Añadir campos necesarios para el modal
+      .select('id, numero_presupuesto, created_at, total, subtotal, descuento_aplicado, gastos_envio, notas, clientes(nombre), usuarios(nombre)') // Cambiado a usuarios(nombre)
       .order('created_at', { ascending: false });
 
     if (err1) throw err1;
 
-    // >>> CORRECCIÓN: Verificar si data es un array antes de usar map <<<
-    if (!Array.isArray(data)) {
-        console.error('Supabase returned non-array data for presupuestos:', data);
-        // Si no es un array, tratar como si no hubiera presupuestos
-        setPresupuestosExistentes([]);
-        setLoadingPresupuestos(false);
-        return; // Salir de la función
-    }
-
-    // Ahora data es definitivamente un array (puede estar vacío)
-    const presupuestos = data;
-
-
     // 2) Para cada presupuesto, traer sus ítems
     const presupuestosConItems = await Promise.all(
-      presupuestos.map(async p => { // Line 109 - Ahora 'presupuestos' es un array
+      presupuestos.map(async p => {
         // 1) Obtén sólo campos básicos del presupuesto_items
         // con el nombre real:
         const { data: items, error: err2 } = await supabase
@@ -174,7 +162,7 @@ const fetchPresupuestosExistentes = async () => {
 
         // 2) Enriquecemos cada ítem con el nombre de producto desde el contexto de productos
         // Esto es útil si la descripción en presupuesto_items no siempre es el nombre completo
-        const itemsConNombre = (items || []).map(item => { // Asegurar que items sea un array
+        const itemsConNombre = items.map(item => {
            // Buscar el producto en el contexto de productos cargado previamente
            // Asegúrate de que productos no sea null o undefined antes de usar find
            const producto = productos ? productos.find(prod => prod.id === item.producto_id) : null;
@@ -189,15 +177,17 @@ const fetchPresupuestosExistentes = async () => {
         return {
           ...p,
           presupuesto_items: itemsConNombre // Usar los ítems enriquecidos
+          // El nombre del vendedor ahora debería estar en p.usuarios.nombre
         };
       })
     );
 
     setPresupuestosExistentes(presupuestosConItems);
   } catch (err) {
-    console.error('Error cargando presupuestos existentes:', err);
-    setErrorPresupuestos('Error al cargar los presupuestos.');
-    toast.error('Error al cargar presupuestos.');
+    console.error('Error al cargar presupuestos existentes:', err);
+    // >>> CORRECCIÓN: Mostrar el mensaje de error de Supabase si está disponible <<<
+    setErrorPresupuestos(`Error al cargar los presupuestos: ${err.message || err.toString()}`);
+    toast.error(`Error al cargar presupuestos: ${err.message || err.toString()}`);
   } finally {
     setLoadingPresupuestos(false);
   }
@@ -269,7 +259,7 @@ const fetchPresupuestosExistentes = async () => {
       idInterno: Date.now() + Math.random(), // Usar timestamp + random para clave única local
       producto_id: producto.id,
       descripcion: producto.nombre,
-      // >>> Usar precio_promocion si existe, de lo contrario usar precio normal <<<
+      // Usar promocion si existe, de lo contrario usar precio normal
       precio_unitario: producto.promocion ?? producto.precio ?? 0 // Usar 0 como fallback final
     };
     setItemsPresupuesto(prev => [...prev, newItem]);
@@ -489,87 +479,114 @@ const fetchPresupuestosExistentes = async () => {
       return createdDate < tenDaysAgo;
   };
 
-  // >>> Lógica para generar los datos del presupuesto para el componente de visualización <<<
-  const preparePresupuestoDataForDisplay = (presupuesto) => {
-      // Si es el presupuesto actual (preview), construir los datos desde los estados del formulario
-      if (!presupuesto) {
-          return {
-              numero_presupuesto: 'PREVIEW',
-              clientes: clienteSeleccionado,
-              created_at: new Date(),
-              // Para el preview, usamos itemsPresupuesto del estado local
-              presupuesto_items: itemsPresupuesto.map(item => ({
-                  // Adaptar la estructura para que coincida con la esperada por el HTML del ticket
-                  id: item.idInterno, // Usar idInterno como id temporal
-                  productos: { nombre: item.descripcion }, // Simular la estructura anidada
-                  descripcion: item.descripcion,
-                  cantidad: parseFloat(item.cantidad) || 0,
-                  precio_unitario: parseFloat(item.precio_unitario) || 0,
-                  subtotal_item: (parseFloat(item.cantidad) || 0) * (parseFloat(item.precio_unitario) || 0)
-              })),
-              subtotal: subtotal,
-              descuento_aplicado: descuentoAplicadoFrontend,
-              gastos_envio: gastosEnvioNum,
-              total: totalFrontend,
-              notas: notas,
-              // No hay vendedor en los estados del formulario, podrías añadirlo si lo necesitas
-              // vendedor: { nombre: user?.email || 'Usuario Actual' }
-          };
-      } else {
-          // Si es un presupuesto histórico, usar los datos directamente del objeto presupuesto
-          return presupuesto;
+  // >>> Lógica para generar el Ticket (Imagen) <<<
+  // Esta función se usará tanto para el presupuesto actual como para el histórico
+  const generateTicketImage = async (presupuestoData) => {
+      if (!presupuestoData || !ticketContentRef.current) {
+          toast.error("No hay datos de presupuesto o referencia de ticket.");
+          return;
+      }
+
+      // Asegurarse de que html2canvas esté cargado antes de usarlo
+      if (typeof html2canvas === 'undefined') {
+           console.error("html2canvas is not loaded.");
+           toast.error("Error interno: la librería de imagen no está cargada.");
+           return;
+      }
+
+      // Determinar el nombre del vendedor para el ticket
+      // Si es un presupuesto histórico, usar el nombre del usuario fetchado (si existe)
+      // Si es el presupuesto actual, usar el nombre del usuario logueado
+      const vendedorNombre = presupuestoData.usuarios?.nombre // Para histórico (si se fetchó)
+                           || presupuestoData.vendedores?.nombre // Fallback por si acaso (del código anterior)
+                           || user?.user_metadata?.nombre // Para presupuesto actual (del usuario logueado)
+                           || user?.email // Fallback al email si no hay nombre en metadata
+                           || 'N/A'; // Fallback final
+
+
+      // Populate the hidden ticket content div
+      // This is a simplified example, you'll need to build the full HTML structure
+      // based on your desired ticket format, similar to the image provided.
+      // Ensure the structure uses Tailwind classes for styling.
+      const ticketHtmlContent = `
+        <div class="p-4 text-xs font-mono">
+            <div class="text-center mb-4">
+                ${logoBase64 ? `<img src="${logoBase64}" alt="Logo Empresa" class="w-24 mx-auto mb-4"/>` : ''}
+                <h4 class="font-bold text-sm">PERFUMES ELISA</h4>
+                <p>61 3380 4010 - Ciudad Apodaca</p>
+                <p class="mt-2 font-bold">${presupuestoData.numero_presupuesto || 'N/A'}</p>
+            </div>
+            <div class="mb-4">
+                <p>Cliente: ${presupuestoData.clientes?.nombre || 'N/A'}</p>
+                <p>Vendedor: ${vendedorNombre}</p> 
+                <p>Fecha: ${formatReadableDate(presupuestoData.created_at || new Date())}</p>
+            </div>
+            <div class="border-t border-b border-gray-400 py-2 mb-4">
+                <p class="font-bold mb-2">Detalle:</p>
+                 ${presupuestoData.itemsPresupuesto ? // Si es presupuesto actual (usando itemsPresupuesto)
+                    presupuestoData.itemsPresupuesto.map(item => `
+                        <p class="text-gray-800 mb-1">${item.cantidad}x ${item.descripcion} - ${formatCurrency(item.precio_unitario)}</p>
+                    `).join('')
+                    : // Si es presupuesto histórico (usando presupuesto_items)
+                    presupuestoData.presupuesto_items.map(item => `
+                         <p class="text-gray-800 mb-1">${item.cantidad}x ${item.productos?.nombre || item.descripcion} - ${formatCurrency(item.precio_unitario)}</p>
+                    `).join('')
+                 }
+            </div>
+            <div class="text-right mb-4">
+                <p>Subtotal: ${formatCurrency(presupuestoData.subtotal)}</p>
+                ${presupuestoData.descuento_aplicado > 0 ? `<p>Descuento: -${formatCurrency(presupuestoData.descuento_aplicado)}</p>` : ''}
+                 <p>Envío: ${formatCurrency(presupuestoData.gastos_envio)}</p>
+                <p class="font-bold text-sm mt-2">Total: ${formatCurrency(presupuestoData.total)}</p>
+            </div>
+            <div class="text-center mt-4">
+                <p>¡Gracias por considerar nuestros productos!</p>
+                <p>Este es un presupuesto, no un comprobante de venta.</p>
+            </div>
+        </div>
+      `;
+
+      // Limpiar el contenido del ref ANTES de poblarlo y capturar
+      ticketContentRef.current.innerHTML = ''; // Limpiar contenido previo
+      ticketContentRef.current.innerHTML = ticketHtmlContent; // Populate the hidden div
+
+      try {
+          const canvas = await html2canvas(ticketContentRef.current, {
+              scale: 2, // Increase scale for better resolution
+              logging: true, // Enable logging for debugging
+              useCORS: true // Important if loading images from another origin
+          });
+          const imageData = canvas.toDataURL('image/jpeg'); // Convert canvas to JPG data URL
+          setTicketPreviewData(imageData); // Set the image data
+          setShowTicketPreviewModal(true); // Open the ticket preview modal
+      } catch (error) {
+          console.error("Error generating ticket image:", error);
+          toast.error("Error al generar la imagen del ticket.");
+      } finally {
+           // Limpiar el contenido del ref DESPUÉS de capturar
+           ticketContentRef.current.innerHTML = ''; // Clear the hidden div after capturing
       }
   };
 
-  // >>> Lógica para mostrar el modal de previsualización del presupuesto <<<
-  const handleShowPresupuestoPreview = (presupuesto = null) => {
-      const dataToDisplay = preparePresupuestoDataForDisplay(presupuesto);
-      setPresupuestoPreviewData(dataToDisplay);
-      setShowPresupuestoPreviewModal(true);
-  };
-
-  // >>> Lógica para cerrar el modal de previsualización del presupuesto <<<
-  const handleClosePresupuestoPreviewModal = () => {
-      setShowPresupuestoPreviewModal(false);
-      setPresupuestoPreviewData(null);
-  };
-
-  // >>> Lógica para capturar la imagen del ticket desde el modal visible <<<
-   const captureTicketImage = async () => {
-        if (!ticketContentRef.current) {
-            toast.error("No se encontró el contenido del ticket para capturar.");
-            return null;
-        }
-
-        try {
-            const canvas = await html2canvas(ticketContentRef.current, {
-                scale: 2, // Aumentar escala para mejor resolución
-                logging: true, // Habilitar logging para depuración
-                useCORS: true // Importante si cargas imágenes de otro origen
-            });
-            const imageData = canvas.toDataURL('image/jpeg'); // Convertir canvas a JPG data URL
-            return imageData; // Retornar la imagen en base64
-        } catch (error) {
-            console.error("Error generating ticket image:", error);
-            toast.error("Error al generar la imagen del ticket.");
-            return null;
-        }
-   };
-
-  // >>> Lógica para descargar la imagen del ticket capturada <<<
-  const downloadTicketImage = async () => {
-      const imageData = await captureTicketImage();
-      if (imageData) {
+  // >>> Lógica para descargar el Ticket (Imagen) <<<
+  const downloadTicketImage = () => {
+      if (ticketPreviewData) {
           const link = document.createElement('a');
-          link.href = imageData;
-          // Generar nombre de archivo basado en el número de presupuesto o timestamp
-          const filename = `presupuesto_${presupuestoPreviewData?.numero_presupuesto || formatDateForFilename(new Date())}.jpg`;
+          link.href = ticketPreviewData;
+          // Generate filename based on budget number or timestamp
+          // Usar el número de presupuesto del ticketPreviewData si está disponible
+          const filename = `presupuesto_${presupuestoSeleccionadoHistorial?.numero_presupuesto || formatDateForFilename(new Date())}.jpg`; // Usar número del histórico si aplica
           link.download = filename;
           document.body.appendChild(link);
           link.click();
           document.body.removeChild(link);
-          toast.success("Imagen del ticket descargada.");
       }
+  };
+
+  // >>> Lógica para cerrar el modal de previsualización de ticket <<<
+  const closeTicketPreviewModal = () => {
+      setShowTicketPreviewModal(false);
+      setTicketPreviewData(null);
   };
 
 
@@ -598,7 +615,8 @@ const fetchPresupuestosExistentes = async () => {
       <div className="flex flex-col md:flex-row items-center justify-between gap-6 mb-10"> {/* Mayor margen inferior */}
         <button
           onClick={() => navigate('/')}
-          className="px-6 py-2 bg-gray-200 text-gray-800 font-semibold rounded-lg shadow-md hover:bg-gray-300 transition duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-opacity-50"
+          // Clases modificadas para que se parezca a la imagen
+          className="px-6 py-3 bg-gray-700 text-white font-bold rounded-lg shadow-md hover:bg-gray-800 transition duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-opacity-50 text-lg" // font-bold y colores oscuros
         >
           Volver al inicio
         </button>
@@ -644,7 +662,7 @@ const fetchPresupuestosExistentes = async () => {
                           // Añadir onMouseDown para evitar que onBlur cierre antes de onClick
                           onMouseDown={(e) => e.preventDefault()}
                         >
-                          {c.nombre}
+                          {c.nombre} {/* Corrected: Use curly braces for JSX expression */}
                         </li>
                       ))}
                     </ul>
@@ -696,7 +714,7 @@ const fetchPresupuestosExistentes = async () => {
                        // Añadir onMouseDown para evitar que onBlur cierre antes de onClick
                        onMouseDown={(e) => e.preventDefault()}
                     >
-                      {p.nombre} <span className="text-gray-500 text-xs">(${parseFloat(p.promocion ?? p.precio ?? 0).toFixed(2)})</span> {/* Mostrar precio de promoción/normal */}
+                      {p.nombre} <span className="text-gray-500 text-xs">(${parseFloat(p.promocion ?? p.precio ?? 0).toFixed(2)})</span> {/* Mostrar precio de promoción/normal */} {/* Corrected: Use curly braces for JSX expression */}
                     </li>
                   ))}
                 </ul>
@@ -719,6 +737,7 @@ const fetchPresupuestosExistentes = async () => {
                 <div className="overflow-x-auto">
                   <table className="min-w-full divide-y divide-gray-200 bg-white">
                     <thead className="bg-gray-50">
+                      {/* CORRECCIÓN: Asegurar que no haya espacios en blanco ni saltos de línea entre <th> tags */}
                       <tr>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Descripción</th>
                         <th className="px-4 py-2 text-right text-xs font-medium text-gray-600 uppercase tracking-wider w-24">Cantidad</th> {/* Ancho ajustado */}
@@ -728,6 +747,7 @@ const fetchPresupuestosExistentes = async () => {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200">
+                      {/* CORRECCIÓN: Asegurar que no haya espacios en blanco ni saltos de línea entre <td> tags */}
                       {itemsPresupuesto.map(item => (
                         <tr key={item.idInterno} className="hover:bg-gray-50 transition-colors">
                           <td className="px-4 py-2 text-gray-800 text-sm">{item.descripcion}</td>
@@ -866,7 +886,19 @@ const fetchPresupuestosExistentes = async () => {
         {/* Estos botones generarán el ticket/PDF del presupuesto actual ANTES de guardarlo */}
         <div className="flex justify-end gap-4 mb-6">
           <button
-            onClick={() => handleShowPresupuestoPreview()} // Llama a la nueva función para mostrar el modal con datos del presupuesto actual
+            onClick={() => generateTicketImage({ // Pass current budget data structure
+                numero_presupuesto: 'PREVIEW', // Use a placeholder for current budget
+                clientes: clienteSeleccionado,
+                // Pasar info del vendedor actual (user) para el preview
+                usuarios: { nombre: user?.user_metadata?.nombre || user?.email || 'N/A' }, // Usar 'usuarios' para consistencia
+                created_at: new Date(), // Use current date for preview
+                itemsPresupuesto: itemsPresupuesto, // Pass current items
+                subtotal: subtotal,
+                descuento_aplicado: descuentoAplicadoFrontend,
+                gastos_envio: gastosEnvioNum,
+                total: totalFrontend,
+                notas: notas
+            })}
             className="px-4 py-2 bg-blue-500 text-white rounded-md font-semibold hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
             disabled={itemsPresupuesto.length === 0 || !clienteSeleccionado}
           >
@@ -914,15 +946,18 @@ const fetchPresupuestosExistentes = async () => {
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200 bg-white">
               <thead className="bg-gray-50">
+                {/* CORRECCIÓN: Asegurar que no haya espacios en blanco ni saltos de línea entre <th> tags */}
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Número</th> {/* Padding ajustado */}
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Cliente</th> {/* Padding ajustado */}
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Fecha</th> {/* Padding ajustado */}
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-600 uppercase tracking-wider">Total</th> {/* Padding ajustado */}
-                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-600 uppercase tracking-wider w-40">Acciones</th> {/* Ancho ajustado */}
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Número</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Cliente</th>
+                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Vendedor</th> {/* Añadido Vendedor */}
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Fecha</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-600 uppercase tracking-wider">Total</th>
+                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-600 uppercase tracking-wider w-40">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
+                {/* CORRECCIÓN: Asegurar que no haya espacios en blanco ni saltos de línea entre <td> tags */}
                 {presupuestosExistentes.map(p => {
                     const isOld = isBudgetOld(p.created_at); // Verificar si es viejo
                     return (
@@ -931,13 +966,13 @@ const fetchPresupuestosExistentes = async () => {
                          className={`hover:bg-gray-100 transition-colors cursor-pointer ${isOld ? 'opacity-70' : ''}`} // Estilo para presupuestos viejos
                          onClick={() => handleViewHistoricalBudget(p)} // Hacer toda la fila clicable para ver detalles
                       >
-                        <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">{p.numero_presupuesto || p.id?.substring(0, 8)}</td> {/* Padding ajustado */}
-                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-800">{p.clientes?.nombre || 'Cliente Desconocido'}</td> {/* Padding ajustado, manejar cliente null */}
-                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500"> {/* Padding ajustado */}
-                          {formatReadableDate(p.created_at)} {/* Formatear fecha */}
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm text-right font-semibold text-gray-800">{formatCurrency(p.total)}</td> {/* Padding ajustado, formatear moneda */}
-                        <td className="px-4 py-3 whitespace-nowrap text-sm text-center space-x-2"> {/* Padding y espacio ajustados */}
+                        <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">{p.numero_presupuesto || p.id?.substring(0, 8)}</td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-800">{p.clientes?.nombre || 'Cliente Desconocido'}</td>
+                         {/* >>> CORRECCIÓN: Mostrar nombre del vendedor desde p.usuarios.nombre <<< */}
+                         <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-800">{p.usuarios?.nombre || 'N/A'}</td> {/* Mostrar nombre del vendedor */}
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{formatReadableDate(p.created_at)}</td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-right font-semibold text-gray-800">{formatCurrency(p.total)}</td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-center space-x-2">
                            {/* Botón para ver detalles (abre el único modal) */}
                            <button
                              onClick={(e) => { e.stopPropagation(); handleViewHistoricalBudget(p); }}
@@ -987,8 +1022,10 @@ const fetchPresupuestosExistentes = async () => {
                        <p className="text-sm text-gray-600 mb-2">
                           Fecha: <span className="font-semibold text-gray-800">{formatReadableDate(presupuestoSeleccionadoHistorial.created_at)}</span>
                        </p>
-                       {/* Puedes añadir más detalles del presupuesto aquí si los seleccionaste en la consulta */}
-                       {/* <p className="text-sm text-gray-600 mb-2">Vendedor: ...</p> */}
+                        <p className="text-sm text-gray-600 mb-2"> {/* Mostrar Vendedor en el detalle */}
+                           {/* >>> CORRECCIÓN: Mostrar nombre del vendedor desde presupuestoSeleccionadoHistorial.usuarios.nombre <<< */}
+                           Vendedor: <span className="font-semibold text-gray-800">{presupuestoSeleccionadoHistorial.usuarios?.nombre || 'N/A'}</span>
+                        </p>
                        {presupuestoSeleccionadoHistorial.notas && (
                            <div className="mt-4 p-3 bg-gray-50 rounded-md text-sm text-gray-700 italic">
                                <span className="font-semibold not-italic">Notas:</span> {presupuestoSeleccionadoHistorial.notas}
@@ -1004,6 +1041,7 @@ const fetchPresupuestosExistentes = async () => {
                            <div className="overflow-x-auto"> {/* Este div es correcto para manejar el scroll horizontal */}
                                <table className="min-w-full divide-y divide-gray-200 bg-white text-sm">
                                    <thead className="bg-gray-50">
+                                       {/* CORRECCIÓN: Asegurar que no haya espacios en blanco ni saltos de línea entre <th> tags */}
                                        <tr>
                                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Descripción</th>
                                            <th className="px-4 py-2 text-right text-xs font-medium text-gray-600 uppercase tracking-wider w-24">Cantidad</th>
@@ -1013,9 +1051,10 @@ const fetchPresupuestosExistentes = async () => {
                                    </thead>
                                    <tbody className="divide-y divide-gray-200">
                                        {/* Cada item se renderiza como una fila (tr) */}
+                                       {/* CORRECCIÓN: Asegurar que no haya espacios en blanco ni saltos de línea entre <td> tags */}
                                        {presupuestoSeleccionadoHistorial.presupuesto_items.map((item, index) => (
                                            <tr key={item.id || index}> {/* Usar item.id si existe, de lo contrario index */}
-                                                <td className="px-4 py-2 text-gray-800">{item.productos?.nombre || item.descripcion || 'Item Desconocido'}</td> {/* Mostrar nombre del producto o descripción */}
+                                                <td className="px-4 py-2 text-gray-800">{item.productos?.nombre || item.descripcion || 'Item Desconocido'}</td>
                                                 <td className="px-4 py-2 text-right">{item.cantidad ?? 0}</td>
                                                 <td className="px-4 py-2 text-right">{formatCurrency(item.precio_unitario ?? 0)}</td>
                                                 <td className="px-4 py-2 text-right font-semibold">{formatCurrency((item.cantidad ?? 0) * (item.precio_unitario ?? 0))}</td>
@@ -1056,7 +1095,7 @@ const fetchPresupuestosExistentes = async () => {
 
                        {/* Botón "Ver Ticket" para presupuesto histórico */}
                        <button
-                           onClick={() => handleShowPresupuestoPreview(presupuestoSeleccionadoHistorial)} // Llama a la nueva función para mostrar el modal con datos históricos
+                           onClick={() => generateTicketImage(presupuestoSeleccionadoHistorial)} // Pass historical budget data
                            className={`px-4 py-2 bg-purple-600 text-white rounded-md font-semibold hover:bg-purple-700 transition-colors text-sm ${isBudgetOld(presupuestoSeleccionadoHistorial.created_at) ? 'opacity-50 cursor-not-allowed' : ''}`}
                            title="Ver Ticket"
                            disabled={isBudgetOld(presupuestoSeleccionadoHistorial.created_at)} // Deshabilitar si es viejo
@@ -1085,102 +1124,61 @@ const fetchPresupuestosExistentes = async () => {
 
                </div> {/* Cierre correcto del div principal del contenido del modal */}
            </div> /* Cierre correcto del div del overlay del modal */
+       )
+
+       /* >>> Modal para Previsualización del Ticket (JPG) <<< */}
+       {showTicketPreviewModal && ticketPreviewData && (
+            <div
+                className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+                onClick={closeTicketPreviewModal} // Cerrar al hacer clic fuera
+            >
+                <div
+                    onClick={(e) => e.stopPropagation()} // Evitar cerrar al hacer clic dentro
+                    className="bg-white rounded-lg shadow-lg w-full max-w-sm p-6 max-h-[90vh] overflow-y-auto relative flex flex-col items-center" // Ancho más pequeño, centrado
+                >
+                    {/* Encabezado del Modal */}
+                    <div className="flex justify-between items-center mb-4 w-full border-b pb-3">
+                        <h3 className="text-xl font-bold text-gray-800">Previsualización del Ticket</h3>
+                        <button
+                            onClick={closeTicketPreviewModal}
+                            className="text-gray-600 hover:text-gray-800 text-2xl font-bold leading-none ml-4"
+                        >
+                            &times;
+                        </button>
+                    </div>
+
+                    {/* Imagen del Ticket */}
+                    <div className="mb-6 border border-gray-300 rounded-md overflow-hidden">
+                         <img src={ticketPreviewData} alt="Ticket Preview" className="block w-full h-auto" />
+                    </div>
+
+
+                    {/* Botones de Acción */}
+                    <div className="flex justify-center gap-4 w-full">
+                        <button
+                            onClick={downloadTicketImage}
+                            className="px-6 py-2 bg-blue-600 text-white rounded-md font-semibold hover:bg-blue-700 transition-colors"
+                        >
+                            Descargar Ticket (JPG)
+                        </button>
+                        <button
+                            onClick={closeTicketPreviewModal}
+                            className="px-6 py-2 bg-gray-300 text-gray-800 rounded-md font-semibold hover:bg-gray-400 transition-colors"
+                        >
+                            Cerrar
+                        </button>
+                    </div>
+
+                </div> {/* Cierre correcto del div principal del contenido del modal */}
+            </div> /* Cierre correcto del div del overlay del modal */
        )}
 
-       {/* >>> Modal para Previsualización del Presupuesto (HTML renderizado) <<< */}
-       {showPresupuestoPreviewModal && presupuestoPreviewData && (
-           <div
-               className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
-               onClick={handleClosePresupuestoPreviewModal} // Cerrar al hacer clic fuera
-           >
-               {/* Contenido del modal */}
-               <div
-                   className="bg-white rounded-lg shadow-lg w-full max-w-sm p-6 max-h-[90vh] overflow-y-auto relative flex flex-col items-center" // Ancho más pequeño, centrado
-                   onClick={(e) => e.stopPropagation()} // Evitar cerrar al hacer clic dentro
-               >
-                   {/* Encabezado del Modal */}
-                   <div className="flex justify-between items-center mb-4 w-full border-b pb-3">
-                       <h3 className="text-xl font-bold text-gray-800">Previsualización del Presupuesto</h3>
-                       <button
-                           onClick={handleClosePresupuestoPreviewModal}
-                           className="text-gray-600 hover:text-gray-800 text-2xl font-bold leading-none ml-4"
-                       >
-                           &times;
-                       </button>
-                   </div>
-
-                   {/* >>> Contenido del Ticket (Este es el div que se convertirá a imagen) <<< */}
-                   {/* Puedes editar el diseño aquí usando clases de Tailwind CSS */}
-                   {/* Este div ahora tiene la referencia ticketContentRef */}
-                   <div ref={ticketContentRef} className="p-4 text-xs font-mono bg-white text-gray-900 w-full border border-gray-300 rounded-md"> {/* Añadido borde y padding */}
-                       <div className="text-center mb-4">
-                           {/* Añadir la imagen del logo si está cargada */}
-                           {logoBase64 && (
-                               <img src={logoBase64} alt="Logo" className="mx-auto h-12 mb-2" /> // Clases para centrar y tamaño
-                           )}
-                           <h4 className="font-bold text-sm">PERFUMES ELISA</h4>
-                           <p>61 3380 4010 - Ciudad Apodaca</p>
-                           <p className="mt-2 font-bold">{presupuestoPreviewData?.numero_presupuesto || 'PREVIEW'}</p> {/* Ajustado texto */}
-                       </div>
-                       <div className="mb-4 border-t border-b border-gray-200 py-2"> {/* Añadido borde sutil */}
-                           <p>Cliente: {presupuestoPreviewData?.clientes?.nombre || 'N/A'}</p>
-                           <p>Fecha: {formatReadableDate(presupuestoPreviewData?.created_at || new Date())}</p>
-                            {/* Puedes añadir el vendedor si lo pasas en presupuestoPreviewData */}
-                            {/* <p>Vendedor: {presupuestoPreviewData?.vendedor?.nombre || 'N/A'}</p> */}
-                       </div>
-                       <div className="border-b border-gray-200 py-2 mb-4"> {/* Añadido borde sutil */}
-                           <p className="font-bold mb-2">Detalle:</p>
-                            {presupuestoPreviewData?.presupuesto_items && presupuestoPreviewData.presupuesto_items.length > 0 ? (
-                                presupuestoPreviewData.presupuesto_items.map((item, index) => (
-                                    <div key={item.idInterno || item.id || index} className="flex justify-between"> {/* Usar idInterno, id o index como key */}
-                                        <span className="flex-grow truncate mr-2">{item.cantidad}x {item.productos?.nombre || item.descripcion || 'Item Desconocido'}</span> {/* truncate para nombres largos */}
-                                        <span>{formatCurrency(item.precio_unitario)}</span>
-                                    </div>
-                                ))
-                            ) : (
-                                <p className="italic text-gray-500 text-center">No hay ítems en el presupuesto.</p> // Mensaje ajustado
-                            )}
-                       </div>
-                       <div className="text-right mb-4 space-y-1"> {/* Espaciado entre líneas */}
-                           <p>Subtotal: {formatCurrency(presupuestoPreviewData?.subtotal ?? 0)}</p>
-                            {/* Mostrar solo si hay descuento aplicado > 0 */}
-                           {(presupuestoPreviewData?.descuento_aplicado ?? 0) > 0 && (
-                               <p className="text-red-600">Descuento: -{formatCurrency(presupuestoPreviewData?.descuento_aplicado ?? 0)}</p>
-                           )}
-                            <p>Envío: {formatCurrency(presupuestoPreviewData?.gastos_envio ?? 0)}</p>
-                            {/* Impuestos si aplican */}
-                            {/* <p>Impuestos: {formatCurrency(presupuestoPreviewData?.impuestos ?? 0)}</p> */}
-                           <div className="font-bold text-sm mt-2 border-t border-gray-300 pt-2"> {/* Separador visual */}
-                               <p>Total: {formatCurrency(presupuestoPreviewData?.total ?? 0)}</p>
-                           </div>
-                       </div>
-                       <div className="text-center mt-4 text-gray-700"> {/* Texto más discreto */}
-                           <p>¡Gracias por tu interés!</p> {/* Mensaje ajustado */}
-                           <p>Visítanos de nuevo pronto.</p>
-                       </div>
-                   </div>
-                   {/* >>> FIN Contenido del Ticket <<< */}
-
-
-                   {/* Botones de Acción */}
-                   <div className="flex justify-center gap-4 w-full mt-6">
-                       <button
-                           onClick={downloadTicketImage} // Llama a la función para descargar la imagen capturada
-                           className="px-6 py-2 bg-blue-600 text-white rounded-md font-semibold hover:bg-blue-700 transition-colors"
-                       >
-                           Descargar Ticket (JPG)
-                       </button>
-                       <button
-                           onClick={handleClosePresupuestoPreviewModal}
-                           className="px-6 py-2 bg-gray-300 text-gray-800 rounded-md font-semibold hover:bg-gray-400 transition-colors"
-                       >
-                           Cerrar
-                       </button>
-                   </div>
-
-               </div> {/* Cierre correcto del div principal del contenido del modal */}
-           </div> /* Cierre correcto del div del overlay del modal */
-       )}
+        {/* >>> Hidden div for html2canvas capture <<< */}
+        {/* This div will contain the HTML structure to be converted to image */}
+        {/* It should be hidden from view */}
+        <div ref={ticketContentRef} style={{ position: 'absolute', left: '-9999px', top: '-9999px' }}>
+            {/* The HTML structure for the ticket will be populated here by generateTicketImage */}
+        </div>
 
 
     </div> // Cierre correcto del div principal de la página
