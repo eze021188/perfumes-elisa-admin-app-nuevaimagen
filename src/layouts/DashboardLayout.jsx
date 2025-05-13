@@ -40,14 +40,15 @@ export default function DashboardLayout() {
     }
   };
 
-  // Estructura de los ítems de navegación, ahora con soporte para hijos
+  // Estructura de los ítems de navegación, ahora con soporte para hijos y menús anidados
   const navItems = [
     { to: '/', label: 'Inicio' },
     {
       label: 'Ventas', // Elemento padre para Ventas
       children: [
         { to: '/checkout', label: 'Procesar Venta' },
-        { to: '/crear-presupuesto', label: 'Presupuesto' },
+        // >>> Enlace a Presupuesto con la ruta correcta <<<
+        { to: '/presupuestos/crear', label: 'Presupuesto' },
         { to: '/ventas', label: 'Historial de Ventas' }, // Renombrado para claridad
       ]
     },

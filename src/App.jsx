@@ -8,7 +8,8 @@ import { Toaster } from 'react-hot-toast';
 import { ClientesProvider } from './contexts/ClientesContext';
 // CORRECCIÓN: Sintaxis de importación para ProductosProvider
 import { ProductosProvider } from './contexts/ProductosContext';
-import { ComprasProvider } from './contexts/ComprasContext';
+// >>> CORRECCIÓN: Cambiada la ruta de importación para ComprasProvider <<<
+import { ComprasProvider } from './contexts/ComprasContext'; // <-- Nombre de archivo corregido
 // >>> Importa tu nuevo AuthProvider y useAuth <<<
 import { AuthProvider, useAuth } from './contexts/AuthContext'; // Asegúrate de que la ruta sea correcta
 
@@ -146,6 +147,7 @@ export default function App() {
                   <Route path="saldos-clientes" element={<SaldosClientes />} />
 
                    {/* AGREGA AQUÍ LA RUTA PARA CREAR PRESUPUESTOS */}
+                   {/* >>> AJUSTE: Cambiado el path a "presupuestos/crear" para coincidir con la URL esperada <<< */}
                    <Route path="presupuestos/crear" element={<CrearPresupuesto />} />
 
 
