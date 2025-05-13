@@ -538,7 +538,7 @@ export default function Ventas() {
              fecha: formattedDate,
              productosVenta: ventaSeleccionada.productos.map(item => ({ // Mapear los detalles de venta cargados (ahora en ventaSeleccionada.productos)
                  id: item.producto_id,
-                 nombre: item.producto?.nombre || '–', // Usar el nombre del producto obtenido de la relación
+                 nombre: item.nombre         || '–', // Usar el nombre del producto obtenido de la relación
                  cantidad: item.cantidad,
                  precio_unitario: item.precio_unitario, // Usar el precio unitario del detalle
                  total_parcial: item.total_parcial, // Usar el subtotal por ítem del detalle
