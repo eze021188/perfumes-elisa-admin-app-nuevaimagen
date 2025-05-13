@@ -14,6 +14,14 @@ export default function DashboardLayout() {
   // Puedes obtener el usuario del contexto si necesitas mostrar su nombre o email
   // const { user } = useAuth();
 
+  // Estado para controlar qué menú desplegable está abierto
+  const [expandedMenu, setExpandedMenu] = useState(null); // Usamos null o el 'label' del menú padre
+
+  // Función para alternar la visibilidad de un menú desplegable
+  const toggleMenu = (label) => {
+    setExpandedMenu(expandedMenu === label ? null : label);
+  };
+
   // Función para manejar el cierre de sesión
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut();
@@ -31,6 +39,46 @@ export default function DashboardLayout() {
        toast.success('Sesión cerrada.'); // Mensaje de éxito
     }
   };
+
+  // Estructura de los ítems de navegación, ahora con soporte para hijos
+  const navItems = [
+    { to: '/', label: 'Inicio' },
+    {
+      label: 'Ventas', // Elemento padre para Ventas
+      children: [
+        { to: '/checkout', label: 'Procesar Venta' },
+        { to: '/crear-presupuesto', label: 'Presupuesto' },
+        { to: '/ventas', label: 'Historial de Ventas' }, // Renombrado para claridad
+      ]
+    },
+    {
+      label: 'Inventario', // Elemento padre para Inventario
+      children: [
+        { to: '/productos', label: 'Productos' }, // Podría ser 'Gestión de Productos'
+        { to: '/compras', label: 'Compras' },
+        // { to: '/productos-stock', label: 'Stock Actual' }, // Si tienes una página específica para stock
+      ]
+    },
+     {
+       label: 'Clientes', // Elemento padre para Clientes
+       children: [
+         { to: '/clientes', label: 'Gestión de Clientes' }, // Podría ser 'Listado de Clientes'
+         { to: '/saldos-clientes', label: 'Saldos Pendientes' }, // Renombrado para claridad
+       ]
+     },
+    { to: '/reportes', 'label': 'Reportes' }, // Reportes como enlace directo por ahora
+     {
+       label: 'Administración', // Elemento padre para Administración
+       children: [
+         { to: '/usuarios', 'label': 'Usuarios y permisos' },
+         // { to: '/configuracion', label: 'Configuración' }, // Si tienes más opciones de admin
+       ]
+     },
+    // Puedes añadir enlaces de Debug aquí si quieres que estén en el sidebar
+    // { to: '/test-pdf', label: 'Test PDF' },
+    // { to: '/debug-ventas', label: 'Debug Ventas' },
+  ];
+
 
   return (
     <div className="min-h-screen flex relative bg-gray-100"> {/* Añadido fondo gris claro */}
@@ -57,64 +105,67 @@ export default function DashboardLayout() {
         {/* Eliminamos el h1 "Perfumes Elisa" ya que ahora tenemos el logo */}
         {/* <h1 className="text-2xl font-bold mb-6">Perfumes Elisa</h1> */}
 
-        <ul className="space-y-4">
-          {[
-            ['/', 'Inicio'],
-            ['/checkout', 'Checkout'],
-            ['/productos', 'Productos'],
-            ['/clientes', 'Clientes'],
-            ['/compras', 'Compras'],
-            ['/ventas', 'Ventas'],
-            ['/saldos-clientes', 'Saldos Clientes'],
-            ['/reportes', 'Reportes'],
-            ['/usuarios', 'Usuarios y permisos']
-          ].map(([to, label]) => (
-            <li key={to}>
-              <NavLink
-                to={to}
-                end={to === '/'}
-                className={({ isActive }) =>
-                  `block px-4 py-2 rounded transition duration-150 ease-in-out ${
-                    isActive ? 'bg-gray-700 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                  }`
-                }
-                onClick={() => setSidebarOpen(false)} // Cierra el sidebar móvil al hacer clic
-              >
-                {label}
-              </NavLink>
+        <ul className="space-y-2"> {/* Espaciado vertical reducido */}
+          {navItems.map((item) => (
+            <li key={item.label}>
+              {item.children ? (
+                // Si el ítem tiene hijos, renderizar como un encabezado desplegable
+                <>
+                  <button
+                    onClick={() => toggleMenu(item.label)}
+                    className={`w-full text-left px-4 py-2 rounded transition duration-150 ease-in-out font-semibold ${
+                      expandedMenu === item.label ? 'bg-gray-700 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                    }`}
+                  >
+                    {item.label}
+                    {/* Indicador de desplegable (opcional) */}
+                    <span className="float-right">
+                       {expandedMenu === item.label ? '▼' : '►'}
+                    </span>
+                  </button>
+                  {/* Renderizar ítems hijos si el menú está expandido */}
+                  {expandedMenu === item.label && (
+                    <ul className="ml-4 mt-1 space-y-1 border-l border-gray-700"> {/* Indentación y borde para sub-menú */}
+                      {item.children.map((child) => (
+                        <li key={child.to}>
+                          <NavLink
+                            to={child.to}
+                            end={child.to === '/'}
+                            className={({ isActive }) =>
+                              `block px-4 py-2 rounded transition duration-150 ease-in-out text-sm ${ // Tamaño de fuente reducido para hijos
+                                isActive ? 'bg-gray-600 text-white' : 'text-gray-400 hover:bg-gray-700 hover:text-white' // Colores ajustados para hijos
+                              }`
+                            }
+                            onClick={() => setSidebarOpen(false)} // Cierra el sidebar móvil al hacer clic
+                          >
+                            {child.label}
+                          </NavLink>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              ) : (
+                // Si el ítem no tiene hijos, renderizar como un enlace normal
+                <NavLink
+                  to={item.to}
+                  end={item.to === '/'}
+                  className={({ isActive }) =>
+                    `block px-4 py-2 rounded transition duration-150 ease-in-out ${
+                      isActive ? 'bg-gray-700 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                    }`
+                  }
+                  onClick={() => setSidebarOpen(false)} // Cierra el sidebar móvil al hacer clic
+                >
+                  {item.label}
+                </NavLink>
+              )}
             </li>
           ))}
-          {/* Puedes añadir enlaces de Debug aquí si quieres que estén en el sidebar */}
-           {/* <li>
-              <NavLink
-                to="/test-pdf"
-                className={({ isActive }) =>
-                  `block px-4 py-2 rounded transition duration-150 ease-in-out ${
-                    isActive ? 'bg-gray-700 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                  }`
-                }
-                 onClick={() => setSidebarOpen(false)}
-              >
-                Test PDF
-              </NavLink>
-           </li>
-           <li>
-              <NavLink
-                to="/debug-ventas"
-                 className={({ isActive }) =>
-                  `block px-4 py-2 rounded transition duration-150 ease-in-out ${
-                    isActive ? 'bg-gray-700 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                  }`
-                }
-                 onClick={() => setSidebarOpen(false)}
-              >
-                Debug Ventas
-              </NavLink>
-           </li> */}
 
            {/* Botón de Cerrar Sesión como un ítem de la lista */}
            {/* Añadimos mt-4 para un pequeño espacio superior */}
-           <li className="mt-4"> {/* Añadido margen superior */}
+           <li className="mt-4 pt-4 border-t border-gray-700"> {/* Añadido margen superior y borde */}
                 {/* Puedes mostrar el email del usuario aquí usando el contexto */}
                  {/* {user && <p className="text-sm text-gray-400 mb-3">Logueado como: {user.email}</p>} */}
                 <button
@@ -125,16 +176,6 @@ export default function DashboardLayout() {
                 </button>
             </li>
         </ul>
-
-        {/* Eliminamos el div anterior que contenía el botón de cerrar sesión */}
-        {/* <div className="mt-8 pt-4 border-t border-gray-700">
-             <button
-                 onClick={handleLogout}
-                 className="w-full text-left px-4 py-2 bg-red-600 text-white font-semibold rounded-md hover:bg-red-700 transition duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50"
-             >
-                 Cerrar Sesión
-             </button>
-         </div> */}
 
       </nav>
 
