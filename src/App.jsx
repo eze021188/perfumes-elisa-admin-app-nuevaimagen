@@ -12,6 +12,9 @@ import { ComprasProvider } from './contexts/ComprasContext';
 // >>> Importa tu nuevo AuthProvider y useAuth <<<
 import { AuthProvider, useAuth } from './contexts/AuthContext'; // Asegúrate de que la ruta sea correcta
 
+// Importa la nueva página de Crear Presupuesto
+import CrearPresupuesto from './pages/CrearPresupuesto'; // <--- Importa aquí
+
 // Páginas públicas (importadas del directorio pages)
 import Login from './pages/Login';
 import Signup from './pages/Signup';
@@ -141,6 +144,10 @@ export default function App() {
                   <Route path="reportes" element={<Reportes />} />
                   <Route path="usuarios" element={<UsersPermissions />} />
                   <Route path="saldos-clientes" element={<SaldosClientes />} />
+
+                   {/* AGREGA AQUÍ LA RUTA PARA CREAR PRESUPUESTOS */}
+                   <Route path="presupuestos/crear" element={<CrearPresupuesto />} />
+
 
                    {/* Puedes añadir aquí rutas protegidas adicionales si no usan el DashboardLayout,
                        o si quieres proteger solo algunas rutas dentro del layout, pero

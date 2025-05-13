@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react'; // Importar useMemo
 import { supabase } from '../supabase';
-import ModalEditarProducto from './ModalEditarProducto';
+import ModalEditarProducto from './ModalEditarProducto'; // Mantener si se usa para editar
 import toast from 'react-hot-toast';
 
 export default function ProductosItems() {
   const [productos, setProductos] = useState([]);
   const [busqueda, setBusqueda] = useState('');
-  const [modalActivo, setModalActivo] = useState(false);
+  const [modalActivo, setModalActivo] = useState(false); // Modal para editar (existente)
   const [productoEditando, setProductoEditando] = useState(null);
   const [actualizando, setActualizando] = useState(false);
   const [seleccionados, setSeleccionados] = useState(new Set());
@@ -15,6 +15,23 @@ export default function ProductosItems() {
   // --- Estados para el ordenamiento ---
   const [sortColumn, setSortColumn] = useState('nombre'); // Columna por defecto para ordenar (por nombre)
   const [sortDirection, setSortDirection] = useState('asc'); // Dirección por defecto (ascendente)
+
+  // >>> Nuevos estados para el modal de Agregar Producto <<<
+  const [showAddProductModal, setShowAddProductModal] = useState(false);
+  const [newProductForm, setNewProductForm] = useState({
+      nombre: '',
+      stock: '',
+      precio: '', // Precio de venta (normal)
+      precio_promocion: '', // Precio de promoción (opcional)
+      costo_final_usd: '', // Costo final en USD
+      costo_final_mxn: '', // Costo final en MXN
+      codigo: '', // Código del producto (opcional)
+      categoria: '', // Categoría (opcional)
+      imagen_url: '', // URL de imagen (opcional)
+      // Agrega otros campos si tu tabla 'productos' los tiene
+  });
+  const [isAddingProduct, setIsAddingProduct] = useState(false); // Estado para indicar si se está guardando el nuevo producto
+
 
   useEffect(() => {
     cargarProductos();
@@ -126,7 +143,7 @@ export default function ProductosItems() {
       toast.info('No hay productos seleccionados para eliminar.');
       return;
     }
-    if (!window.confirm(`¿Estás seguro de eliminar ${ids.length} producto(s) seleccionado(s)? Esto también eliminará sus movimientos de inventario y registros de compras/ventas asociados.`)) {
+    if (!window.confirm(`¿Estás seguro de eliminar ${ids.length} producto(s) seleccionado(s)? Esta acción también eliminará sus movimientos de inventario y registros de compras/ventas asociados.`)) {
         return;
     }
 
@@ -228,7 +245,6 @@ export default function ProductosItems() {
     // Pero si hubo errores, una recarga completa podría ser útil para sincronizar.
     // await cargarProductos(); // Opcional: descomentar si quieres recargar siempre
 
-    setActualizando(false);
     setSeleccionados(new Set()); // Limpiar selección después de actualizar
   };
 
@@ -273,6 +289,84 @@ export default function ProductosItems() {
 
   const gananciasProyectadas = totalValorStock - costoTotalStock;
 
+    // >>> Calcular el total de unidades en stock de todos los productos <<<
+    const totalUnidadesStock = useMemo(() => {
+        return productos.reduce((sum, p) => sum + (parseFloat(p.stock || 0)), 0);
+    }, [productos]); // Recalcular solo cuando cambia la lista completa de productos
+
+
+  // >>> Lógica para el modal de Agregar Producto <<<
+  const handleNewProductInputChange = (e) => {
+      const { name, value } = e.target;
+      setNewProductForm(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleAddProduct = async () => {
+      setIsAddingProduct(true);
+      // Validaciones básicas
+      if (!newProductForm.nombre || newProductForm.stock === '' || newProductForm.precio === '') {
+          toast.error('El nombre, stock y precio son obligatorios.');
+          setIsAddingProduct(false);
+          return;
+      }
+
+      const stockNum = parseFloat(newProductForm.stock) || 0;
+      const precioNum = parseFloat(newProductForm.precio) || 0;
+      const precioPromocionNum = parseFloat(newProductForm.precio_promocion) || null; // Usar null si está vacío
+      const costoFinalUsdNum = parseFloat(newProductForm.costo_final_usd) || null; // Usar null si está vacío
+      const costoFinalMxnNum = parseFloat(newProductForm.costo_final_mxn) || null; // Usar null si está vacío
+
+
+      if (stockNum < 0 || precioNum < 0 || (precioPromocionNum !== null && precioPromocionNum < 0) || (costoFinalUsdNum !== null && costoFinalUsdNum < 0) || (costoFinalMxnNum !== null && costoFinalMxnNum < 0)) {
+          toast.error('Los valores numéricos no pueden ser negativos.');
+          setIsAddingProduct(false);
+          return;
+      }
+
+      const productToInsert = {
+          nombre: newProductForm.nombre.trim(),
+          stock: stockNum,
+          precio: precioNum, // Precio normal
+          precio_promocion: precioPromocionNum,
+          costo_final_usd: costoFinalUsdNum,
+          costo_final_mxn: costoFinalMxnNum,
+          codigo: newProductForm.codigo.trim() || null, // Usar null si está vacío
+          categoria: newProductForm.categoria.trim() || null, // Usar null si está vacío
+          imagen_url: newProductForm.imagen_url.trim() || null, // Usar null si está vacío
+          // Asegúrate de incluir otros campos si son obligatorios en tu BD
+      };
+
+      const { data, error } = await supabase
+          .from('productos')
+          .insert([productToInsert])
+          .select() // Opcional: seleccionar el producto insertado para obtener su ID
+          .single();
+
+      if (error) {
+          console.error('Error al agregar producto:', error.message);
+          toast.error(`Error al agregar producto: ${error.message}`);
+      } else {
+          toast.success('Producto agregado exitosamente!');
+          // Limpiar formulario y cerrar modal
+          setNewProductForm({
+              nombre: '', stock: '', precio: '', precio_promocion: '',
+              costo_final_usd: '', costo_final_mxn: '', codigo: '', categoria: '', imagen_url: ''
+          });
+          setShowAddProductModal(false);
+          cargarProductos(); // Recargar la lista de productos
+      }
+      setIsAddingProduct(false);
+  };
+
+  const closeAddProductModal = () => {
+      setShowAddProductModal(false);
+      // Opcional: limpiar el formulario al cerrar el modal sin guardar
+      setNewProductForm({
+          nombre: '', stock: '', precio: '', precio_promocion: '',
+          costo_final_usd: '', costo_final_mxn: '', codigo: '', categoria: '', imagen_url: ''
+      });
+  };
+
 
   return (
     <div>
@@ -282,10 +376,20 @@ export default function ProductosItems() {
         <div>Costo de stock: <span className="font-semibold">{formatCurrencyMXN(costoTotalStock)}</span></div>
         <div>Total en stock (Venta): <span className="font-semibold">{formatCurrencyMXN(totalValorStock)}</span></div> {/* Etiqueta más clara */}
         <div>Ganancias proyectadas: <span className="font-semibold">{formatCurrencyMXN(gananciasProyectadas)}</span></div>
+         {/* >>> Mostrar el total de unidades en stock <<< */}
+         <div>Total artículos en tienda: <span className="font-semibold">{totalUnidadesStock}</span></div>
       </div>
 
+      {/* Acciones masivas y botón Agregar Producto */}
       <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
         <div className="flex items-center gap-4">
+             {/* >>> Botón Agregar Producto <<< */}
+            <button
+                onClick={() => setShowAddProductModal(true)} // Abre el modal al hacer clic
+                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors text-xs md:text-sm whitespace-nowrap"
+            >
+                Agregar producto
+            </button>
             <button
                 onClick={eliminarSeleccionados}
                 disabled={seleccionados.size === 0}
@@ -298,7 +402,7 @@ export default function ProductosItems() {
                 disabled={actualizando || seleccionados.size === 0} // Deshabilitar si no hay seleccionados
                 className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 text-xs md:text-sm"
             >
-                {actualizando ? 'Actualizando...' : 'Actualizar Seleccionados'} {/* Texto más claro */}
+                {actualizando ? 'Actualizando...' : 'Actualizar Precios Seleccionados'} {/* Texto más claro */}
             </button>
         </div>
       </div>
@@ -410,6 +514,8 @@ export default function ProductosItems() {
               <label className="text-gray-600 mb-1 text-[10px]">Promoción</label>
               <input
                 type="number"
+                 min="0"
+                 step="0.01"
                 // Usar .toString() para evitar advertencias de React con valores null/undefined en inputs controlados
                 value={(producto.promocion ?? '').toString()}
                 onChange={e => handleEditarLocal(producto.id, 'promocion', e.target.value)} // Llamar a handleEditarLocal
@@ -421,6 +527,8 @@ export default function ProductosItems() {
               <label className="text-gray-600 mb-1 text-[10px]">P. Normal</label>
               <input
                 type="number"
+                 min="0"
+                 step="0.01"
                  // Usar .toString() para evitar advertencias de React con valores null/undefined en inputs controlados
                 value={(producto.precio_normal ?? '').toString()}
                 onChange={e => handleEditarLocal(producto.id, 'precio_normal', e.target.value)} // Llamar a handleEditarLocal
@@ -460,6 +568,168 @@ export default function ProductosItems() {
           onGuardado={cerrarModal} // Al guardar en el modal, cerramos y recargamos la lista
         />
       )}
+
+      {/* >>> Modal para Agregar Nuevo Producto <<< */}
+      {showAddProductModal && (
+          <div
+              className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+              onClick={closeAddProductModal} // Cerrar al hacer clic fuera
+          >
+              <div
+                  onClick={(e) => e.stopPropagation()} // Evitar cerrar al hacer clic dentro
+                  className="bg-white rounded-lg shadow-lg w-full max-w-md p-6 max-h-[90vh] overflow-y-auto relative" // Ancho y alto ajustados
+              >
+                  {/* Encabezado del Modal */}
+                  <div className="flex justify-between items-center mb-4 border-b pb-3">
+                      <h3 className="text-xl font-bold text-gray-800">Agregar Nuevo Producto</h3>
+                      <button
+                          onClick={closeAddProductModal}
+                          className="text-gray-600 hover:text-gray-800 text-2xl font-bold leading-none ml-4"
+                      >
+                          &times;
+                      </button>
+                  </div>
+
+                  {/* Formulario para Nuevo Producto */}
+                  <div className="grid grid-cols-1 gap-4 mb-6">
+                      <div>
+                          <label htmlFor="nombre" className="block text-sm font-medium text-gray-700 mb-1">Nombre del Producto <span className="text-red-500">*</span></label>
+                          <input
+                              type="text"
+                              id="nombre"
+                              name="nombre"
+                              value={newProductForm.nombre}
+                              onChange={handleNewProductInputChange}
+                              className="w-full border border-gray-300 px-3 py-2 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                              required
+                          />
+                      </div>
+                       <div>
+                          <label htmlFor="stock" className="block text-sm font-medium text-gray-700 mb-1">Stock Inicial <span className="text-red-500">*</span></label>
+                          <input
+                              type="number"
+                              id="stock"
+                              name="stock"
+                               min="0"
+                               step="any"
+                              value={newProductForm.stock}
+                              onChange={handleNewProductInputChange}
+                              className="w-full border border-gray-300 px-3 py-2 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                              required
+                          />
+                      </div>
+                       <div>
+                          <label htmlFor="precio" className="block text-sm font-medium text-gray-700 mb-1">Precio de Venta (Normal) <span className="text-red-500">*</span></label>
+                          <input
+                              type="number"
+                              id="precio"
+                              name="precio"
+                               min="0"
+                               step="0.01"
+                              value={newProductForm.precio}
+                              onChange={handleNewProductInputChange}
+                              className="w-full border border-gray-300 px-3 py-2 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                              required
+                          />
+                      </div>
+                       <div>
+                          <label htmlFor="precio_promocion" className="block text-sm font-medium text-gray-700 mb-1">Precio de Venta (Promoción)</label>
+                          <input
+                              type="number"
+                              id="precio_promocion"
+                              name="precio_promocion"
+                               min="0"
+                               step="0.01"
+                              value={newProductForm.precio_promocion}
+                              onChange={handleNewProductInputChange}
+                              className="w-full border border-gray-300 px-3 py-2 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                          />
+                      </div>
+                       <div>
+                          <label htmlFor="costo_final_usd" className="block text-sm font-medium text-gray-700 mb-1">Costo Final (USD)</label>
+                          <input
+                              type="number"
+                              id="costo_final_usd"
+                              name="costo_final_usd"
+                               min="0"
+                               step="0.01"
+                              value={newProductForm.costo_final_usd}
+                              onChange={handleNewProductInputChange}
+                              className="w-full border border-gray-300 px-3 py-2 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                          />
+                      </div>
+                       <div>
+                          <label htmlFor="costo_final_mxn" className="block text-sm font-medium text-gray-700 mb-1">Costo Final (MXN)</label>
+                          <input
+                              type="number"
+                              id="costo_final_mxn"
+                              name="costo_final_mxn"
+                               min="0"
+                               step="0.01"
+                              value={newProductForm.costo_final_mxn}
+                              onChange={handleNewProductInputChange}
+                              className="w-full border border-gray-300 px-3 py-2 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                          />
+                      </div>
+                       <div>
+                          <label htmlFor="codigo" className="block text-sm font-medium text-gray-700 mb-1">Código</label>
+                          <input
+                              type="text"
+                              id="codigo"
+                              name="codigo"
+                              value={newProductForm.codigo}
+                              onChange={handleNewProductInputChange}
+                              className="w-full border border-gray-300 px-3 py-2 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                          />
+                      </div>
+                       <div>
+                          <label htmlFor="categoria" className="block text-sm font-medium text-gray-700 mb-1">Categoría</label>
+                          <input
+                              type="text"
+                              id="categoria"
+                              name="categoria"
+                              value={newProductForm.categoria}
+                              onChange={handleNewProductInputChange}
+                              className="w-full border border-gray-300 px-3 py-2 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                          />
+                      </div>
+                       <div>
+                          <label htmlFor="imagen_url" className="block text-sm font-medium text-gray-700 mb-1">URL Imagen</label>
+                          <input
+                              type="text"
+                              id="imagen_url"
+                              name="imagen_url"
+                              value={newProductForm.imagen_url}
+                              onChange={handleNewProductInputChange}
+                              className="w-full border border-gray-300 px-3 py-2 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                          />
+                      </div>
+                      {/* Agrega más campos del formulario según tu tabla */}
+                  </div>
+
+                  {/* Botones del Modal */}
+                  <div className="flex justify-end gap-4">
+                      <button
+                          onClick={handleAddProduct}
+                          disabled={isAddingProduct || !newProductForm.nombre || newProductForm.stock === '' || newProductForm.precio === ''}
+                          className="px-6 py-2 bg-green-600 text-white rounded-md font-semibold hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                          {isAddingProduct ? 'Agregando...' : 'Guardar Producto'}
+                      </button>
+                      <button
+                          onClick={closeAddProductModal}
+                          disabled={isAddingProduct}
+                          className="px-6 py-2 bg-gray-300 text-gray-800 rounded-md font-semibold hover:bg-gray-400 transition-colors disabled:opacity-50"
+                      >
+                          Cancelar
+                      </button>
+                  </div>
+
+              </div> {/* Cierre correcto del div principal del contenido del modal */}
+          </div> /* Cierre correcto del div del overlay del modal */
+      )}
+
+
     </div>
   );
 }

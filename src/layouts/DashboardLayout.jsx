@@ -111,20 +111,30 @@ export default function DashboardLayout() {
                 Debug Ventas
               </NavLink>
            </li> */}
+
+           {/* Botón de Cerrar Sesión como un ítem de la lista */}
+           {/* Añadimos mt-4 para un pequeño espacio superior */}
+           <li className="mt-4"> {/* Añadido margen superior */}
+                {/* Puedes mostrar el email del usuario aquí usando el contexto */}
+                 {/* {user && <p className="text-sm text-gray-400 mb-3">Logueado como: {user.email}</p>} */}
+                <button
+                    onClick={handleLogout} // Llama a la función de cerrar sesión
+                    className="w-full text-left px-4 py-2 bg-red-600 text-white font-semibold rounded-md hover:bg-red-700 transition duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50"
+                >
+                    Cerrar Sesión
+                </button>
+            </li>
         </ul>
 
-        {/* Botón de Cerrar Sesión */}
-        {/* Lo colocamos al final de la lista o en su propio div para separarlo */}
-        <div className="mt-8 pt-4 border-t border-gray-700"> {/* Margen superior y borde */}
-            {/* Puedes mostrar el email del usuario aquí usando el contexto */}
-             {/* {user && <p className="text-sm text-gray-400 mb-3">Logueado como: {user.email}</p>} */}
-            <button
-                onClick={handleLogout} // Llama a la función de cerrar sesión
-                className="w-full text-left px-4 py-2 bg-red-600 text-white font-semibold rounded-md hover:bg-red-700 transition duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50"
-            >
-                Cerrar Sesión
-            </button>
-        </div>
+        {/* Eliminamos el div anterior que contenía el botón de cerrar sesión */}
+        {/* <div className="mt-8 pt-4 border-t border-gray-700">
+             <button
+                 onClick={handleLogout}
+                 className="w-full text-left px-4 py-2 bg-red-600 text-white font-semibold rounded-md hover:bg-red-700 transition duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50"
+             >
+                 Cerrar Sesión
+             </button>
+         </div> */}
 
       </nav>
 

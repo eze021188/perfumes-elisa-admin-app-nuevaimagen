@@ -1,8 +1,21 @@
 // src/components/Sidebar.jsx
-import React from 'react'
-import { NavLink } from 'react-router-dom'
+import React from 'react';
+import { NavLink } from 'react-router-dom';
 
 export default function Sidebar({ open, onClose }) {
+  const links = [
+    ['/', 'Inicio'],
+    ['/checkout', 'Checkout'],
+    ['/presupuestos/crear', 'Presupuestos'],
+    ['/productos', 'Productos'],
+    ['/clientes', 'Clientes'],
+    ['/compras', 'Compras'],
+    ['/ventas', 'Ventas'],
+    ['/reportes', 'Reportes'],
+    ['/usuarios', 'Usuarios y permisos'],
+    ['/saldos-clientes', 'Saldos Clientes'],
+  ];
+
   return (
     <nav
       className={`fixed inset-y-0 left-0 w-64 bg-black text-white p-6 z-50
@@ -12,17 +25,7 @@ export default function Sidebar({ open, onClose }) {
     >
       <h1 className="text-2xl font-bold mb-6">Perfumes Elisitaa</h1>
       <ul className="space-y-4">
-        {[
-          ['/', 'Inicio'],
-          ['/checkout', 'Checkout'],
-          ['/productos', 'Productos'],
-          ['/clientes', 'Clientes'],
-          ['/compras', 'Compras'],
-          ['/ventas', 'Ventas'],
-          ['/reportes', 'Reportes'],
-          ['/usuarios', 'Usuarios y permisos'],
-          ['/saldos-clientes', 'Saldos Clientes'],
-        ].map(([to, label]) => (
+        {links.map(([to, label]) => (
           <li key={to}>
             <NavLink
               to={to}
@@ -42,5 +45,5 @@ export default function Sidebar({ open, onClose }) {
         ))}
       </ul>
     </nav>
-  )
+  );
 }
