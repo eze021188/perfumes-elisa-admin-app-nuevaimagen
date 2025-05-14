@@ -1,11 +1,13 @@
+// src/pages/Productos.jsx
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import ProductosItems from '../components/ProductosItems';
-import ProductosStock from '../components/ProductosStock.jsx';
-
+import ProductosItems from '../components/ProductosItems'; // Tu componente existente
+import ProductosStock from '../components/ProductosStock.jsx'; // Tu componente existente
+// Asegúrate de que este archivo exista en la ruta correcta: src/components/ProductoHTMLInput.jsx
+import ProductoHTMLInput from '../components/ProductoHTMLInput.jsx'; // Componente para gestionar el HTML del producto
 
 export default function Productos() {
-  const [pestaniaActiva, setPestaniaActiva] = useState('ITEMS');
+  const [pestaniaActiva, setPestaniaActiva] = useState('ITEMS'); // 'ITEMS' como pestaña inicial
   const navigate = useNavigate();
 
   return (
@@ -59,19 +61,29 @@ export default function Productos() {
         >
           STOCK
         </button>
+        {/* --- NUEVO BOTÓN DE PESTAÑA: DETALLE HTML --- */}
+        <button
+          className={`
+             px-6 py-3 -mb-[2px] border-b-2 text-lg font-semibold transition duration-200 ease-in-out focus:outline-none
+            ${
+              pestaniaActiva === 'HTML_DETALLE' // Nuevo identificador para esta pestaña
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-gray-600 hover:text-blue-600 hover:border-blue-300'
+            }
+          `}
+          onClick={() => setPestaniaActiva('HTML_DETALLE')}
+        >
+          DETALLE HTML
+        </button>
       </div>
 
       {/* Contenido según pestaña activa */}
       {/* Contenedor del contenido con padding y fondo blanco */}
       <div className="bg-white p-6 rounded-lg shadow-md"> {/* Aumentado padding, bordes redondeados y sombra */}
-      {pestaniaActiva === 'ITEMS' ? (
-          // Asegúrate de que ProductosItems tenga su propio diseño interno o clases de Tailwind
-          <ProductosItems />
-      ) : (
-          // Asegúrate de que ProductosStock tenga su propio diseño interno o clases de Tailwind
-          <ProductosStock />
-      )}
-
+      {pestaniaActiva === 'ITEMS' && <ProductosItems />}
+      {pestaniaActiva === 'STOCK' && <ProductosStock />}
+      {/* --- NUEVA CONDICIÓN PARA RENDERIZAR EL COMPONENTE DE GESTIÓN DE HTML --- */}
+      {pestaniaActiva === 'HTML_DETALLE' && <ProductoHTMLInput />}
       </div>
     </div>
   );
