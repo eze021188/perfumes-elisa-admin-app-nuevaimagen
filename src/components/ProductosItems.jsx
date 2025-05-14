@@ -312,7 +312,7 @@ export default function ProductosItems() {
 
       const stockNum = parseFloat(newProductForm.stock) || 0;
       const precioNum = parseFloat(newProductForm.precio_normal) || 0;
-      const precioPromocionNum = parseFloat(newProductForm.precio_promocion) || null; // Usar null si está vacío
+      const precioPromocionNum = parseFloat(newProductForm.promocion) || null; // Usar null si está vacío
       const costoFinalUsdNum = parseFloat(newProductForm.costo_final_usd) || null; // Usar null si está vacío
       const costoFinalMxnNum = parseFloat(newProductForm.costo_final_mxn) || null; // Usar null si está vacío
 
@@ -327,7 +327,7 @@ export default function ProductosItems() {
           nombre: newProductForm.nombre.trim(),
           stock: stockNum,
           precio_normal: precioNum, // Precio normal
-          precio_promocion: precioPromocionNum,
+          promocion: precioPromocionNum,
           costo_final_usd: costoFinalUsdNum,
           costo_final_mxn: costoFinalMxnNum,
           codigo: newProductForm.codigo.trim() || null, // Usar null si está vacío
@@ -349,7 +349,7 @@ export default function ProductosItems() {
           toast.success('Producto agregado exitosamente!');
           // Limpiar formulario y cerrar modal
           setNewProductForm({
-              nombre: '', stock: '', precio_normal: '', precio_promocion: '',
+              nombre: '', stock: '', precio_normal: '', promocion: '',
               costo_final_usd: '', costo_final_mxn: '', codigo: '', categoria: '', imagen_url: ''
           });
           setShowAddProductModal(false);
@@ -362,7 +362,7 @@ export default function ProductosItems() {
       setShowAddProductModal(false);
       // Opcional: limpiar el formulario al cerrar el modal sin guardar
       setNewProductForm({
-          nombre: '', stock: '', precio_normal: '', precio_promocion: '',
+          nombre: '', stock: '', precio_normal: '', promocion: '',
           costo_final_usd: '', costo_final_mxn: '', codigo: '', categoria: '', imagen_url: ''
       });
   };
@@ -633,14 +633,14 @@ export default function ProductosItems() {
                           />
                       </div>
                        <div>
-                          <label htmlFor="precio_promocion" className="block text-sm font-medium text-gray-700 mb-1">Precio de Venta (Promoción)</label>
+                          <label htmlFor="promocion" className="block text-sm font-medium text-gray-700 mb-1">Precio de Venta (Promoción)</label>
                           <input
                               type="number"
-                              id="precio_promocion"
-                              name="precio_promocion"
+                              id="promocion"
+                              name="promocion"
                                min="0"
                                step="0.01"
-                              value={newProductForm.precio_promocion}
+                              value={newProductForm.promocion}
                               onChange={handleNewProductInputChange}
                               className="w-full border border-gray-300 px-3 py-2 rounded-md focus:ring-blue-500 focus:border-blue-500"
                           />
