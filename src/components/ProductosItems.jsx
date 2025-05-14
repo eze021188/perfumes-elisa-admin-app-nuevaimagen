@@ -21,8 +21,8 @@ export default function ProductosItems() {
   const [newProductForm, setNewProductForm] = useState({
       nombre: '',
       stock: '',
-      promocion: '', // Precio de venta (normal)
-      precio_promocion: '', // Precio de promoción (opcional)
+      precio: '', // Precio de venta (normal)
+      promocion: '', // Precio de promoción (opcional)
       costo_final_usd: '', // Costo final en USD
       costo_final_mxn: '', // Costo final en MXN
       codigo: '', // Código del producto (opcional)
