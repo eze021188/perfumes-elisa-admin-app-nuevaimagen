@@ -711,7 +711,7 @@ export default function ProductosItems() {
                   <div className="flex justify-end gap-4">
                       <button
                           onClick={handleAddProduct}
-                          disabled={isAddingProduct || !newProductForm.nombre || newProductForm.stock === '' || newProductForm.precio === ''}
+                          disabled={isAddingProduct || !newProductForm.nombre || newProductForm.stock === '' || newProductForm.precio_normal === ''}
                           className="px-6 py-2 bg-green-600 text-white rounded-md font-semibold hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                           {isAddingProduct ? 'Agregando...' : 'Guardar Producto'}
