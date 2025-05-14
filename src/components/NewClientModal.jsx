@@ -46,12 +46,18 @@ export default function NewClientModal({
   if (!isOpen) return null
 
   function validate() {
-    const errs = { nombre: '', telefono: '', correo: '' }
-    if (!form.nombre.trim()) errs.nombre = 'Requerido'
-    if (!form.telefono.trim()) errs.telefono = 'Requerido'
-    if (!form.correo.trim() || !form.correo.includes('@')) errs.correo = 'Email inválido'
-    setErrors(errs)
-    return !errs.nombre && !errs.telefono && !errs.correo
+    const errs = { nombre: '', telefono: '', correo: '', direccion: '' };
+  
+    if (!form.nombre.trim()) {
+      errs.nombre = 'Requerido';
+    }
+  
+    if (form.correo.trim() && !form.correo.includes('@')) {
+      errs.correo = 'Email inválido';
+    }
+  
+    setErrors(errs);
+    return Object.values(errs).every(errorMsg => errorMsg === '');
   }
 
   async function handleSave() {
