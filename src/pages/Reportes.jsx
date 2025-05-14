@@ -396,7 +396,6 @@ export default function Reportes() {
       doc.setFontSize(10);
       doc.setFont(undefined, 'normal');
       // >>> CORRECCIÓN: Eliminar la línea de dirección específica <<<
-      // doc.text('Tu Calle #123, Tu Colonia', companyInfoX, yOffset + 12); // Dirección
       doc.text('Ciudad Apodaca, N.L., C.P. 66640', companyInfoX, yOffset + 12); // Ciudad y CP
       doc.text('Teléfono: 81 3080 4010', companyInfoX, yOffset + 17); // Teléfono
 
