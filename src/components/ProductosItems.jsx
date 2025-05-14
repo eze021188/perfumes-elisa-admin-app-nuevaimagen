@@ -619,7 +619,7 @@ export default function ProductosItems() {
                           />
                       </div>
                        <div>
-                          <label htmlFor="precio" className="block text-sm font-medium text-gray-700 mb-1">Precio de Venta (Normal) <span className="text-red-500">*</span></label>
+                          <label htmlFor="precio_normal" className="block text-sm font-medium text-gray-700 mb-1">Precio de Venta (Normal) <span className="text-red-500">*</span></label>
                           <input
                               type="number"
                               id="precio"
