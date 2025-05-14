@@ -223,8 +223,7 @@ export default function Ventas() {
       doc.text('PERFUMES ELISA', companyInfoX, yOffset + 5); // Título de la empresa
       doc.setFontSize(10);
       doc.setFont(undefined, 'normal');
-      doc.text('Tu Calle #123, Tu Colonia', companyInfoX, yOffset + 12); // Dirección
-      doc.text('Ciudad Apodaca, N.L., C.P. 66600', companyInfoX, yOffset + 17); // Ciudad y CP
+      doc.text('Ciudad Apodaca, N.L., C.P. 66640', companyInfoX, yOffset + 17); // Ciudad y CP
       doc.text('Teléfono: 81 3080 4010', companyInfoX, yOffset + 22); // Teléfono
       // doc.text('RFC: TU RFC AQUÍ', companyInfoX, yOffset + 27); // RFC (opcional)
 
