@@ -106,7 +106,7 @@ export default function NewClientModal({
         </h2>
 
         {/* Nombre */}
-        <label htmlFor="nc-nombre" className="block text-sm mb-1">Nombre*</label>
+        <label htmlFor="nc-nombre" className="block text-sm mb-1">Nombre</label>
         <input
           id="nc-nombre"
           ref={inputRef}
@@ -132,7 +132,7 @@ export default function NewClientModal({
         {errors.telefono && <p className="text-red-500 text-xs mb-2">{errors.telefono}</p>}
 
         {/* Correo */}
-        <label htmlFor="nc-correo" className="block text-sm mb-1">Correo*</label>
+        <label htmlFor="nc-correo" className="block text-sm mb-1">Correo</label>
         <input
           id="nc-correo"
           type="email"
