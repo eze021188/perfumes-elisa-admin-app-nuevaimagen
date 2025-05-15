@@ -1,44 +1,37 @@
-import React, { useState, useEffect, useMemo } from 'react'; // Importar useMemo
+// src/components/ProductosItems.jsx 
+// o src/pages/ProductosItems.jsx (asegúrate que el nombre y ruta de importación sean correctos)
+import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../supabase';
-import ModalEditarProducto from './ModalEditarProducto'; // Mantener si se usa para editar
+import ModalEditarProducto from './ModalEditarProducto';
 import toast from 'react-hot-toast';
 
 export default function ProductosItems() {
   const [productos, setProductos] = useState([]);
   const [busqueda, setBusqueda] = useState('');
-  const [modalActivo, setModalActivo] = useState(false); // Modal para editar (existente)
+  const [modalActivo, setModalActivo] = useState(false);
   const [productoEditando, setProductoEditando] = useState(null);
-  const [actualizando, setActualizando] = useState(false);
+  const [actualizando, setActualizando] = useState(false); // Para la actualización de precios
   const [seleccionados, setSeleccionados] = useState(new Set());
-  const [mostrarSinStock, setMostrarSinStock] = useState(false); // Nuevo estado para controlar la visibilidad de productos sin stock
+  
+  // Estado para el filtro de stock
+  const [stockFilter, setStockFilter] = useState('con-stock'); // Opciones: 'con-stock', 'sin-stock', 'todos'
 
-  // --- Estados para el ordenamiento ---
-  const [sortColumn, setSortColumn] = useState('nombre'); // Columna por defecto para ordenar (por nombre)
-  const [sortDirection, setSortDirection] = useState('asc'); // Dirección por defecto (ascendente)
+  const [sortColumn, setSortColumn] = useState('nombre');
+  const [sortDirection, setSortDirection] = useState('asc');
 
-  // >>> Nuevos estados para el modal de Agregar Producto <<<
   const [showAddProductModal, setShowAddProductModal] = useState(false);
   const [newProductForm, setNewProductForm] = useState({
-      nombre: '',
-      stock: '',
-      precio_normal: '', // Precio de venta (normal)
-      promocion: '', // Precio de promoción (opcional)
-      costo_final_usd: '', // Costo final en USD
-      costo_final_mxn: '', // Costo final en MXN
-      codigo: '', // Código del producto (opcional)
-      categoria: '', // Categoría (opcional)
-      imagen_url: '', // URL de imagen (opcional)
-      // Agrega otros campos si tu tabla 'productos' los tiene
+      nombre: '', stock: '', precio_normal: '', promocion: '',
+      costo_final_usd: '', costo_final_mxn: '', codigo: '',
+      categoria: '', imagen_url: '',
   });
-  const [isAddingProduct, setIsAddingProduct] = useState(false); // Estado para indicar si se está guardando el nuevo producto
-
+  const [isAddingProduct, setIsAddingProduct] = useState(false);
 
   useEffect(() => {
     cargarProductos();
   }, []);
 
   const cargarProductos = async () => {
-    // Al cargar, no aplicamos ordenamiento aquí, lo haremos en el useMemo
     const { data, error } = await supabase.from('productos').select('*');
     if (error) {
       console.error('Error al cargar productos:', error.message);
@@ -48,38 +41,34 @@ export default function ProductosItems() {
     }
   };
 
-  // --- Función para manejar el cambio de ordenamiento ---
   const handleSort = (column) => {
       if (sortColumn === column) {
-          // Si es la misma columna, cambiar la dirección
           setSortDirection(prevDirection => (prevDirection === 'asc' ? 'desc' : 'asc'));
       } else {
-          // Si es una nueva columna, establecerla y ordenar ascendente por defecto
           setSortColumn(column);
           setSortDirection('asc');
       }
-      // No hay paginación en este componente, así que no necesitamos resetear la página
   };
 
-
-  // Lógica de filtrado y ordenamiento usando useMemo para optimizar
   const productosFiltradosYOrdenados = useMemo(() => {
-      let productosTrabajo = [...productos]; // Copia para no mutar el estado original
+      let productosTrabajo = [...productos]; 
 
       // 1. Filtrar por búsqueda
       if (busqueda) {
           productosTrabajo = productosTrabajo.filter(p =>
               (p.nombre || '').toLowerCase().includes(busqueda.toLowerCase()) ||
-              (p.codigo || '').toLowerCase().includes(busqueda.toLowerCase()) || // Asumiendo que tienes columna 'codigo'
-              (p.categoria || '').toLowerCase().includes(busqueda.toLowerCase()) // Asumiendo que tienes columna 'categoria'
-              // Agrega otros campos buscables aquí si es necesario
+              (p.codigo || '').toLowerCase().includes(busqueda.toLowerCase()) ||
+              (p.categoria || '').toLowerCase().includes(busqueda.toLowerCase())
           );
       }
 
-      // 2. Filtrar por stock (si mostrarSinStock es false)
-      if (!mostrarSinStock) {
+      // 2. Filtrar por stock según stockFilter
+      if (stockFilter === 'con-stock') {
           productosTrabajo = productosTrabajo.filter(p => p.stock && parseFloat(p.stock) > 0);
+      } else if (stockFilter === 'sin-stock') {
+          productosTrabajo = productosTrabajo.filter(p => !p.stock || parseFloat(p.stock) <= 0);
       }
+      // Si stockFilter es 'todos', no se aplica filtro de stock.
 
       // 3. Ordenar
       if (sortColumn) {
@@ -87,42 +76,31 @@ export default function ProductosItems() {
               const aValue = a[sortColumn];
               const bValue = b[sortColumn];
 
-              // Manejar valores nulos o indefinidos: los ponemos al final en orden ascendente
               if (aValue == null && bValue == null) return 0;
               if (aValue == null) return sortDirection === 'asc' ? 1 : -1;
               if (bValue == null) return sortDirection === 'asc' ? -1 : 1;
 
-              // Manejar ordenamiento numérico (para 'stock', 'promocion', 'precio_normal', 'costo_final_usd', 'costo_final_mxn')
-              // Convertir a número para comparación numérica, usando 0 como fallback si no es un número válido
-              const aNum = parseFloat(aValue) || 0;
-              const bNum = parseFloat(bValue) || 0;
-
-              if (sortColumn === 'stock' || sortColumn === 'promocion' || sortColumn === 'precio_normal' || sortColumn === 'costo_final_usd' || sortColumn === 'costo_final_mxn') {
+              const numColumns = ['stock', 'promocion', 'precio_normal', 'costo_final_usd', 'costo_final_mxn'];
+              if (numColumns.includes(sortColumn)) {
+                   const aNum = parseFloat(aValue) || 0;
+                   const bNum = parseFloat(bValue) || 0;
                    if (aNum < bNum) return sortDirection === 'asc' ? -1 : 1;
                    if (aNum > bNum) return sortDirection === 'asc' ? 1 : -1;
                    return 0;
               }
 
-              // Ordenamiento por defecto para texto (para 'nombre', 'codigo', 'categoria', 'imagen_url')
               const aString = String(aValue).toLowerCase();
               const bString = String(bValue).toLowerCase();
-
-              if (aString < bString) {
-                  return sortDirection === 'asc' ? -1 : 1;
-              }
-              if (aString > bString) {
-                  return sortDirection === 'asc' ? 1 : -1;
-              }
-              return 0; // Son iguales
+              if (aString < bString) return sortDirection === 'asc' ? -1 : 1;
+              if (aString > bString) return sortDirection === 'asc' ? 1 : -1;
+              return 0;
           });
       }
-
       return productosTrabajo;
-  }, [productos, busqueda, mostrarSinStock, sortColumn, sortDirection]); // Dependencias del useMemo
+  }, [productos, busqueda, stockFilter, sortColumn, sortDirection]);
 
 
   const toggleSeleccionarTodos = () => {
-    // Ahora usamos productosFiltradosYOrdenados para la selección
     if (seleccionados.size === productosFiltradosYOrdenados.length && productosFiltradosYOrdenados.length > 0) {
       setSeleccionados(new Set());
     } else {
@@ -146,38 +124,18 @@ export default function ProductosItems() {
     if (!window.confirm(`¿Estás seguro de eliminar ${ids.length} producto(s) seleccionado(s)? Esta acción también eliminará sus movimientos de inventario y registros de compras/ventas asociados.`)) {
         return;
     }
-
-    // >>> Importante: Eliminar en cascada en la BD es más eficiente y seguro si está configurado <<<
-    // Si no tienes cascada configurada, el orden de eliminación es importante:
-    // Primero tablas que referencian a 'productos' (registros_inventario, movimientos_inventario, detalle_venta, compra_items)
-    // Luego la tabla 'productos'
-
     console.log(`Attempting to delete related records for product IDs: ${ids.join(', ')}`);
-
-    // Eliminar registros_inventario
     const { error: errReg } = await supabase.from('registros_inventario').delete().in('producto_id', ids);
     if (errReg) console.error('Error al borrar registros_inventario:', errReg.message);
-
-    // Eliminar movimientos_inventario
     const { error: errMov } = await supabase.from('movimientos_inventario').delete().in('producto_id', ids);
     if (errMov) console.error('Error al borrar movimientos_inventario:', errMov.message);
+    const { error: errDetalleVenta } = await supabase.from('detalle_venta').delete().in('producto_id', ids);
+    if (errDetalleVenta) console.error('Error al borrar detalle_venta:', errDetalleVenta.message);
+    const { error: errCompraItems } = await supabase.from('compra_items').delete().in('producto_id', ids);
+    if (errCompraItems) console.error('Error al borrar compra_items:', errCompraItems.message);
 
-     // Eliminar detalle_venta
-     const { error: errDetalleVenta } = await supabase.from('detalle_venta').delete().in('producto_id', ids);
-     if (errDetalleVenta) console.error('Error al borrar detalle_venta:', errDetalleVenta.message);
-
-     // Eliminar compra_items
-     const { error: errCompraItems } = await supabase.from('compra_items').delete().in('producto_id', ids);
-     if (errCompraItems) console.error('Error al borrar compra_items:', errCompraItems.message);
-
-
-    // Finalmente, eliminar los productos
     console.log(`Attempting to delete products for IDs: ${ids.join(', ')}`);
-    const { error: errProd } = await supabase
-      .from('productos')
-      .delete()
-      .in('id', ids);
-
+    const { error: errProd } = await supabase.from('productos').delete().in('id', ids);
     if (errProd) {
       console.error('Error al borrar productos:', errProd.message);
       toast.error('Error al eliminar productos.');
@@ -185,47 +143,34 @@ export default function ProductosItems() {
         console.log(`Deleted products for IDs: ${ids.join(', ')}`);
         toast.success(`${ids.length} producto(s) eliminado(s) exitosamente.`);
     }
-
     setSeleccionados(new Set());
-    await cargarProductos(); // Recargar la lista después de eliminar
+    await cargarProductos();
   };
 
-  // Esta función handleEditar ahora solo actualiza el estado local de la lista
-  // para reflejar los cambios hechos en los inputs de la lista.
   const handleEditarLocal = (id, campo, valor) => {
     setProductos(prev =>
       prev.map(p => (p.id === id ? { ...p, [campo]: valor } : p))
     );
   };
 
-  // La función para actualizar en la BD se llama handleActualizar
-  const handleActualizarPrecios = async () => { // Renombrada para mayor claridad
+  const handleActualizarPrecios = async () => {
     setActualizando(true);
-    // Preparamos solo los campos que pueden ser editados directamente en la lista
-    const updates = productosFiltradosYOrdenados.map(p => ({ // Usar la lista filtrada/ordenada
+    const updates = productosFiltradosYOrdenados.map(p => ({
       id: p.id,
-      // Asegurarse de que los valores son numéricos o null/undefined si están vacíos
-      promocion: parseFloat(p.promocion) || null, // Usar null si el input está vacío o no es número
-      precio_normal: parseFloat(p.precio_normal) || null // Usar null si el input está vacío o no es número
+      promocion: parseFloat(p.promocion) || null,
+      precio_normal: parseFloat(p.precio_normal) || null
     }));
-
-    // Filtramos solo los productos que realmente fueron seleccionados para actualizar
      const updatesToApply = updates.filter(item => seleccionados.has(item.id));
-
-
      if (updatesToApply.length === 0) {
          toast.info('No hay productos seleccionados para actualizar precios.');
          setActualizando(false);
          return;
      }
-
-
     const updatePromises = updatesToApply.map(item =>
         supabase.from('productos')
             .update({ promocion: item.promocion, precio_normal: item.precio_normal })
             .eq('id', item.id)
     );
-
     const results = await Promise.all(updatePromises);
     let hasError = false;
     results.forEach((result, index) => {
@@ -235,19 +180,12 @@ export default function ProductosItems() {
             hasError = true;
         }
     });
-
     if (!hasError) {
          toast.success(`${updatesToApply.length} precios actualizados exitosamente.`);
     }
-
-    // No necesitamos recargar todos los productos si la actualización fue exitosa,
-    // ya que handleEditarLocal ya actualizó el estado local 'productos'.
-    // Pero si hubo errores, una recarga completa podría ser útil para sincronizar.
-    // await cargarProductos(); // Opcional: descomentar si quieres recargar siempre
-
-    setSeleccionados(new Set()); // Limpiar selección después de actualizar
+    setSeleccionados(new Set());
+    setActualizando(false); // Asegúrate de resetear el estado 'actualizando'
   };
-
 
   const abrirModal = producto => {
     setProductoEditando(producto);
@@ -257,45 +195,22 @@ export default function ProductosItems() {
   const cerrarModal = () => {
     setModalActivo(false);
     setProductoEditando(null);
-    cargarProductos(); // Recargar productos después de cerrar el modal de edición
+    cargarProductos();
   };
 
-
   const formatCurrencyMXN = (number) => {
-    // Asegurarse de que el número sea válido antes de formatear
     const num = parseFloat(number);
-    if (isNaN(num)) {
-        return '$0.00'; // O algún otro indicador para valores no numéricos
-    }
+    if (isNaN(num)) { return '$0.00'; }
     return num.toLocaleString('es-MX', {
-      style: 'currency',
-      currency: 'MXN',
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
+      style: 'currency', currency: 'MXN', minimumFractionDigits: 2, maximumFractionDigits: 2,
     });
   };
 
-    // Calcular totales de stock y ganancias usando la lista COMPLETA de productos (no la filtrada/ordenada)
-    // Esto asegura que los totales reflejen todo el inventario, no solo lo que se muestra en la vista actual.
-  const costoTotalStock = productos.reduce(
-    (sum, p) => sum + (parseFloat(p.costo_final_mxn || 0) * parseFloat(p.stock || 0)),
-    0
-  );
-
-  const totalValorStock = productos.reduce(
-    (sum, p) => sum + (parseFloat(p.promocion || p.precio_normal || 0) * parseFloat(p.stock || 0)), // Usar precio promocional si existe, sino el normal
-    0
-  );
-
+  const costoTotalStock = useMemo(() => productos.reduce((sum, p) => sum + (parseFloat(p.costo_final_mxn || 0) * parseFloat(p.stock || 0)), 0), [productos]);
+  const totalValorStock = useMemo(() => productos.reduce((sum, p) => sum + (parseFloat(p.promocion || p.precio_normal || 0) * parseFloat(p.stock || 0)), 0), [productos]);
   const gananciasProyectadas = totalValorStock - costoTotalStock;
+  const totalUnidadesStock = useMemo(() => productos.reduce((sum, p) => sum + (parseFloat(p.stock || 0)), 0), [productos]);
 
-    // >>> Calcular el total de unidades en stock de todos los productos <<<
-    const totalUnidadesStock = useMemo(() => {
-        return productos.reduce((sum, p) => sum + (parseFloat(p.stock || 0)), 0);
-    }, [productos]); // Recalcular solo cuando cambia la lista completa de productos
-
-
-  // >>> Lógica para el modal de Agregar Producto <<<
   const handleNewProductInputChange = (e) => {
       const { name, value } = e.target;
       setNewProductForm(prev => ({ ...prev, [name]: value }));
@@ -303,89 +218,70 @@ export default function ProductosItems() {
 
   const handleAddProduct = async () => {
       setIsAddingProduct(true);
-      // Validaciones básicas
       if (!newProductForm.nombre || newProductForm.stock === '' || newProductForm.precio_normal === '') {
           toast.error('El nombre, stock y precio son obligatorios.');
           setIsAddingProduct(false);
           return;
       }
-
       const stockNum = parseFloat(newProductForm.stock) || 0;
       const precioNum = parseFloat(newProductForm.precio_normal) || 0;
-      const precioPromocionNum = parseFloat(newProductForm.promocion) || null; // Usar null si está vacío
-      const costoFinalUsdNum = parseFloat(newProductForm.costo_final_usd) || null; // Usar null si está vacío
-      const costoFinalMxnNum = parseFloat(newProductForm.costo_final_mxn) || null; // Usar null si está vacío
-
+      const precioPromocionNum = parseFloat(newProductForm.promocion) || null;
+      const costoFinalUsdNum = parseFloat(newProductForm.costo_final_usd) || null;
+      const costoFinalMxnNum = parseFloat(newProductForm.costo_final_mxn) || null;
 
       if (stockNum < 0 || precioNum < 0 || (precioPromocionNum !== null && precioPromocionNum < 0) || (costoFinalUsdNum !== null && costoFinalUsdNum < 0) || (costoFinalMxnNum !== null && costoFinalMxnNum < 0)) {
           toast.error('Los valores numéricos no pueden ser negativos.');
           setIsAddingProduct(false);
           return;
       }
-
       const productToInsert = {
-          nombre: newProductForm.nombre.trim(),
-          stock: stockNum,
-          precio_normal: precioNum, // Precio normal
-          promocion: precioPromocionNum,
-          costo_final_usd: costoFinalUsdNum,
-          costo_final_mxn: costoFinalMxnNum,
-          codigo: newProductForm.codigo.trim() || null, // Usar null si está vacío
-          categoria: newProductForm.categoria.trim() || null, // Usar null si está vacío
-          imagen_url: newProductForm.imagen_url.trim() || null, // Usar null si está vacío
-          // Asegúrate de incluir otros campos si son obligatorios en tu BD
+          nombre: newProductForm.nombre.trim(), stock: stockNum, precio_normal: precioNum,
+          promocion: precioPromocionNum, costo_final_usd: costoFinalUsdNum, costo_final_mxn: costoFinalMxnNum,
+          codigo: newProductForm.codigo.trim() || null, categoria: newProductForm.categoria.trim() || null,
+          imagen_url: newProductForm.imagen_url.trim() || null,
       };
-
-      const { data, error } = await supabase
-          .from('productos')
-          .insert([productToInsert])
-          .select() // Opcional: seleccionar el producto insertado para obtener su ID
-          .single();
-
+      const { error } = await supabase.from('productos').insert([productToInsert]).select().single();
       if (error) {
           console.error('Error al agregar producto:', error.message);
           toast.error(`Error al agregar producto: ${error.message}`);
       } else {
           toast.success('Producto agregado exitosamente!');
-          // Limpiar formulario y cerrar modal
           setNewProductForm({
-              nombre: '', stock: '', precio_normal: '', promocion: '',
-              costo_final_usd: '', costo_final_mxn: '', codigo: '', categoria: '', imagen_url: ''
+              nombre: '', stock: '', precio_normal: '', promocion: '', costo_final_usd: '',
+              costo_final_mxn: '', codigo: '', categoria: '', imagen_url: ''
           });
           setShowAddProductModal(false);
-          cargarProductos(); // Recargar la lista de productos
+          cargarProductos();
       }
       setIsAddingProduct(false);
   };
 
   const closeAddProductModal = () => {
       setShowAddProductModal(false);
-      // Opcional: limpiar el formulario al cerrar el modal sin guardar
       setNewProductForm({
-          nombre: '', stock: '', precio_normal: '', promocion: '',
-          costo_final_usd: '', costo_final_mxn: '', codigo: '', categoria: '', imagen_url: ''
+          nombre: '', stock: '', precio_normal: '', promocion: '', costo_final_usd: '',
+          costo_final_mxn: '', codigo: '', categoria: '', imagen_url: ''
       });
   };
+
+  // Contadores para los botones de filtro de stock
+  const countConStock = useMemo(() => productos.filter(p => p.stock && parseFloat(p.stock) > 0).length, [productos]);
+  const countSinStock = useMemo(() => productos.filter(p => !p.stock || parseFloat(p.stock) <= 0).length, [productos]);
 
 
   return (
     <div>
-      {/* Indicadores y acciones */}
-      {/* Usar los totales calculados sobre la lista completa */}
       <div className="mb-4 p-4 border rounded-lg shadow-sm bg-gray-50 flex flex-wrap gap-x-6 gap-y-2 justify-around items-center text-sm">
         <div>Costo de stock: <span className="font-semibold">{formatCurrencyMXN(costoTotalStock)}</span></div>
-        <div>Total en stock (Venta): <span className="font-semibold">{formatCurrencyMXN(totalValorStock)}</span></div> {/* Etiqueta más clara */}
+        <div>Total en stock (Venta): <span className="font-semibold">{formatCurrencyMXN(totalValorStock)}</span></div>
         <div>Ganancias proyectadas: <span className="font-semibold">{formatCurrencyMXN(gananciasProyectadas)}</span></div>
-         {/* >>> Mostrar el total de unidades en stock <<< */}
-         <div>Total artículos en tienda: <span className="font-semibold">{totalUnidadesStock}</span></div>
+        <div>Total artículos en tienda: <span className="font-semibold">{totalUnidadesStock}</span></div>
       </div>
 
-      {/* Acciones masivas y botón Agregar Producto */}
       <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
         <div className="flex items-center gap-4">
-             {/* >>> Botón Agregar Producto <<< */}
             <button
-                onClick={() => setShowAddProductModal(true)} // Abre el modal al hacer clic
+                onClick={() => setShowAddProductModal(true)}
                 className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors text-xs md:text-sm whitespace-nowrap"
             >
                 Agregar producto
@@ -398,28 +294,25 @@ export default function ProductosItems() {
                 Eliminar ({seleccionados.size})
             </button>
             <button
-                onClick={handleActualizarPrecios} // Llamar a la función renombrada
-                disabled={actualizando || seleccionados.size === 0} // Deshabilitar si no hay seleccionados
+                onClick={handleActualizarPrecios}
+                disabled={actualizando || seleccionados.size === 0}
                 className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 text-xs md:text-sm"
             >
-                {actualizando ? 'Actualizando...' : 'Actualizar Precios Seleccionados'} {/* Texto más claro */}
+                {actualizando ? 'Actualizando...' : 'Actualizar Precios Seleccionados'}
             </button>
         </div>
       </div>
 
-
-      {/* Buscador, selección y botón para mostrar/ocultar sin stock */}
+      {/* Buscador, selección y NUEVOS filtros de stock */}
       <div className="flex flex-col md:flex-row items-center mb-4 gap-4">
         <label className="inline-flex items-center">
           <input
             type="checkbox"
-            // Usar productosFiltradosYOrdenados para el total en la etiqueta
             checked={productosFiltradosYOrdenados.length > 0 && seleccionados.size === productosFiltradosYOrdenados.length}
             onChange={toggleSeleccionarTodos}
-            disabled={productosFiltradosYOrdenados.length === 0} // Deshabilitar si no hay productos filtrados/ordenados
+            disabled={productosFiltradosYOrdenados.length === 0}
             className="form-checkbox"
           />
-          {/* Usar productosFiltradosYOrdenados para el total en la etiqueta */}
           <span className="ml-2 text-sm text-gray-700">Seleccionar todos ({seleccionados.size}/{productosFiltradosYOrdenados.length})</span>
         </label>
         <input
@@ -429,66 +322,52 @@ export default function ProductosItems() {
           onChange={e => setBusqueda(e.target.value)}
           className="border border-gray-300 px-3 py-2 rounded w-full md:w-1/3 text-sm"
         />
-        <button
-          onClick={() => setMostrarSinStock(!mostrarSinStock)}
-          className="px-4 py-2 bg-sky-500 text-white rounded hover:bg-sky-600 transition-colors text-xs md:text-sm whitespace-nowrap"
-        >
-          {mostrarSinStock ? 'Ocultar sin stock' : 'Mostrar todos los productos'}
-        </button>
+        {/* NUEVOS BOTONES DE FILTRO DE STOCK */}
+        <div className="flex space-x-2">
+            <button
+                onClick={() => setStockFilter('con-stock')}
+                className={`px-3 py-2 text-xs md:text-sm font-medium rounded-md border transition-colors ${stockFilter === 'con-stock' ? 'bg-green-600 text-white border-green-700' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
+            >
+                Con Stock ({countConStock})
+            </button>
+            <button
+                onClick={() => setStockFilter('sin-stock')}
+                className={`px-3 py-2 text-xs md:text-sm font-medium rounded-md border transition-colors ${stockFilter === 'sin-stock' ? 'bg-red-600 text-white border-red-700' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
+            >
+                Sin Stock ({countSinStock})
+            </button>
+            <button
+                onClick={() => setStockFilter('todos')}
+                className={`px-3 py-2 text-xs md:text-sm font-medium rounded-md border transition-colors ${stockFilter === 'todos' ? 'bg-gray-600 text-white border-gray-700' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
+            >
+                Todos ({productos.length})
+            </button>
+        </div>
       </div>
 
-      {/* Encabezados de la tabla con ordenamiento */}
-      {/* Usamos un div con grid para simular los encabezados de columna clicables */}
        <div className="grid grid-cols-[auto_60px_1fr_auto_auto_auto] gap-2 items-center border rounded-lg p-2 shadow-sm bg-gray-200 text-xs font-semibold text-gray-600 uppercase tracking-wider mb-2">
-           <div className="p-1"></div> {/* Columna del checkbox */}
-           <div className="p-1">Imagen</div> {/* Columna de la imagen */}
-           {/* Encabezado Nombre con ordenamiento */}
-           <div
-               className="p-1 cursor-pointer hover:text-gray-800"
-               onClick={() => handleSort('nombre')}
-           >
-               Nombre
-               {sortColumn === 'nombre' && (
-                 <span className="ml-1">
-                   {sortDirection === 'asc' ? '▲' : '▼'}
-                 </span>
-               )}
+           <div className="p-1"></div> 
+           <div className="p-1">Imagen</div>
+           <div className="p-1 cursor-pointer hover:text-gray-800" onClick={() => handleSort('nombre')}>
+               Nombre {sortColumn === 'nombre' && (<span>{sortDirection === 'asc' ? '▲' : '▼'}</span>)}
            </div>
-           {/* Encabezado Promoción con ordenamiento */}
-           <div
-               className="p-1 text-right cursor-pointer hover:text-gray-800"
-               onClick={() => handleSort('promocion')}
-           >
-               Promoción
-               {sortColumn === 'promocion' && (
-                 <span className="ml-1">
-                   {sortDirection === 'asc' ? '▲' : '▼'}
-                 </span>
-               )}
+           <div className="p-1 text-right cursor-pointer hover:text-gray-800" onClick={() => handleSort('promocion')}>
+               Promoción {sortColumn === 'promocion' && (<span>{sortDirection === 'asc' ? '▲' : '▼'}</span>)}
            </div>
-            {/* Encabezado Precio Normal con ordenamiento */}
-           <div
-               className="p-1 text-right cursor-pointer hover:text-gray-800"
-               onClick={() => handleSort('precio_normal')}
-           >
-               P. Normal
-               {sortColumn === 'precio_normal' && (
-                 <span className="ml-1">
-                   {sortDirection === 'asc' ? '▲' : '▼'}
-                 </span>
-               )}
+           <div className="p-1 text-right cursor-pointer hover:text-gray-800" onClick={() => handleSort('precio_normal')}>
+               P. Normal {sortColumn === 'precio_normal' && (<span>{sortDirection === 'asc' ? '▲' : '▼'}</span>)}
            </div>
-            <div className="p-1 text-center">Acciones</div> {/* Columna de acciones */}
+            <div className="p-1 text-center">Acciones</div>
        </div>
 
-
-      {/* Lista de productos (cuerpo de la tabla) */}
       <div className="space-y-2">
-        {/* Usar productosFiltradosYOrdenados para renderizar la lista */}
         {productosFiltradosYOrdenados.map(producto => (
           <div
             key={producto.id}
-            className={`grid grid-cols-[auto_60px_1fr_auto_auto_auto] gap-2 items-center border rounded-lg p-2 shadow-sm hover:shadow transition text-xs ${parseFloat(producto.stock || 0) <= 0 && !mostrarSinStock ? 'opacity-50' : ''}`} // Atenuar si no hay stock y no se están mostrando todos
+            className={`grid grid-cols-[auto_60px_1fr_auto_auto_auto] gap-2 items-center border rounded-lg p-2 shadow-sm hover:shadow transition text-xs 
+                        ${(stockFilter !== 'sin-stock' && (!producto.stock || parseFloat(producto.stock) <= 0)) ? 
+                            (stockFilter === 'todos' ? 'opacity-50' : '') : ''}
+                       `}
           >
             <input
               type="checkbox"
@@ -513,12 +392,9 @@ export default function ProductosItems() {
             <div className="flex flex-col items-start">
               <label className="text-gray-600 mb-1 text-[10px]">Promoción</label>
               <input
-                type="number"
-                 min="0"
-                 step="0.01"
-                // Usar .toString() para evitar advertencias de React con valores null/undefined en inputs controlados
+                type="number" min="0" step="0.01"
                 value={(producto.promocion ?? '').toString()}
-                onChange={e => handleEditarLocal(producto.id, 'promocion', e.target.value)} // Llamar a handleEditarLocal
+                onChange={e => handleEditarLocal(producto.id, 'promocion', e.target.value)}
                 className="w-20 border px-2 py-1 rounded text-right text-xs"
                 placeholder="0.00"
               />
@@ -526,36 +402,25 @@ export default function ProductosItems() {
             <div className="flex flex-col items-start">
               <label className="text-gray-600 mb-1 text-[10px]">P. Normal</label>
               <input
-                type="number"
-                 min="0"
-                 step="0.01"
-                 // Usar .toString() para evitar advertencias de React con valores null/undefined en inputs controlados
+                type="number" min="0" step="0.01"
                 value={(producto.precio_normal ?? '').toString()}
-                onChange={e => handleEditarLocal(producto.id, 'precio_normal', e.target.value)} // Llamar a handleEditarLocal
+                onChange={e => handleEditarLocal(producto.id, 'precio_normal', e.target.value)}
                 className="w-20 border px-2 py-1 rounded text-right text-xs"
                 placeholder="0.00"
               />
             </div>
             <div>
-              <button
-                onClick={() => abrirModal(producto)}
-                className="text-blue-600 hover:underline text-xs"
-              >
+              <button onClick={() => abrirModal(producto)} className="text-blue-600 hover:underline text-xs">
                 Editar
               </button>
             </div>
           </div>
         ))}
-        {/* Mensaje cuando no hay productos filtrados/ordenados */}
         {productosFiltradosYOrdenados.length === 0 && (
           <div className="text-center text-gray-500 py-4">
-            {busqueda && productos.length > 0 ?
-                 'No se encontraron productos que coincidan con tu búsqueda.'
-                 : mostrarSinStock && productos.length > 0 ?
-                 'No se encontraron productos (mostrando todos, incluyendo sin stock).'
-                 : !mostrarSinStock && productos.length > 0 ?
-                 'No se encontraron productos con stock (prueba "Mostrar todos los productos").'
-                 : 'No hay productos disponibles.'
+            {busqueda ? 'No se encontraron productos que coincidan con tu búsqueda y filtros.'
+             : (stockFilter !== 'todos') ? 'No hay productos que coincidan con el filtro de stock actual.'
+             : 'No hay productos disponibles.'
             }
           </div>
         )}
@@ -565,149 +430,61 @@ export default function ProductosItems() {
         <ModalEditarProducto
           producto={productoEditando}
           onClose={cerrarModal}
-          onGuardado={cerrarModal} // Al guardar en el modal, cerramos y recargamos la lista
+          onGuardado={cerrarModal}
         />
       )}
 
-      {/* >>> Modal para Agregar Nuevo Producto <<< */}
       {showAddProductModal && (
           <div
               className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
-              onClick={closeAddProductModal} // Cerrar al hacer clic fuera
+              onClick={closeAddProductModal}
           >
               <div
-                  onClick={(e) => e.stopPropagation()} // Evitar cerrar al hacer clic dentro
-                  className="bg-white rounded-lg shadow-lg w-full max-w-md p-6 max-h-[90vh] overflow-y-auto relative" // Ancho y alto ajustados
+                  onClick={(e) => e.stopPropagation()}
+                  className="bg-white rounded-lg shadow-lg w-full max-w-md p-6 max-h-[90vh] overflow-y-auto relative"
               >
-                  {/* Encabezado del Modal */}
                   <div className="flex justify-between items-center mb-4 border-b pb-3">
                       <h3 className="text-xl font-bold text-gray-800">Agregar Nuevo Producto</h3>
-                      <button
-                          onClick={closeAddProductModal}
-                          className="text-gray-600 hover:text-gray-800 text-2xl font-bold leading-none ml-4"
-                      >
-                          &times;
-                      </button>
+                      <button onClick={closeAddProductModal} className="text-gray-600 hover:text-gray-800 text-2xl font-bold leading-none ml-4">&times;</button>
                   </div>
-
-                  {/* Formulario para Nuevo Producto */}
                   <div className="grid grid-cols-1 gap-4 mb-6">
                       <div>
                           <label htmlFor="nombre" className="block text-sm font-medium text-gray-700 mb-1">Nombre del Producto <span className="text-red-500">*</span></label>
-                          <input
-                              type="text"
-                              id="nombre"
-                              name="nombre"
-                              value={newProductForm.nombre}
-                              onChange={handleNewProductInputChange}
-                              className="w-full border border-gray-300 px-3 py-2 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                              required
-                          />
+                          <input type="text" id="nombre" name="nombre" value={newProductForm.nombre} onChange={handleNewProductInputChange} className="w-full border border-gray-300 px-3 py-2 rounded-md focus:ring-blue-500 focus:border-blue-500" required />
                       </div>
                        <div>
                           <label htmlFor="stock" className="block text-sm font-medium text-gray-700 mb-1">Stock Inicial <span className="text-red-500">*</span></label>
-                          <input
-                              type="number"
-                              id="stock"
-                              name="stock"
-                               min="0"
-                               step="any"
-                              value={newProductForm.stock}
-                              onChange={handleNewProductInputChange}
-                              className="w-full border border-gray-300 px-3 py-2 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                              required
-                          />
+                          <input type="number" id="stock" name="stock" min="0" step="any" value={newProductForm.stock} onChange={handleNewProductInputChange} className="w-full border border-gray-300 px-3 py-2 rounded-md focus:ring-blue-500 focus:border-blue-500" required />
                       </div>
                        <div>
                           <label htmlFor="precio_normal" className="block text-sm font-medium text-gray-700 mb-1">Precio de Venta (Normal) <span className="text-red-500">*</span></label>
-                          <input
-                              type="number"
-                              id="precio_normal"
-                              name="precio_normal"
-                               min="0"
-                               step="0.01"
-                              value={newProductForm.precio_normal}
-                              onChange={handleNewProductInputChange}
-                              className="w-full border border-gray-300 px-3 py-2 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                              required
-                          />
+                          <input type="number" id="precio_normal" name="precio_normal" min="0" step="0.01" value={newProductForm.precio_normal} onChange={handleNewProductInputChange} className="w-full border border-gray-300 px-3 py-2 rounded-md focus:ring-blue-500 focus:border-blue-500" required />
                       </div>
                        <div>
                           <label htmlFor="promocion" className="block text-sm font-medium text-gray-700 mb-1">Precio de Venta (Promoción)</label>
-                          <input
-                              type="number"
-                              id="promocion"
-                              name="promocion"
-                               min="0"
-                               step="0.01"
-                              value={newProductForm.promocion}
-                              onChange={handleNewProductInputChange}
-                              className="w-full border border-gray-300 px-3 py-2 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                          />
+                          <input type="number" id="promocion" name="promocion" min="0" step="0.01" value={newProductForm.promocion} onChange={handleNewProductInputChange} className="w-full border border-gray-300 px-3 py-2 rounded-md focus:ring-blue-500 focus:border-blue-500" />
                       </div>
                        <div>
                           <label htmlFor="costo_final_usd" className="block text-sm font-medium text-gray-700 mb-1">Costo Final (USD)</label>
-                          <input
-                              type="number"
-                              id="costo_final_usd"
-                              name="costo_final_usd"
-                               min="0"
-                               step="0.01"
-                              value={newProductForm.costo_final_usd}
-                              onChange={handleNewProductInputChange}
-                              className="w-full border border-gray-300 px-3 py-2 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                          />
+                          <input type="number" id="costo_final_usd" name="costo_final_usd" min="0" step="0.01" value={newProductForm.costo_final_usd} onChange={handleNewProductInputChange} className="w-full border border-gray-300 px-3 py-2 rounded-md focus:ring-blue-500 focus:border-blue-500" />
                       </div>
                        <div>
                           <label htmlFor="costo_final_mxn" className="block text-sm font-medium text-gray-700 mb-1">Costo Final (MXN)</label>
-                          <input
-                              type="number"
-                              id="costo_final_mxn"
-                              name="costo_final_mxn"
-                               min="0"
-                               step="0.01"
-                              value={newProductForm.costo_final_mxn}
-                              onChange={handleNewProductInputChange}
-                              className="w-full border border-gray-300 px-3 py-2 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                          />
+                          <input type="number" id="costo_final_mxn" name="costo_final_mxn" min="0" step="0.01" value={newProductForm.costo_final_mxn} onChange={handleNewProductInputChange} className="w-full border border-gray-300 px-3 py-2 rounded-md focus:ring-blue-500 focus:border-blue-500" />
                       </div>
                        <div>
                           <label htmlFor="codigo" className="block text-sm font-medium text-gray-700 mb-1">Código</label>
-                          <input
-                              type="text"
-                              id="codigo"
-                              name="codigo"
-                              value={newProductForm.codigo}
-                              onChange={handleNewProductInputChange}
-                              className="w-full border border-gray-300 px-3 py-2 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                          />
+                          <input type="text" id="codigo" name="codigo" value={newProductForm.codigo} onChange={handleNewProductInputChange} className="w-full border border-gray-300 px-3 py-2 rounded-md focus:ring-blue-500 focus:border-blue-500" />
                       </div>
                        <div>
                           <label htmlFor="categoria" className="block text-sm font-medium text-gray-700 mb-1">Categoría</label>
-                          <input
-                              type="text"
-                              id="categoria"
-                              name="categoria"
-                              value={newProductForm.categoria}
-                              onChange={handleNewProductInputChange}
-                              className="w-full border border-gray-300 px-3 py-2 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                          />
+                          <input type="text" id="categoria" name="categoria" value={newProductForm.categoria} onChange={handleNewProductInputChange} className="w-full border border-gray-300 px-3 py-2 rounded-md focus:ring-blue-500 focus:border-blue-500" />
                       </div>
                        <div>
                           <label htmlFor="imagen_url" className="block text-sm font-medium text-gray-700 mb-1">URL Imagen</label>
-                          <input
-                              type="text"
-                              id="imagen_url"
-                              name="imagen_url"
-                              value={newProductForm.imagen_url}
-                              onChange={handleNewProductInputChange}
-                              className="w-full border border-gray-300 px-3 py-2 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                          />
+                          <input type="text" id="imagen_url" name="imagen_url" value={newProductForm.imagen_url} onChange={handleNewProductInputChange} className="w-full border border-gray-300 px-3 py-2 rounded-md focus:ring-blue-500 focus:border-blue-500" />
                       </div>
-                      {/* Agrega más campos del formulario según tu tabla */}
                   </div>
-
-                  {/* Botones del Modal */}
                   <div className="flex justify-end gap-4">
                       <button
                           onClick={handleAddProduct}
@@ -724,12 +501,9 @@ export default function ProductosItems() {
                           Cancelar
                       </button>
                   </div>
-
-              </div> {/* Cierre correcto del div principal del contenido del modal */}
-          </div> /* Cierre correcto del div del overlay del modal */
+              </div>
+          </div>
       )}
-
-
     </div>
   );
 }

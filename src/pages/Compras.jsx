@@ -1,13 +1,13 @@
-import { useEffect, useState } from 'react';
+// src/pages/Compras.jsx
+import React, { useEffect, useState, useMemo, useRef } from 'react'; // Añadido useRef
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../supabase'; // Esta ruta '../supabase' debería ser correcta si supabase.js está en src/
+import { supabase } from '../supabase';
 import toast from 'react-hot-toast';
 import { NavLink } from 'react-router-dom';
 
 export default function Compras() {
-  const navigate = useNavigate(); // Hook para navegación
+  const navigate = useNavigate();
 
-  // Estados para manejar el formulario, lista de compras y demás
   const [mostrarFormulario, setMostrarFormulario] = useState(false);
   const [formulario, setFormulario] = useState({
     numeroPedido: '',
@@ -16,7 +16,7 @@ export default function Compras() {
     descuentoTotalUSD: '',
     gastosEnvioUSA: '',
     tipoCambioDia: '',
-    nombreProducto: '',
+    nombreProducto: '', // Este campo será el de búsqueda con autocompletado
     cantidad: '',
     precioUnitarioUSD: ''
   });
@@ -24,32 +24,52 @@ export default function Compras() {
   const [savedCompras, setSavedCompras] = useState([]);
   const [expandedIdx, setExpandedIdx] = useState(null);
   const [currentEditingItems, setCurrentEditingItems] = useState(null);
-  const [editingIdx, setEditingIdx] = useState(null); // Estado no utilizado actualmente, considerar remover si no se implementa edición de ítems guardados
-  const [editItems, setEditItems] = useState([]); // Estado no utilizado actualmente, considerar remover si no se implementa edición de ítems guardados
+  
   const [invConfig, setInvConfig] = useState({
     gastosImportacion: '',
     tipoCambioImportacion: '',
     otrosGastos: '',
-    targetIdx: null // Índice de la compra a la que se aplicará la afectación de inventario
+    targetIdx: null
   });
-  const [nombresSugeridos, setNombresSugeridos] = useState([]);
+  const [nombresSugeridos, setNombresSugeridos] = useState([]); // Lista de todos los nombres de productos
 
-  // Funciones auxiliares para el listado de productos en el formulario
-  const eliminarProductoForm = (index) => {
-    setProductosAgregados(prev => prev.filter((_, i) => i !== index));
-  };
+  // >>> Nuevos estados para el autocompletado del campo producto <<<
+  const [sugerenciasProducto, setSugerenciasProducto] = useState([]);
+  const [mostrarSugerenciasProducto, setMostrarSugerenciasProducto] = useState(false);
+  const productoInputRef = useRef(null); // Ref para el input de producto
+  const sugerenciasRef = useRef(null); // Ref para el contenedor de sugerencias
 
-  const calcularSubtotal = (items) => {
-    return items.reduce((sum, item) => sum + ((parseFloat(item.cantidad) || 0) * (parseFloat(item.precioUnitarioUSD) || 0)), 0);
-  };
+  useEffect(() => {
+    fetchCompras();
+    // Carga inicial de nombres de productos para sugerencias
+    (async () => {
+      const { data, error } = await supabase.from('productos').select('nombre');
+      if (!error && data) {
+        setNombresSugeridos(Array.from(new Set(data.map(p => p.nombre))).sort()); // Ordenar alfabéticamente
+      } else if (error) {
+        console.error('Error al cargar nombres de productos:', error.message);
+      }
+    })();
+  }, []);
+  
+  // Efecto para cerrar sugerencias si se hace clic fuera
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (
+        productoInputRef.current && !productoInputRef.current.contains(event.target) &&
+        sugerenciasRef.current && !sugerenciasRef.current.contains(event.target)
+      ) {
+        setMostrarSugerenciasProducto(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
-  const calcularTotal = (items, descuento) => {
-    return calcularSubtotal(items) - (parseFloat(descuento) || 0);
-  };
 
-  // Función para obtener las compras y sus ítems desde Supabase
-  async function fetchCompras() {
-    // Obtener cabeceras de compra ordenadas por fecha descendente
+  const fetchCompras = async () => {
     const { data: cabeceras = [], error: errCab } = await supabase
       .from('compras')
       .select('*')
@@ -59,8 +79,6 @@ export default function Compras() {
       toast.error('Error al cargar compras.');
       return;
     }
-
-    // Obtener todos los ítems de compra
     const { data: items = [], error: errItems } = await supabase
       .from('compra_items')
       .select('*');
@@ -69,8 +87,6 @@ export default function Compras() {
       toast.error('Error al cargar ítems de compra.');
       return;
     }
-
-    // Combinar cabeceras con sus ítems correspondientes
     const combined = cabeceras.map(c => ({
       compra: c,
       items: items
@@ -78,15 +94,13 @@ export default function Compras() {
         .map(i => ({
           id: i.id,
           nombreProducto: i.nombre_producto,
-          cantidad: parseFloat(i.cantidad) || 0, // Asegurarse de que la cantidad sea un número
-          precioUnitarioUSD: parseFloat(i.precio_unitario_usd) || 0 // Asegurarse de que el precio sea un número flotante
+          cantidad: parseFloat(i.cantidad) || 0,
+          precioUnitarioUSD: parseFloat(i.precio_unitario_usd) || 0
         }))
     }));
     setSavedCompras(combined);
-  }
+  };
 
-  // Efecto para inicializar currentEditingItems cuando se expande una compra
-  // y cargar la configuración de inventario si ya existe en la compra
   useEffect(() => {
     if (expandedIdx !== null && savedCompras[expandedIdx]) {
       const selectedCompra = savedCompras[expandedIdx].compra;
@@ -103,72 +117,77 @@ export default function Compras() {
     }
   }, [expandedIdx, savedCompras]);
 
-  // Carga inicial de compras al montar el componente
-  useEffect(() => {
-    fetchCompras();
-  }, []);
-
-  // Carga inicial de nombres de productos para sugerencias
-  useEffect(() => {
-    (async () => {
-      const { data, error } = await supabase.from('productos').select('nombre');
-      if (!error && data) {
-        // Usamos Set para obtener nombres únicos
-        setNombresSugeridos(Array.from(new Set(data.map(p => p.nombre))));
-      } else if (error) {
-        console.error('Error al cargar nombres de productos:', error.message);
-      }
-    })();
-  }, []);
-
-  // Manejador para actualizar los valores de los ítems en el estado de edición (si se implementa edición de ítems guardados)
-  // Actualmente, este estado se usa para mostrar los ítems de la compra expandida.
-  const handleItemInputChange = (index, field, value) => {
-    if (!currentEditingItems) return;
-    const updatedItems = [...currentEditingItems];
-    updatedItems[index] = {
-      ...updatedItems[index],
-      [field]: field === 'cantidad' ? parseInt(value, 10) || 0 : parseFloat(value) || 0
-    };
-    setCurrentEditingItems(updatedItems);
+  const eliminarProductoForm = (index) => {
+    setProductosAgregados(prev => prev.filter((_, i) => i !== index));
   };
 
-  // Manejador para los cambios en los inputs del formulario de nueva compra
+  const calcularSubtotal = (items) => {
+    return items.reduce((sum, item) => sum + ((parseFloat(item.cantidad) || 0) * (parseFloat(item.precioUnitarioUSD) || 0)), 0);
+  };
+
+  const calcularTotal = (items, descuento) => {
+    return calcularSubtotal(items) - (parseFloat(descuento) || 0);
+  };
+  
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormulario(prev => ({ ...prev, [name]: value }));
+
+    if (name === 'nombreProducto') {
+      if (value.trim() === '') {
+        setSugerenciasProducto([]);
+        setMostrarSugerenciasProducto(false);
+      } else {
+        const filtradas = nombresSugeridos.filter(nombre =>
+          nombre.toLowerCase().includes(value.toLowerCase())
+        );
+        setSugerenciasProducto(filtradas.slice(0, 10)); // Mostrar un máximo de 10 sugerencias
+        setMostrarSugerenciasProducto(filtradas.length > 0);
+      }
+    }
   };
 
-  // Agregar producto a la lista del formulario de nueva compra
+  const handleSeleccionarSugerencia = (nombreSugerido) => {
+    setFormulario(prev => ({ ...prev, nombreProducto: nombreSugerido }));
+    setSugerenciasProducto([]);
+    setMostrarSugerenciasProducto(false);
+    // Opcional: mover el foco al siguiente campo, por ejemplo, cantidad
+    // document.getElementsByName('cantidad')[0]?.focus(); 
+  };
+  
+  // Manejar Escape en el input de producto para cerrar sugerencias
+  const handleProductoInputKeyDown = (e) => {
+    if (e.key === 'Escape') {
+        setMostrarSugerenciasProducto(false);
+    }
+    // Aquí se podría añadir navegación por teclado para las sugerencias (ArrowUp, ArrowDown, Enter)
+  };
+
   const agregarProducto = () => {
     if (!formulario.nombreProducto || !formulario.cantidad || !formulario.precioUnitarioUSD) {
       toast.error('Completa los campos del producto');
       return;
     }
     const nuevoProducto = {
-      id: Date.now(), // Usar timestamp temporal como ID para la lista del formulario
-      nombreProducto: formulario.nombreProducto.trim(), // Limpiar espacios
+      id: Date.now(),
+      nombreProducto: formulario.nombreProducto.trim(),
       cantidad: parseInt(formulario.cantidad, 10) || 0,
       precioUnitarioUSD: parseFloat(formulario.precioUnitarioUSD) || 0
     };
-
     if (nuevoProducto.cantidad <= 0 || nuevoProducto.precioUnitarioUSD < 0) {
          toast.error('La cantidad debe ser mayor a 0 y el precio unitario no puede ser negativo.');
          return;
     }
-
     setProductosAgregados(prev => [...prev, nuevoProducto]);
     setFormulario(prev => ({ ...prev, nombreProducto: '', cantidad: '', precioUnitarioUSD: '' }));
+    setMostrarSugerenciasProducto(false); // Ocultar sugerencias después de agregar
   };
 
-  // Guardar compra en la base de datos
   const guardarCompra = async () => {
-    // Validaciones básicas
     if (!formulario.numeroPedido || !formulario.proveedor || productosAgregados.length === 0) {
       toast.error('Completa la cabecera y agrega al menos un producto.');
       return;
     }
-
     const descuento = parseFloat(formulario.descuentoTotalUSD || 0);
     const gastosEnvio = parseFloat(formulario.gastosEnvioUSA || 0);
     const tipoCambioDia = parseFloat(formulario.tipoCambioDia || 0);
@@ -181,18 +200,16 @@ export default function Compras() {
           toast.warn('Advertencia: El tipo de cambio es 0, los gastos y descuentos en USD no se convertirán a MXN correctamente.');
      }
 
-
-    // Insertar cabecera de compra
     const { data: newCompra, error: errCompra } = await supabase
       .from('compras')
       .insert({
-        numero_pedido: formulario.numeroPedido.trim(), // Limpiar espacios
-        proveedor: formulario.proveedor.trim(), // Limpiar espacios
+        numero_pedido: formulario.numeroPedido.trim(),
+        proveedor: formulario.proveedor.trim(),
         fecha_compra: formulario.fechaCompra || new Date().toISOString().split('T')[0],
         descuento_total_usd: descuento,
         gastos_envio_usa: gastosEnvio,
         tipo_cambio_dia: tipoCambioDia,
-        inventario_afectado: false // Inicialmente no afectado
+        inventario_afectado: false
       })
       .select('id')
       .single();
@@ -203,7 +220,6 @@ export default function Compras() {
       return;
     }
 
-    // Preparar ítems a insertar
     const itemsToInsert = productosAgregados.map(item => ({
       compra_id: newCompra.id,
       nombre_producto: item.nombreProducto,
@@ -211,97 +227,61 @@ export default function Compras() {
       precio_unitario_usd: item.precioUnitarioUSD
     }));
 
-    // Insertar ítems
-    const { error: errItems } = await supabase
-      .from('compra_items')
-      .insert(itemsToInsert);
-
+    const { error: errItems } = await supabase.from('compra_items').insert(itemsToInsert);
     if (errItems) {
       console.error('Error al guardar ítems de compra:', errItems.message);
       toast.error('Error al guardar ítems de compra. La cabecera de compra pudo haber sido creada.');
-      // Considerar eliminar la cabecera si fallan los ítems para mantener consistencia
-      // await supabase.from('compras').delete().eq('id', newCompra.id);
       return;
     }
-
-    // Limpiar formulario y volver a cargar compras
     setFormulario({
-      numeroPedido: '',
-      proveedor: '',
-      fechaCompra: '',
-      descuentoTotalUSD: '',
-      gastosEnvioUSA: '',
-      tipoCambioDia: '',
-      nombreProducto: '',
-      cantidad: '',
-      precioUnitarioUSD: ''
+      numeroPedido: '', proveedor: '', fechaCompra: '', descuentoTotalUSD: '', gastosEnvioUSA: '',
+      tipoCambioDia: '', nombreProducto: '', cantidad: '', precioUnitarioUSD: ''
     });
     setProductosAgregados([]);
     setMostrarFormulario(false);
-    fetchCompras(); // Recargar la lista para mostrar la nueva compra
+    fetchCompras();
     toast.success('Compra guardada exitosamente!');
   };
 
-  // Eliminar una compra (cabecera e ítems)
   const eliminarCompra = async (compraId, inventarioAfectado) => {
     if (inventarioAfectado) {
          toast.error('No se puede eliminar una compra que ya ha afectado el inventario.');
          return;
     }
-    if (!window.confirm('¿Estás seguro de eliminar esta compra y todos sus ítems?')) {
-      return;
-    }
-    // Eliminar ítems primero (por la relación de clave foránea)
-    const { error: errItems } = await supabase
-      .from('compra_items')
-      .delete()
-      .eq('compra_id', compraId);
+    if (!window.confirm('¿Estás seguro de eliminar esta compra y todos sus ítems?')) return;
+    
+    const { error: errItems } = await supabase.from('compra_items').delete().eq('compra_id', compraId);
     if (errItems) {
       console.error('Error al eliminar ítems de compra:', errItems.message);
       toast.error('Error al eliminar ítems de compra.');
       return;
     }
-    // Eliminar cabecera de compra
-    const { error: errCompra } = await supabase
-      .from('compras')
-      .delete()
-      .eq('id', compraId);
+    const { error: errCompra } = await supabase.from('compras').delete().eq('id', compraId);
     if (errCompra) {
       console.error('Error al eliminar compra:', errCompra.message);
       toast.error('Error al eliminar la compra.');
     } else {
-      fetchCompras(); // Recargar la lista
+      fetchCompras();
       toast.success('Compra eliminada exitosamente.');
     }
   };
 
-  // Función para afectar inventario con prorrateo de costos y costo promedio ponderado
   const confirmarAfectInventory = async () => {
     const { gastosImportacion, tipoCambioImportacion, otrosGastos, targetIdx } = invConfig;
-
-    // Validar que se haya seleccionado una compra y los campos de gastos
     if (targetIdx === null || gastosImportacion === '' || tipoCambioImportacion === '' || otrosGastos === '') {
-      toast.error('Selecciona una compra y completa los campos de gastos de importación, tipo de cambio y otros gastos.');
+      toast.error('Selecciona una compra y completa los campos de gastos, tipo de cambio y otros gastos.');
       return;
     }
-
     const { compra } = savedCompras[targetIdx];
-
-    // Validar que la compra no haya afectado el inventario previamente (opcional, pero recomendado para evitar doble afectación sin lógica de reversión)
-    // Si necesitas re-afectar, deberías implementar una lógica para revertir el movimiento anterior primero.
     if (compra.inventario_afectado) {
-         toast.error('Esta compra ya ha afectado el inventario. No se puede afectar nuevamente.');
+         toast.error('Esta compra ya ha afectado el inventario.');
          return;
     }
-
-
-    const itemsToProcess = savedCompras[targetIdx].items; // Usar los ítems guardados para la afectación
-
+    const itemsToProcess = savedCompras[targetIdx].items;
     if (itemsToProcess.length === 0) {
       toast.error('La compra seleccionada no tiene ítems para afectar el inventario.');
       return;
     }
-
     const gastosImportacionNum = parseFloat(gastosImportacion) || 0;
     const tipoCambioImportacionNum = parseFloat(tipoCambioImportacion) || 0;
     const otrosGastosNum = parseFloat(otrosGastos) || 0;
@@ -309,245 +289,129 @@ export default function Compras() {
     const gastosEnvioUSANum = parseFloat(compra.gastos_envio_usa) || 0;
     const tipoCambioDiaNum = parseFloat(compra.tipo_cambio_dia) || 0;
 
-
     if (gastosImportacionNum < 0 || tipoCambioImportacionNum < 0 || otrosGastosNum < 0) {
-         toast.error('Los valores de gastos de importación, tipo de cambio de importación y otros gastos no pueden ser negativos.');
+         toast.error('Los valores de gastos no pueden ser negativos.');
          return;
     }
      if (tipoCambioImportacionNum === 0 && (gastosImportacionNum > 0 || otrosGastosNum > 0)) {
-          toast.warn('Advertencia: El tipo de cambio de importación es 0, los gastos en USD no se convertirán a MXN correctamente para el cálculo del costo final.');
+          toast.warn('Advertencia: El tipo de cambio de importación es 0.');
      }
 
-
-    // 1. Actualizar cabecera de la compra con los gastos de importación y marcar como afectado
-    console.log(`[Afectar Inventario] Actualizando cabecera de compra ${compra.id} con gastos...`);
+    console.log(`[Afectar Inventario] Actualizando cabecera de compra ${compra.id}...`);
     const { error: errCab } = await supabase
       .from('compras')
       .update({
         gastos_importacion: gastosImportacionNum,
         tipo_cambio_importacion: tipoCambioImportacionNum,
         otros_gastos: otrosGastosNum,
-        inventario_afectado: true // Marcar como afectado
+        inventario_afectado: true
       })
       .eq('id', compra.id);
-
     if (errCab) {
-      console.error('[Afectar Inventario] Error al actualizar cabecera de compra:', errCab.message);
-      toast.error('Error al actualizar compra para afectar inventario: ' + errCab.message);
-      return; // Detener el proceso si falla la actualización de la cabecera
+      console.error('[Afectar Inventario] Error al actualizar cabecera:', errCab.message);
+      toast.error('Error al actualizar compra: ' + errCab.message);
+      return;
     }
-    console.log(`[Afectar Inventario] Cabecera de compra ${compra.id} actualizada.`);
+    console.log(`[Afectar Inventario] Cabecera ${compra.id} actualizada.`);
 
-    // 2. Traer catálogo actual de productos
-    console.log('[Afectar Inventario] Cargando catálogo de productos...');
+    console.log('[Afectar Inventario] Cargando catálogo...');
     const { data: catalogo = [], error: errCat } = await supabase
       .from('productos')
-      .select('id, nombre, stock, costo_final_usd, costo_final_mxn'); // Incluir costos actuales
+      .select('id, nombre, stock, costo_final_usd, costo_final_mxn');
     if (errCat) {
-      console.error('[Afectar Inventario] Error al cargar catálogo de productos:', errCat.message);
-      toast.error('Error al cargar catálogo de productos: ' + errCat.message);
-      // Considerar revertir la cabecera de compra si falla la carga del catálogo
-      return; // Detener el proceso
+      console.error('[Afectar Inventario] Error al cargar catálogo:', errCat.message);
+      toast.error('Error al cargar catálogo: ' + errCat.message);
+      return;
     }
-    console.log(`[Afectar Inventario] Catálogo cargado. ${catalogo.length} productos encontrados.`);
+    console.log(`[Afectar Inventario] Catálogo cargado: ${catalogo.length} productos.`);
 
-    // 3. Prorrateo de costos y cálculo del costo promedio ponderado para cada ítem
-    console.log('[Afectar Inventario] Calculando prorrateo y costo promedio ponderado...');
-
-    // Calcular el subtotal bruto de la compra actual
     const subtotalBrutoCompraActual = itemsToProcess.reduce((sum, p) => sum + ((p.cantidad || 0) * (p.precioUnitarioUSD || 0)), 0) || 1;
+    const gastosTotalesCompraActual = descuentoTotalUSDNum * -1 + gastosEnvioUSANum + gastosImportacionNum + otrosGastosNum;
+    console.log(`[Afectar Inventario] Subtotal Bruto: ${subtotalBrutoCompraActual.toFixed(2)} USD, Gastos Totales: ${gastosTotalesCompraActual.toFixed(2)} USD`);
 
-    // Calcular los gastos totales netos de la compra actual (incluyendo descuento como negativo)
-    const gastosTotalesCompraActual =
-      descuentoTotalUSDNum * -1 +
-      gastosEnvioUSANum +
-      gastosImportacionNum +
-      otrosGastosNum;
-
-    console.log(`[Afectar Inventario] Subtotal Bruto Compra Actual: ${subtotalBrutoCompraActual.toFixed(2)} USD`);
-    console.log(`[Afectar Inventario] Gastos Totales Netos Compra Actual: ${gastosTotalesCompraActual.toFixed(2)} USD`);
-
-    // Usar un array para almacenar las promesas de actualización/inserción de productos
     const updatePromises = [];
     const movimientoPromises = [];
-
 
     for (const p of itemsToProcess) {
         const cantidadCompraActual = p.cantidad || 0;
         const precioUnitarioUSDCompraActual = p.precioUnitarioUSD || 0;
-
-        // Calcular el costo final por unidad para este ÍTEM en la COMPRA ACTUAL
         const aporteItemCompraActual = (cantidadCompraActual * precioUnitarioUSDCompraActual) / subtotalBrutoCompraActual;
-        const costoAjustePorItemUSD = (aporteItemCompraActual * gastosTotalesCompraActual) / (cantidadCompraActual || 1); // Dividir por cantidad para obtener ajuste por unidad
+        const costoAjustePorItemUSD = (aporteItemCompraActual * gastosTotalesCompraActual) / (cantidadCompraActual || 1);
         const costoFinalUSDCompraActual = precioUnitarioUSDCompraActual + costoAjustePorItemUSD;
+        const costoFinalMXNCompraActual = costoFinalUSDCompraActual * (tipoCambioImportacionNum > 0 ? tipoCambioImportacionNum : (tipoCambioDiaNum > 0 ? tipoCambioDiaNum : 1));
 
-        // Calcular el costo final en MXN para este ÍTEM en la COMPRA ACTUAL
-        // Usar el tipo de cambio de importación para la conversión a MXN en el cálculo del costo final unitario de esta compra
-        const costoFinalMXNCompraActual = costoFinalUSDCompraActual * (tipoCambioImportacionNum > 0 ? tipoCambioImportacionNum : (tipoCambioDiaNum > 0 ? tipoCambioDiaNum : 1)); // Usar tipo de cambio importación, fallback al del día, fallback a 1
-
-        console.log(`[Afectar Inventario] Item "${p.nombreProducto}":`);
-        console.log(`  Costo Final USD (Compra Actual): ${costoFinalUSDCompraActual.toFixed(4)}`);
-        console.log(`  Costo Final MXN (Compra Actual): ${costoFinalMXNCompraActual.toFixed(2)}`);
-
+        console.log(`[Afectar Inventario] Item "${p.nombreProducto}": Costo USD (Compra): ${costoFinalUSDCompraActual.toFixed(4)}, Costo MXN (Compra): ${costoFinalMXNCompraActual.toFixed(2)}`);
 
         let prod = catalogo.find(x => x.nombre === p.nombreProducto);
         let productoIdParaMovimiento = null;
 
         if (prod) {
-            // El producto ya existe, calcular promedio ponderado
-            console.log(`[Afectar Inventario] Producto "${p.nombreProducto}" encontrado en catálogo (ID: ${prod.id}). Calculando promedio ponderado...`);
-
+            console.log(`[Afectar Inventario] Producto "${p.nombreProducto}" (ID: ${prod.id}) encontrado. Calculando promedio...`);
             const stockActual = prod.stock || 0;
             const costoActualUSD = prod.costo_final_usd || 0;
             const costoActualMXN = prod.costo_final_mxn || 0;
-
             const nuevoStockTotal = stockActual + cantidadCompraActual;
-
-            let nuevoCostoPromedioUSD = costoActualUSD; // Valor por defecto si el nuevo stock es 0
-            let nuevoCostoPromedioMXN = costoActualMXN; // Valor por defecto si el nuevo stock es 0
-
+            let nuevoCostoPromedioUSD = costoActualUSD, nuevoCostoPromedioMXN = costoActualMXN;
             if (nuevoStockTotal > 0) {
-                const costoTotalUSDPonderado = (stockActual * costoActualUSD) + (cantidadCompraActual * costoFinalUSDCompraActual);
-                const costoTotalMXNPonderado = (stockActual * costoActualMXN) + (cantidadCompraActual * costoFinalMXNCompraActual);
-
-                nuevoCostoPromedioUSD = costoTotalUSDPonderado / nuevoStockTotal;
-                nuevoCostoPromedioMXN = costoTotalMXNPonderado / nuevoStockTotal;
+                nuevoCostoPromedioUSD = ((stockActual * costoActualUSD) + (cantidadCompraActual * costoFinalUSDCompraActual)) / nuevoStockTotal;
+                nuevoCostoPromedioMXN = ((stockActual * costoActualMXN) + (cantidadCompraActual * costoFinalMXNCompraActual)) / nuevoStockTotal;
             }
-
-            console.log(`[Afectar Inventario] Producto "${p.nombreProducto}":`);
-            console.log(`  Stock Actual: ${stockActual}, Costo Actual USD: ${costoActualUSD.toFixed(4)}, Costo Actual MXN: ${costoActualMXN.toFixed(2)}`);
-            console.log(`  Cantidad Compra Actual: ${cantidadCompraActual}, Costo Compra Actual USD: ${costoFinalUSDCompraActual.toFixed(4)}, Costo Compra Actual MXN: ${costoFinalMXNCompraActual.toFixed(2)}`);
-            console.log(`  Nuevo Stock Total: ${nuevoStockTotal}`);
-            console.log(`  Nuevo Costo Promedio USD: ${nuevoCostoPromedioUSD.toFixed(4)}`);
-            console.log(`  Nuevo Costo Promedio MXN: ${nuevoCostoPromedioMXN.toFixed(2)}`);
-
-
-            // Actualizar producto existente con el nuevo stock total y costos promedio
+            console.log(`  Nuevo Stock: ${nuevoStockTotal}, Nuevo Costo USD: ${nuevoCostoPromedioUSD.toFixed(4)}, Nuevo Costo MXN: ${nuevoCostoPromedioMXN.toFixed(2)}`);
             updatePromises.push(
-                supabase
-                .from('productos')
-                .update({
+                supabase.from('productos').update({
                     stock: nuevoStockTotal,
                     costo_final_usd: parseFloat(nuevoCostoPromedioUSD.toFixed(4)),
                     costo_final_mxn: parseFloat(nuevoCostoPromedioMXN.toFixed(2))
-                })
-                .eq('id', prod.id)
-                .then(({ error: errUpd }) => {
-                    if (errUpd) {
-                        console.error(`[Afectar Inventario] Error al actualizar producto "${p.nombreProducto}" (ID: ${prod.id}):`, errUpd.message);
-                        toast.error(`Error al actualizar producto ${p.nombreProducto}.`);
-                    } else {
-                        console.log(`[Afectar Inventario] Producto "${p.nombreProducto}" actualizado exitosamente.`);
-                    }
-                })
+                }).eq('id', prod.id)
             );
             productoIdParaMovimiento = prod.id;
-
         } else {
-            // El producto no existe, insertarlo con el stock y costos de esta compra
-            console.log(`[Afectar Inventario] Producto "${p.nombreProducto}" NO encontrado en catálogo. Insertando nuevo producto...`);
-            console.log(`[Afectar Inventario] Valores a insertar para "${p.nombreProducto}": nombre=${p.nombreProducto}, stock=${cantidadCompraActual}, precio_unitario_usd=${precioUnitarioUSDCompraActual.toFixed(2)}, costo_final_usd=${costoFinalUSDCompraActual.toFixed(4)}, costo_final_mxn=${costoFinalMXNCompraActual.toFixed(2)}`);
-
+            console.log(`[Afectar Inventario] Producto "${p.nombreProducto}" NO encontrado. Insertando...`);
             updatePromises.push(
-                supabase
-                .from('productos')
-                .insert({
-                    nombre: p.nombreProducto,
-                    stock: cantidadCompraActual,
-                    // El precio unitario de venta inicial podría ser el precio de compra o calcularse aparte
-                    precio_unitario_usd: precioUnitarioUSDCompraActual, // O definir un precio de venta inicial diferente
+                supabase.from('productos').insert({
+                    nombre: p.nombreProducto, stock: cantidadCompraActual,
+                    precio_unitario_usd: precioUnitarioUSDCompraActual, // Ojo: Este es el precio de compra, no necesariamente el de venta
                     costo_final_usd: parseFloat(costoFinalUSDCompraActual.toFixed(4)),
                     costo_final_mxn: parseFloat(costoFinalMXNCompraActual.toFixed(2))
-                })
-                .select('id') // Seleccionar el ID del nuevo producto insertado
-                .single()
-                .then(({ data: newProd, error: errIns }) => {
-                    if (errIns) {
-                        console.error(`[Afectar Inventario] Error al crear producto "${p.nombreProducto}":`, errIns.message);
-                        toast.error(`Error al crear producto ${p.nombreProducto}.`);
-                        return { productoId: null }; // Indicar que no se obtuvo ID
-                    } else if (newProd && newProd.id) {
-                        console.log(`[Afectar Inventario] Producto "${p.nombreProducto}" creado exitosamente (ID: ${newProd.id}).`);
-                        return { productoId: newProd.id }; // Retornar el ID del nuevo producto
-                    } else {
-                         console.error(`[Afectar Inventario] Error al crear producto "${p.nombreProducto}": No se recibió ID del nuevo producto.`);
-                         toast.error(`Error al crear producto ${p.nombreProducto}: No se recibió ID.`);
-                         return { productoId: null }; // Indicar que no se obtuvo ID
-                    }
-                })
-                .then(({ productoId }) => {
-                    // Registrar movimiento de entrada solo si se obtuvo un productoId válido
-                    if (productoId) {
-                        console.log(`[Afectar Inventario] Registrando movimiento de entrada para nuevo producto ID ${productoId}...`);
+                }).select('id').single().then(({ data: newProdData, error: errIns }) => {
+                    if (errIns) { console.error(`Error creando "${p.nombreProducto}":`, errIns.message); toast.error(`Error creando ${p.nombreProducto}.`); return null; }
+                    if (newProdData && newProdData.id) { console.log(`"${p.nombreProducto}" creado (ID: ${newProdData.id}).`); return newProdData.id; }
+                    return null;
+                }).then(newProdId => {
+                    if (newProdId) {
                         movimientoPromises.push(
                             supabase.from('movimientos_inventario').insert({
-                                tipo: 'ENTRADA',
-                                producto_id: productoId,
-                                cantidad: cantidadCompraActual,
-                                referencia: compra.numero_pedido,
-                                motivo: 'compra',
-                                fecha: new Date().toISOString()
-                            }).then(({ error: errMov }) => {
-                                if (errMov) {
-                                    console.error(`[Afectar Inventario] Error al registrar movimiento para producto ID ${productoId}:`, errMov.message);
-                                    toast.error(`Error al registrar movimiento para ${p.nombreProducto}.`);
-                                } else {
-                                    console.log(`[Afectar Inventario] Movimiento de entrada registrado para producto ID ${productoId}.`);
-                                }
+                                tipo: 'ENTRADA', producto_id: newProdId, cantidad: cantidadCompraActual,
+                                referencia: compra.numero_pedido, motivo: 'compra', fecha: new Date().toISOString()
                             })
                         );
-                    } else {
-                         console.warn(`[Afectar Inventario] No se pudo obtener ID para registrar movimiento de entrada para "${p.nombreProducto}".`);
-                         toast.warn(`Advertencia: No se pudo registrar movimiento para ${p.nombreProducto}.`);
                     }
                 })
             );
-             // Para el caso de inserción, el movimiento se registra DENTRO de la promesa de inserción
-             // para asegurar que tenemos el ID del nuevo producto.
-             productoIdParaMovimiento = 'handled_in_promise'; // Marcar como manejado en la promesa
+            productoIdParaMovimiento = 'handled_in_promise';
         }
-
-        // Registrar movimiento de entrada para productos EXISTENTES
         if (prod && productoIdParaMovimiento !== 'handled_in_promise') {
-             console.log(`[Afectar Inventario] Registrando movimiento de entrada para producto ID ${productoIdParaMovimiento}...`);
              movimientoPromises.push(
                  supabase.from('movimientos_inventario').insert({
-                     tipo: 'ENTRADA',
-                     producto_id: productoIdParaMovimiento,
-                     cantidad: cantidadCompraActual,
-                     referencia: compra.numero_pedido,
-                     motivo: 'compra',
-                     fecha: new Date().toISOString()
-                 }).then(({ error: errMov }) => {
-                     if (errMov) {
-                         console.error(`[Afectar Inventario] Error al registrar movimiento para producto ID ${productoIdParaMovimiento}:`, errMov.message);
-                         toast.error(`Error al registrar movimiento para ${p.nombreProducto}.`);
-                     } else {
-                         console.log(`[Afectar Inventario] Movimiento de entrada registrado para producto ID ${productoIdParaMovimiento}.`);
-                     }
+                     tipo: 'ENTRADA', producto_id: productoIdParaMovimiento, cantidad: cantidadCompraActual,
+                     referencia: compra.numero_pedido, motivo: 'compra', fecha: new Date().toISOString()
                  })
              );
         }
-    } // Fin del bucle for...of
-
-    // Esperar a que todas las promesas de actualización/inserción y movimientos se completen
-    console.log('[Afectar Inventario] Esperando a que se completen las operaciones de base de datos...');
+    }
+    console.log('[Afectar Inventario] Esperando promesas...');
     await Promise.all([...updatePromises, ...movimientoPromises]);
-    console.log('[Afectar Inventario] Operaciones de base de datos completadas.');
-
-
-    // 4. Refrescar lista de compras y limpiar formulario de afectación
-    console.log('[Afectar Inventario] Refrescando lista de compras y limpiando formulario...');
+    console.log('[Afectar Inventario] Promesas completadas.');
     fetchCompras();
     setInvConfig({ gastosImportacion: '', tipoCambioImportacion: '', otrosGastos: '', targetIdx: null });
     setCurrentEditingItems(null);
-    toast.success(`Inventario afectado exitosamente para pedido ${compra.numero_pedido}`);
-    console.log('[Afectar Inventario] Proceso de afectación de inventario finalizado.');
+    toast.success(`Inventario afectado para pedido ${compra.numero_pedido}`);
+    console.log('[Afectar Inventario] Proceso finalizado.');
   };
+  
 
   return (
     <div className="min-h-screen bg-gray-100 p-4 md:p-8 lg:p-12">
-      {/* Encabezado responsive */}
       <div className="flex flex-col md:flex-row items-center justify-between gap-6 mb-8">
         <button
           onClick={() => navigate('/')}
@@ -555,12 +419,10 @@ export default function Compras() {
         >
           Volver al inicio
         </button>
-
-        <div className="w-full md:w-[150px]" /> {/* Espaciador para alinear */}
+        <div className="w-full md:w-[150px]" />
       </div>
       <div className="mt-6 bg-white shadow-lg rounded-lg p-6 md:p-8">
         <h1 className="text-3xl font-bold text-gray-800 mb-6 text-center">Gestión de Compras</h1>
-        {/* Botón para mostrar/ocultar formulario */}
         <button
           onClick={() => setMostrarFormulario(!mostrarFormulario)}
           className={`mb-6 px-6 py-2 rounded-lg shadow-md transition duration-200 ${mostrarFormulario ? 'bg-red-600 hover:bg-red-700 text-white' : 'bg-blue-600 hover:bg-blue-700 text-white'}`}
@@ -573,122 +435,82 @@ export default function Compras() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Número de Pedido</label>
-                <input
-                  type="text"
-                  name="numeroPedido"
-                  placeholder="Ej: 12345"
-                  value={formulario.numeroPedido}
-                  onChange={handleInputChange}
-                  className="w-full border border-gray-300 px-3 py-2 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                />
+                <input type="text" name="numeroPedido" placeholder="Ej: 12345" value={formulario.numeroPedido} onChange={handleInputChange} className="w-full border border-gray-300 px-3 py-2 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Proveedor</label>
-                <input
-                  type="text"
-                  name="proveedor"
-                  placeholder="Ej: Proveedor A"
-                  value={formulario.proveedor}
-                  onChange={handleInputChange}
-                  className="w-full border border-gray-300 px-3 py-2 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                />
+                <input type="text" name="proveedor" placeholder="Ej: Proveedor A" value={formulario.proveedor} onChange={handleInputChange} className="w-full border border-gray-300 px-3 py-2 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Fecha de Compra</label>
-                <input
-                  type="date"
-                  name="fechaCompra"
-                  value={formulario.fechaCompra}
-                  onChange={handleInputChange}
-                  className="w-full border border-gray-300 px-3 py-2 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                />
+                <input type="date" name="fechaCompra" value={formulario.fechaCompra} onChange={handleInputChange} className="w-full border border-gray-300 px-3 py-2 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Descuento Total (USD)</label>
-                <input
-                  type="number"
-                  name="descuentoTotalUSD"
-                  placeholder="Ej: 10.50"
-                  value={formulario.descuentoTotalUSD}
-                  onChange={handleInputChange}
-                  className="w-full border border-gray-300 px-3 py-2 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                />
+                <input type="number" name="descuentoTotalUSD" placeholder="Ej: 10.50" value={formulario.descuentoTotalUSD} onChange={handleInputChange} className="w-full border border-gray-300 px-3 py-2 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Gastos Envío USA (USD)</label>
-                <input
-                  type="number"
-                  name="gastosEnvioUSA"
-                  placeholder="Ej: 25.00"
-                  value={formulario.gastosEnvioUSA}
-                  onChange={handleInputChange}
-                  className="w-full border border-gray-300 px-3 py-2 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                />
+                <input type="number" name="gastosEnvioUSA" placeholder="Ej: 25.00" value={formulario.gastosEnvioUSA} onChange={handleInputChange} className="w-full border border-gray-300 px-3 py-2 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de Cambio del Día</label>
-                <input
-                  type="number"
-                  name="tipoCambioDia"
-                  placeholder="Ej: 20.00"
-                  value={formulario.tipoCambioDia}
-                  onChange={handleInputChange}
-                  className="w-full border border-gray-300 px-3 py-2 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                />
+                <input type="number" name="tipoCambioDia" placeholder="Ej: 20.00" value={formulario.tipoCambioDia} onChange={handleInputChange} className="w-full border border-gray-300 px-3 py-2 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" />
               </div>
             </div>
-            {/* Sección para agregar ítems a la compra */}
+            
+            {/* Sección para agregar ítems a la compra MODIFICADA */}
             <div className="mb-6 p-4 border border-gray-200 rounded-md bg-gray-50">
               <h3 className="text-lg font-semibold text-gray-800 mb-4">Agregar Producto a la Compra</h3>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-                <div className="md:col-span-2">
+                <div className="md:col-span-2 relative" ref={productoInputRef}> {/* Añadido ref y relative */}
                   <label className="block text-sm font-medium text-gray-700 mb-1">Producto</label>
                   <input
                     type="text"
                     name="nombreProducto"
-                    placeholder="Selecciona o escribe un producto"
+                    placeholder="Escribe para buscar un producto..." // Placeholder actualizado
                     value={formulario.nombreProducto}
                     onChange={handleInputChange}
-                    list="nombres-sugeridos"
+                    onKeyDown={handleProductoInputKeyDown} // Para cerrar con Escape
+                    onFocus={() => setMostrarSugerenciasProducto(true)} // Mostrar al enfocar
+                    // No usar 'list' si implementamos sugerencias personalizadas
                     className="w-full border border-gray-300 px-3 py-2 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   />
-                  <datalist id="nombres-sugeridos">
-                    {nombresSugeridos.map((nombre, index) => (
-                      <option key={index} value={nombre} />
-                    ))}
-                  </datalist>
+                  {/* Lista de sugerencias desplegable */}
+                  {mostrarSugerenciasProducto && sugerenciasProducto.length > 0 && (
+                    <ul 
+                        ref={sugerenciasRef} // Añadido ref
+                        className="absolute z-10 w-full bg-white border border-gray-300 rounded-md shadow-lg mt-1 max-h-60 overflow-y-auto"
+                    >
+                      {sugerenciasProducto.map((nombre, index) => (
+                        <li key={index}>
+                          <button
+                            type="button" // Importante para no enviar el formulario
+                            onClick={() => handleSeleccionarSugerencia(nombre)}
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 focus:bg-gray-100 focus:outline-none"
+                          >
+                            {nombre}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Cantidad</label>
-                  <input
-                    type="number"
-                    name="cantidad"
-                    placeholder="Cant."
-                    value={formulario.cantidad}
-                    onChange={handleInputChange}
-                    className="w-full border border-gray-300 px-3 py-2 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-right"
-                  />
+                  <input type="number" name="cantidad" placeholder="Cant." value={formulario.cantidad} onChange={handleInputChange} className="w-full border border-gray-300 px-3 py-2 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-right" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Precio USD</label>
-                  <input
-                    type="number"
-                    name="precioUnitarioUSD"
-                    placeholder="Precio USD"
-                    value={formulario.precioUnitarioUSD}
-                    onChange={handleInputChange}
-                    className="w-full border border-gray-300 px-3 py-2 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-right"
-                  />
+                  <input type="number" name="precioUnitarioUSD" placeholder="Precio USD" value={formulario.precioUnitarioUSD} onChange={handleInputChange} className="w-full border border-gray-300 px-3 py-2 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-right" />
                 </div>
               </div>
-              <button
-                onClick={agregarProducto}
-                className="mt-4 px-6 py-2 bg-green-600 text-white rounded-lg shadow-md hover:bg-green-700 transition duration-200 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50"
-              >
+              <button onClick={agregarProducto} className="mt-4 px-6 py-2 bg-green-600 text-white rounded-lg shadow-md hover:bg-green-700 transition duration-200 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50">
                 Agregar Producto
               </button>
             </div>
-            {productosAgregados.length > 0 && (
+            {/* ... resto del formulario de nueva compra ... */}
+             {productosAgregados.length > 0 && (
               <div className="mb-6">
                 <h3 className="text-lg font-semibold text-gray-800 mb-4">Productos Agregados</h3>
                 <div className="overflow-x-auto bg-white rounded-lg shadow-md">
@@ -733,11 +555,11 @@ export default function Compras() {
             )}
           </div>
         )}
+        {/* ... resto del componente (Historial de Compras, Afectar Inventario, etc.) ... */}
         <h2 className="text-2xl font-bold text-gray-800 mb-6">Historial de Compras</h2>
         <div className="space-y-6">
           {savedCompras.map((compraData, index) => (
             <div key={compraData.compra.id} className="border border-gray-200 rounded-lg shadow-md overflow-hidden bg-white">
-              {/* Cabecera de la compra */}
               <div
                 className={`flex justify-between items-center p-4 cursor-pointer transition duration-150 ease-in-out ${compraData.compra.inventario_afectado ? 'bg-green-50 hover:bg-green-100' : 'bg-gray-50 hover:bg-gray-100'}`}
                 onClick={() => setExpandedIdx(expandedIdx === index ? null : index)}
@@ -751,24 +573,18 @@ export default function Compras() {
                   {compraData.compra.inventario_afectado ? 'Inventario Afectado' : 'Pendiente Afectar'}
                 </div>
                 <button
-                  onClick={(e) => {
-                    e.stopPropagation(); // Evita que se expanda/colapse al hacer clic en eliminar
-                    eliminarCompra(compraData.compra.id, compraData.compra.inventario_afectado); // Pasar estado de afectado
-                  }}
+                  onClick={(e) => { e.stopPropagation(); eliminarCompra(compraData.compra.id, compraData.compra.inventario_afectado); }}
                   className="ml-4 px-3 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700 disabled:opacity-50"
-                   disabled={compraData.compra.inventario_afectado} // Deshabilitar si ya afectó inventario
+                   disabled={compraData.compra.inventario_afectado}
                 >
                   Eliminar
                 </button>
               </div>
-              {/* Detalles de la compra */}
               {expandedIdx === index && (
                 <div className="p-4 bg-white border-t">
                   <h3 className="text-lg font-medium mb-3">Ítems de la Compra:</h3>
-                  {/* Sección de visualización/edición de ítems (actualmente solo visualización de ítems guardados) */}
-                  {/* Si deseas editar ítems de compras guardadas, necesitarías una lógica más compleja aquí */}
                    <div className="space-y-3 mb-4">
-                       {savedCompras[index].items.map((item, itemIndex) => (
+                       {savedCompras[index].items.map((item) => ( // No necesitas itemIndex si no lo usas como key
                            <div key={item.id} className="grid grid-cols-3 gap-4 items-center text-sm text-gray-700">
                                <div className="font-medium">{item.nombreProducto}</div>
                                <div>
@@ -786,66 +602,33 @@ export default function Compras() {
                            </div>
                        ))}
                    </div>
-
-                  {/* Información de gastos de la cabecera */}
                   <div className="mb-4 text-sm text-gray-700">
-                    <div>
-                      <span className="font-semibold">Descuento Total (USD):</span> ${compraData.compra.descuento_total_usd?.toFixed(2) || '0.00'}
-                    </div>
-                    <div>
-                      <span className="font-semibold">Gastos Envío USA (USD):</span> ${compraData.compra.gastos_envio_usa?.toFixed(2) || '0.00'}
-                    </div>
-                    <div>
-                      <span className="font-semibold">Tipo de Cambio Venta:</span> {compraData.compra.tipo_cambio_dia?.toFixed(2) || 'N/A'}
-                    </div>
+                    <div><span className="font-semibold">Descuento Total (USD):</span> ${compraData.compra.descuento_total_usd?.toFixed(2) || '0.00'}</div>
+                    <div><span className="font-semibold">Gastos Envío USA (USD):</span> ${compraData.compra.gastos_envio_usa?.toFixed(2) || '0.00'}</div>
+                    <div><span className="font-semibold">Tipo de Cambio Venta:</span> {compraData.compra.tipo_cambio_dia?.toFixed(2) || 'N/A'}</div>
                     {compraData.compra.inventario_afectado && (
                       <>
-                        <div>
-                          <span className="font-semibold">Gastos Importación Registrados:</span> ${compraData.compra.gastos_importacion?.toFixed(2) || '0.00'}
-                        </div>
-                        <div>
-                          <span className="font-semibold">Tipo de Cambio Importación Registrado:</span> {compraData.compra.tipo_cambio_importacion?.toFixed(2) || 'N/A'}
-                        </div>
-                        <div>
-                          <span className="font-semibold">Otros Gastos Registrados:</span> ${compraData.compra.otros_gastos?.toFixed(2) || '0.00'}
-                        </div>
+                        <div><span className="font-semibold">Gastos Importación Registrados:</span> ${compraData.compra.gastos_importacion?.toFixed(2) || '0.00'}</div>
+                        <div><span className="font-semibold">Tipo de Cambio Importación Registrado:</span> {compraData.compra.tipo_cambio_importacion?.toFixed(2) || 'N/A'}</div>
+                        <div><span className="font-semibold">Otros Gastos Registrados:</span> ${compraData.compra.otros_gastos?.toFixed(2) || '0.00'}</div>
                       </>
                     )}
                   </div>
-                  {/* Sección para afectar inventario */}
-                  {!compraData.compra.inventario_afectado && ( // Mostrar solo si no ha afectado inventario
+                  {!compraData.compra.inventario_afectado && (
                       <div className="p-3 border rounded bg-yellow-50">
                         <h3 className="text-lg font-medium mb-3">Afectar Inventario con esta Compra</h3>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                           <div>
                             <label className="block text-sm font-medium text-gray-700">Gastos Importación</label>
-                            <input
-                              type="number"
-                              placeholder="Ej: 79.00"
-                              value={invConfig.targetIdx === index ? invConfig.gastosImportacion : ''}
-                              onChange={(e) => setInvConfig(prev => ({ ...prev, gastosImportacion: e.target.value, targetIdx: index }))}
-                              className="w-full border border-gray-300 p-2 rounded"
-                            />
+                            <input type="number" placeholder="Ej: 79.00" value={invConfig.targetIdx === index ? invConfig.gastosImportacion : ''} onChange={(e) => setInvConfig(prev => ({ ...prev, gastosImportacion: e.target.value, targetIdx: index }))} className="w-full border border-gray-300 p-2 rounded" />
                           </div>
                           <div>
                             <label className="block text-sm font-medium text-gray-700">Tipo de Cambio Importación</label>
-                            <input
-                              type="number"
-                              placeholder="Ej: 20.35"
-                              value={invConfig.targetIdx === index ? invConfig.tipoCambioImportacion : ''}
-                              onChange={(e) => setInvConfig(prev => ({ ...prev, tipoCambioImportacion: e.target.value, targetIdx: index }))}
-                              className="w-full border border-gray-300 p-2 rounded"
-                            />
+                            <input type="number" placeholder="Ej: 20.35" value={invConfig.targetIdx === index ? invConfig.tipoCambioImportacion : ''} onChange={(e) => setInvConfig(prev => ({ ...prev, tipoCambioImportacion: e.target.value, targetIdx: index }))} className="w-full border border-gray-300 p-2 rounded" />
                           </div>
                           <div>
                             <label className="block text-sm font-medium text-gray-700">Otros Gastos</label>
-                            <input
-                              type="number"
-                              placeholder="Ej: 0.00"
-                              value={invConfig.targetIdx === index ? invConfig.otrosGastos : ''}
-                              onChange={(e) => setInvConfig(prev => ({ ...prev, otrosGastos: e.target.value, targetIdx: index }))}
-                              className="w-full border border-gray-300 p-2 rounded"
-                            />
+                            <input type="number" placeholder="Ej: 0.00" value={invConfig.targetIdx === index ? invConfig.otrosGastos : ''} onChange={(e) => setInvConfig(prev => ({ ...prev, otrosGastos: e.target.value, targetIdx: index }))} className="w-full border border-gray-300 p-2 rounded" />
                           </div>
                         </div>
                         <button
@@ -866,3 +649,4 @@ export default function Compras() {
     </div>
   );
 }
+
