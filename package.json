@@ -13,6 +13,8 @@
     "chart.js": "^4.4.9",
     "date-fns": "^4.1.0",
     "html2canvas": "^1.4.1",
+    "html2pdf.js": "^0.10.3",
+    "jsdom": "^26.1.0",
     "jspdf": "^2.5.2",
     "jspdf-autotable": "^3.8.4",
     "lucide-react": "^0.507.0",
