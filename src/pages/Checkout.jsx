@@ -1,10 +1,10 @@
 // src/pages/Checkout.jsx
 import React, { useEffect, useState, useMemo } from 'react';
 import { supabase } from '../supabase';
-import { useNavigate, useLocation } from 'react-router-dom'; // Importa useLocation
-import jsPDF from 'jspdf'; // Mantenemos la importación por si acaso, pero no la usaremos para el ticket HTML
+import { useNavigate, useLocation } from 'react-router-dom';
+import jsPDF from 'jspdf';
 import toast from 'react-hot-toast';
-import 'jspdf-autotable'; // Mantenemos la importación por si acaso
+import 'jspdf-autotable';
 import QuickEntryBar from '../components/QuickEntryBar';
 import QuickSaleModal from '../components/QuickSaleModal';
 import ClientSelector from '../components/ClientSelector';
@@ -12,19 +12,16 @@ import NewClientModal from '../components/NewClientModal';
 import FilterTabs from '../components/FilterTabs';
 import ProductGrid from '../components/ProductGrid';
 import ModalCheckout from '../components/ModalCheckout';
-// >>> Importamos el nuevo componente para mostrar el ticket HTML <<<
 import HtmlTicketDisplay from '../components/HtmlTicketDisplay';
-import { ChevronRight } from 'lucide-react'; // Importa el icono ChevronRight si lo usas en el footer
+import { ChevronRight, Eye, EyeOff } from 'lucide-react'; // --- NUEVO/MODIFICADO: Añadimos iconos ---
 
 
-// Helper simple para formatear moneda (si no está global)
+// Helper simple para formatear moneda
 const formatCurrency = (amount) => {
-     // Asegurarse de que amount sea un número antes de formatear
      const numericAmount = parseFloat(amount);
      if (isNaN(numericAmount)) {
-         return '$0.00'; // Devolver un valor por defecto si no es un número válido
+         return '$0.00';
      }
-     // Ajusta según tu moneda y región (asumiendo COP por tu código anterior, cambia a USD si es necesario)
      return numericAmount.toLocaleString('es-CO', {
         style: 'currency',
         currency: 'COP',
@@ -33,7 +30,7 @@ const formatCurrency = (amount) => {
     });
 };
 
-// Helper para formatear fecha y hora para el código (aaaammddhhmmss)
+// Helper para formatear fecha y hora para el código
 const formatDateTimeForCode = (date) => {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -41,11 +38,10 @@ const formatDateTimeForCode = (date) => {
     const hours = String(date.getHours()).padStart(2, '0');
     const minutes = String(date.getMinutes()).padStart(2, '0');
     const seconds = String(date.getSeconds()).padStart(2, '0');
-    return `${year}${month}${day}${hours}${minutes}${seconds}`; // Formato sin ':' para el código
+    return `${year}${month}${day}${hours}${minutes}${seconds}`;
 };
 
-// Función para cargar una imagen local y convertirla a Base64 (ya no necesaria para el ticket HTML, pero se mantiene si se usa en otro lugar)
-// Aunque no la usamos para el ticket HTML, la mantenemos si piensas generar PDFs en otros lados
+// Función para cargar una imagen local y convertirla a Base64
 const getBase64Image = async (url) => {
     try {
         const response = await fetch(url);
@@ -65,79 +61,70 @@ const getBase64Image = async (url) => {
     }
 };
 
-
 export default function Checkout() {
     const navigate = useNavigate();
-    const location = useLocation(); // Hook para acceder al estado de navegación
+    const location = useLocation();
 
     const [clientes, setClientes] = useState([]);
-    const [productos, setProductos] = useState([]); // Lista completa de productos
-    const [productosVenta, setProductosVenta] = useState([]); // Productos en el carrito/venta actual
+    const [productos, setProductos] = useState([]);
+    const [productosVenta, setProductosVenta] = useState([]);
 
     const [filtro, setFiltro] = useState('All');
     const [busqueda, setBusqueda] = useState('');
 
-    const [clienteSeleccionado, setClienteSeleccionado] = useState(null);
-    const [currentUser, setCurrentUser] = useState(null); // Usuario logueado de auth.users
-    const [vendedorInfo, setVendedorInfo] = useState(null); // Info adicional del vendedor de la tabla 'usuarios'
+    // --- NUEVO/MODIFICADO: Estado para mostrar/ocultar productos sin stock ---
+    const [showOutOfStock, setShowOutOfStock] = useState(false);
 
-    const [clienteBalance, setClienteBalance] = useState(0);
+    const [clienteSeleccionado, setClienteSeleccionado] = useState(null);
+    const [currentUser, setCurrentUser] = useState(null);
+    const [vendedorInfo, setVendedorInfo] = useState(null);
+
+    const [infoClienteConSaldo, setInfoClienteConSaldo] = useState(null);
+    const [loadingSaldoCliente, setLoadingSaldoCliente] = useState(false);
+    const [usarSaldoFavor, setUsarSaldoFavor] = useState(false);
+    const [montoAplicadoDelSaldoFavor, setMontoAplicadoDelSaldoFavor] = useState(0);
+
     const [enganche, setEnganche] = useState(0);
     const [gastosEnvio, setGastosEnvio] = useState(0);
 
     const [showQuickSale, setShowQuickSale] = useState(false);
     const [showNewClient, setShowNewClient] = useState(false);
-    const [showSaleModal, setShowSaleModal] = useState(false); // Estado para controlar el modal de checkout
+    const [showSaleModal, setShowSaleModal] = useState(false);
     const [processing, setProcessing] = useState(false);
 
     const [paymentType, setPaymentType] = useState('');
-    const [discountType, setDiscountType] = useState('Sin descuento'); // 'Sin descuento', 'Por importe', 'Por porcentaje'
-    const [discountValue, setDiscountValue] = useState(0); // Valor numérico del descuento
+    const [discountType, setDiscountType] = useState('Sin descuento');
+    const [discountValue, setDiscountValue] = useState(0);
 
-    // >>> Nuevo estado para el ID del presupuesto origen <<<
     const [budgetSourceId, setBudgetSourceId] = useState(null);
-
-    // Estados para mostrar el ticket HTML
     const [showHtmlTicket, setShowHtmlTicket] = useState(false);
     const [htmlTicketData, setHtmlTicketData] = useState(null);
-    // ------------------------------------------
 
-
-    // Carga inicial de clientes, productos, usuario logueado (auth y tabla) y logo (si aún se usa)
     useEffect(() => {
         async function loadData() {
-            // 1. Obtener el usuario logueado de Supabase Auth
             const { data: { user }, error: authError } = await supabase.auth.getUser();
             if (authError) {
                 console.error("Error getting auth user:", authError);
-                // Manejar error de autenticación si es necesario
             }
-
             if (user) {
                 setCurrentUser(user);
-
-                // 2. Si hay un usuario logueado, obtener su información de la tabla 'usuarios'
-                // Asumimos que el ID del usuario en auth.users coincide con el ID en la tabla 'usuarios'
                 const { data: vendedorData, error: vendedorError } = await supabase
                     .from('usuarios')
-                    .select('nombre') // Selecciona solo el campo 'nombre'
-                    .eq('id', user.id) // Filtra por el ID del usuario logueado
-                    .single(); // Espera un solo resultado
-
+                    .select('nombre')
+                    .eq('id', user.id)
+                    .single();
                 if (vendedorError) {
                     console.error("Error loading vendedor info from 'usuarios' table:", vendedorError);
-                    setVendedorInfo({ nombre: user.email }); // Usar email como fallback si falla la carga del nombre
+                    setVendedorInfo({ nombre: user.email });
                 } else {
-                    setVendedorInfo(vendedorData); // Guarda el objeto { nombre: '...' }
+                    setVendedorInfo(vendedorData);
                 }
             } else {
                 console.warn('No hay usuario logueado en Checkout.');
                 setCurrentUser(null);
-                setVendedorInfo(null); // No hay vendedor si no hay usuario logueado
+                setVendedorInfo(null);
             }
 
-            // Cargar clientes
-            // >>> Incluir 'telefono' y cualquier otro campo necesario para el ticket <<<
             const { data: cli, error: errorClientes } = await supabase.from('clientes').select('id, nombre, telefono');
             if (errorClientes) {
                 console.error("Error loading clients:", errorClientes);
@@ -146,7 +133,6 @@ export default function Checkout() {
                 setClientes(cli || []);
             }
 
-            // Cargar productos
             const { data: prod, error: errorProductos } = await supabase.from('productos').select('*');
             if (errorProductos) {
                 console.error("Error loading products:", errorProductos);
@@ -154,269 +140,229 @@ export default function Checkout() {
             } else {
                 const prodMapped = (prod || []).map(p => {
                     let imagenUrl = p.imagenUrl || p.imagen_url || p.imagen || '';
-                    // Supabase Storage URL - Asegúrate de que el bucket se llama 'productos'
                     if (imagenUrl && !imagenUrl.startsWith('http') && supabase.storage) {
-                        // Verificar si la ruta es correcta dentro del bucket
-                        // Por ejemplo, si 'p.imagen' es solo el nombre del archivo 'mi_imagen.jpg'
                         const { data } = supabase.storage.from('productos').getPublicUrl(p.imagen);
                         imagenUrl = data.publicUrl;
                     } else if (imagenUrl && !imagenUrl.startsWith('http')) {
-                        // Manejar caso si supabase.storage no accesible o bucket no encontrado
                         console.warn('Supabase Storage no accesible o bucket "productos" no encontrado para obtener URL pública.');
-                        imagenUrl = ''; // O poner una URL de imagen placeholder
+                        imagenUrl = '';
                     }
-
-                    // Asegurarse de que el stock es un número
                     const stockNumerico = parseFloat(p.stock) || 0;
                     return { ...p, imagenUrl, stock: stockNumerico };
                 });
                 setProductos(prodMapped);
             }
-
-            // --- Cargar la imagen del logo al iniciar (solo si se usa en PDF o en otro lugar) ---
-            // const logoUrl = '/imagen/PERFUMESELISA.jpg';
-            // const base64 = await getBase64Image(logoUrl);
-            // setLogoBase64(base64);
-            // ------------------------------------------
         }
         loadData();
-    }, []); // Vacío para que solo se ejecute una vez al montar
+    }, []);
 
-    // Efecto para cargar el balance del cliente cuando cambia el cliente seleccionado
     useEffect(() => {
-        async function loadClientBalance() {
-            if (clienteSeleccionado?.id) {
-                // >>> Sumar todos los movimientos para obtener el balance actual <<<
-                const { data, error } = await supabase
-                    .from('movimientos_cuenta_clientes')
-                    .select('monto')
-                    .eq('cliente_id', clienteSeleccionado.id);
-
-                if (error) {
-                    console.error("Error loading client balance:", error);
-                    setClienteBalance(0); // Resetear si hay error
-                    toast.error("No se pudo cargar el balance del cliente.");
-                } else {
-                    const totalBalance = (data || []).reduce((sum, mov) => sum + (parseFloat(mov.monto) || 0), 0);
-                    setClienteBalance(totalBalance);
+        if (clienteSeleccionado && clienteSeleccionado.id) {
+            const fetchClienteConSaldo = async () => {
+                setLoadingSaldoCliente(true);
+                setInfoClienteConSaldo(null);
+                setUsarSaldoFavor(false);
+                setMontoAplicadoDelSaldoFavor(0);
+                try {
+                    const { data, error } = await supabase.rpc('get_cliente_con_saldo', {
+                        p_cliente_id: clienteSeleccionado.id
+                    });
+                    if (error) throw error;
+                    if (data && data.length > 0) {
+                        setInfoClienteConSaldo(data[0]);
+                    } else {
+                        setInfoClienteConSaldo({
+                            client_id: clienteSeleccionado.id,
+                            client_name: clienteSeleccionado.nombre,
+                            telefono: clienteSeleccionado.telefono,
+                            balance: 0,
+                            latest_payment_date: null,
+                            first_purchase_date: null,
+                        });
+                    }
+                } catch (err) {
+                    console.error('Error obteniendo información y saldo del cliente:', err.message);
+                    toast.error('Error al obtener el saldo del cliente.');
+                    setInfoClienteConSaldo({
+                        client_id: clienteSeleccionado.id,
+                        client_name: clienteSeleccionado.nombre,
+                        telefono: clienteSeleccionado.telefono,
+                        balance: 0,
+                        errorAlObtenerSaldo: true
+                    });
+                } finally {
+                    setLoadingSaldoCliente(false);
                 }
-            } else {
-                setClienteBalance(0); // Resetear si no hay cliente seleccionado
-            }
+            };
+            fetchClienteConSaldo();
+        } else {
+            setInfoClienteConSaldo(null);
+            setUsarSaldoFavor(false);
+            setMontoAplicadoDelSaldoFavor(0);
         }
-        loadClientBalance();
-    }, [clienteSeleccionado]); // Ejecutar cuando clienteSeleccionado cambie
+    }, [clienteSeleccionado]);
 
-
-    // >>> Nuevo Efecto para cargar datos de Presupuesto si existen en el estado de navegación <<<
     useEffect(() => {
-        console.log("Checkout useEffect location.state:", location.state);
         if (location.state && location.state.budgetData) {
             const budget = location.state.budgetData;
-            console.log("Cargando datos de presupuesto en Checkout:", budget);
-
-            // 1. Cargar el cliente del presupuesto
             if (budget.clientes) {
                 setClienteSeleccionado(budget.clientes);
             } else {
                 toast.warn("Presupuesto sin información de cliente.");
-                // Si no hay cliente, quizás no deberías continuar? O permitir seleccionarlo?
-                // Por ahora, si no hay cliente, no cargamos el resto para evitar errores.
                 return;
             }
-
-            // 2. Cargar los productos del presupuesto en productosVenta
             if (budget.presupuesto_items && budget.presupuesto_items.length > 0) {
-                // Necesitamos mapear los ítems del presupuesto a la estructura esperada por productosVenta
-                // y obtener el stock actual de esos productos de la lista 'productos' ya cargada.
-                // NOTA: 'productos' se carga asíncronamente. Este useEffect puede correr antes que 'productos' esté listo.
-                // Añadimos 'productos' a la dependencia para que se re-ejecute si los productos se cargan después.
                 const itemsFromBudget = budget.presupuesto_items.map(item => {
-                    // Buscar el producto completo en la lista de productos disponibles para obtener stock
                     const fullProductInfo = productos.find(p => p.id === item.producto_id);
-
                     return {
-                        // Usamos el ID del producto real de la BD
                         id: item.producto_id,
-                        // Usamos el nombre del producto (desde la relación o descripción)
                         nombre: item.productos?.nombre || item.descripcion || 'Producto Desconocido',
                         cantidad: parseFloat(item.cantidad) || 0,
-                        // El precio unitario en el presupuesto es el que usaremos como 'promocion' aquí
                         promocion: parseFloat(item.precio_unitario) || 0,
-                        // El subtotal del ítem en el presupuesto
                         total: parseFloat(item.subtotal_item) || 0,
-                        // Añadir el stock del producto completo para las validaciones del carrito
                         stock: fullProductInfo ? (parseFloat(fullProductInfo.stock) || 0) : 0,
-                        // Mantener otras propiedades del producto si son necesarias (imagen, etc.)
                         imagenUrl: fullProductInfo?.imagenUrl || ''
                     };
                 });
-                // Filtrar ítems con cantidad > 0
                 const validItemsFromBudget = itemsFromBudget.filter(item => item.cantidad > 0);
-
                 if (validItemsFromBudget.length !== itemsFromBudget.length) {
                     toast.warn("Algunos productos del presupuesto tenían cantidad cero y fueron omitidos.");
                 }
-
                 setProductosVenta(validItemsFromBudget);
             } else {
                 setProductosVenta([]);
                 toast.warn("El presupuesto no contiene productos.");
             }
-
-            // 3. Cargar detalles de descuento, envío y pago
             setDiscountType(budget.tipo_descuento || 'Sin descuento');
-            // Usar valor_descuento que es el porcentaje o importe
             setDiscountValue(parseFloat(budget.valor_descuento) || 0);
             setGastosEnvio(parseFloat(budget.gastos_envio) || 0);
-            setPaymentType(budget.forma_pago || ''); // Pre-seleccionar forma de pago del presupuesto
-
-            // 4. Guardar el ID del presupuesto origen
+            setPaymentType(budget.forma_pago || '');
             setBudgetSourceId(budget.id);
-
-            // 5. Limpiar el estado de navegación para que no se recargue al volver a la página
-            // history.replaceState({}, '', location.pathname); // Esto requiere acceder a history, no ideal en React Router v6+
-            // Una alternativa es navegar sin reemplazar, o resetear el state después de usarlo.
-            // Por ahora, dejaremos que el efecto se dispare solo una vez gracias a [location.state]
-            // Pero si recargas la página, volverá a cargar el presupuesto. Considera esto.
-
-            // 6. Abrir el modal de Checkout automáticamente
-            // Usamos un setTimeout para asegurar que los estados se actualicen antes de abrir el modal
-            // y la UI tenga tiempo de renderizar el footer con los totales calculados.
             setTimeout(() => {
-                console.log("Opening sale modal from budget load...");
-                // Validar que se hayan cargado productos y cliente antes de abrir el modal
                 if (budget.clientes && budget.presupuesto_items && budget.presupuesto_items.length > 0) {
-                    openSaleModal(); // Llama a la función que abre el modal de confirmación
+                    openSaleModal();
                 } else {
                     toast.error("No se pudo abrir el modal de venta. Asegúrate de que el presupuesto tenga cliente y productos.");
                 }
-            }, 100); // Pequeño retraso (100ms)
-
+            }, 100);
         } else {
-            console.log("No budget data found in location state. Loading empty checkout.");
-            // Asegurarse de que los estados estén limpios si no hay datos de presupuesto
-            setBudgetSourceId(null); // No hay presupuesto origen
-            // Otros estados como productosVenta, clienteSeleccionado, etc. ya están vacíos por defecto.
-            // Si llegaras a re-usar esta lógica para limpiar después de una venta, asegúrate de resetear todos los estados.
+            setBudgetSourceId(null);
         }
-    }, [location.state, productos]); // Depende de location.state y productos (para buscar stock). ¡Importante añadir 'productos'!
+    }, [location.state, productos]);
 
-
-    // Filtrado de productos por búsqueda y filtro de categoría
     const productosFiltrados = useMemo(() => {
-        return productos.filter(p =>
-            (filtro === 'All' || p.categoria === filtro) &&
-            p.nombre.toLowerCase().includes(busqueda.toLowerCase())
-        );
-    }, [productos, filtro, busqueda]); // Depende de 'productos', 'filtro' y 'busqueda'
+        return productos.filter(p => {
+            const categoriaMatch = filtro === 'All' || p.categoria === filtro;
+            const busquedaMatch = p.nombre.toLowerCase().includes(busqueda.toLowerCase());
+            const stockMatch = showOutOfStock ? true : (parseFloat(p.stock) || 0) > 0;
+            return categoriaMatch && busquedaMatch && stockMatch;
+        });
+    }, [productos, filtro, busqueda, showOutOfStock]);
 
+    const saldoAFavorDisponible = useMemo(() => {
+        return (infoClienteConSaldo && infoClienteConSaldo.balance < 0)
+            ? Math.abs(infoClienteConSaldo.balance)
+            : 0;
+    }, [infoClienteConSaldo]);
 
-    // Cálculos de totales, descuento y Gastos de Envío
-    const { totalItems, originalSubtotal, subtotal, discountAmount, totalFinal } = useMemo(() => {
-        const calculatedOriginalSubtotal = productosVenta.reduce((sum, p) => {
-            const cantidad = parseFloat(p.cantidad) || 0;
-            // Usar p.promocion para el precio unitario en checkout
-            const precio = parseFloat(p.promocion) || 0;
-            return sum + (cantidad * precio);
-        }, 0);
+    const { totalItems, originalSubtotal, subtotalConDescuento, discountAmount, totalAntesDeCredito } = useMemo(() => {
+        try {
+            const calculatedOriginalSubtotal = productosVenta.reduce((sum, p) => (sum + (parseFloat(p.cantidad) || 0) * (parseFloat(p.promocion) || 0)), 0);
+            const calculatedTotalItems = productosVenta.reduce((sum, p) => sum + (parseFloat(p.cantidad) || 0), 0);
+            let calculatedSubtotalConDescuento = calculatedOriginalSubtotal;
+            let calculatedDiscountAmount = 0;
 
-        const calculatedTotalItems = productosVenta.reduce((sum, p) => sum + (parseFloat(p.cantidad) || 0), 0);
+            if (discountType === 'Por importe') {
+                calculatedDiscountAmount = Math.min(parseFloat(discountValue) || 0, calculatedOriginalSubtotal);
+                calculatedSubtotalConDescuento = Math.max(0, calculatedOriginalSubtotal - calculatedDiscountAmount);
+            } else if (discountType === 'Por porcentaje') {
+                const discountPercentage = Math.min(Math.max(0, parseFloat(discountValue) || 0), 100);
+                calculatedDiscountAmount = calculatedOriginalSubtotal * (discountPercentage / 100);
+                calculatedSubtotalConDescuento = calculatedOriginalSubtotal - calculatedDiscountAmount;
+            }
 
-        let calculatedSubtotal = calculatedOriginalSubtotal;
-        let calculatedDiscountAmount = 0;
-
-        if (discountType === 'Por importe') {
-            calculatedDiscountAmount = Math.min(parseFloat(discountValue) || 0, calculatedOriginalSubtotal);
-            calculatedSubtotal = Math.max(0, calculatedOriginalSubtotal - calculatedDiscountAmount);
-        } else if (discountType === 'Por porcentaje') {
-            const discountPercentage = Math.min(Math.max(0, parseFloat(discountValue) || 0), 100);
-            calculatedDiscountAmount = calculatedOriginalSubtotal * (discountPercentage / 100);
-            calculatedSubtotal = calculatedOriginalSubtotal - calculatedDiscountAmount;
+            const calculatedGastosEnvio = parseFloat(gastosEnvio) || 0;
+            const calculatedTotalAntesDeCredito = calculatedSubtotalConDescuento + calculatedGastosEnvio;
+            
+            return {
+                totalItems: calculatedTotalItems,
+                originalSubtotal: calculatedOriginalSubtotal,
+                subtotalConDescuento: calculatedSubtotalConDescuento,
+                discountAmount: calculatedDiscountAmount,
+                totalAntesDeCredito: calculatedTotalAntesDeCredito
+            };
+        } catch (e) {
+            console.error("Error dentro del useMemo para calcular totales:", e);
+            return {
+                totalItems: 0,
+                originalSubtotal: 0,
+                subtotalConDescuento: 0,
+                discountAmount: 0,
+                totalAntesDeCredito: 0
+            };
         }
+    }, [productosVenta, discountType, discountValue, gastosEnvio]);
 
-        const calculatedGastosEnvio = parseFloat(gastosEnvio) || 0;
-        const calculatedTotalFinal = calculatedSubtotal + calculatedGastosEnvio;
+    useEffect(() => {
+        if (usarSaldoFavor && saldoAFavorDisponible > 0) {
+            const creditoAUsar = Math.min(totalAntesDeCredito, saldoAFavorDisponible);
+            setMontoAplicadoDelSaldoFavor(creditoAUsar);
+        } else {
+            setMontoAplicadoDelSaldoFavor(0);
+        }
+    }, [usarSaldoFavor, saldoAFavorDisponible, totalAntesDeCredito]);
 
+    const totalFinalAPagar = useMemo(() => {
+        return totalAntesDeCredito - montoAplicadoDelSaldoFavor;
+    }, [totalAntesDeCredito, montoAplicadoDelSaldoFavor]);
 
-        return {
-            totalItems: calculatedTotalItems,
-            originalSubtotal: calculatedOriginalSubtotal,
-            subtotal: calculatedSubtotal, // Subtotal después del descuento
-            discountAmount: calculatedDiscountAmount,
-            totalFinal: calculatedTotalFinal // Total incluyendo descuento y envío
-        };
-    }, [productosVenta, discountType, discountValue, gastosEnvio]); // Depende de los estados que afectan el cálculo
-
-
-    // Función para agregar producto al carrito
     const onAddToCart = producto => {
         const currentStock = parseFloat(producto.stock) || 0;
         if (currentStock <= 0) {
             toast.error('Producto sin stock disponible');
             return;
         }
-
         setProductosVenta(prev => {
             const existe = prev.find(p => p.id === producto.id);
             if (existe) {
-                // Buscar el producto completo en la lista 'productos' para la validación de stock
                 const fullProductInfo = productos.find(p => p.id === producto.id);
                 const productStock = fullProductInfo ? (parseFloat(fullProductInfo.stock) || 0) : 0;
-
                 if (existe.cantidad + 1 > productStock) {
                     toast.error(`Stock insuficiente. Máximo disponible: ${productStock}`);
                     return prev;
                 }
-                // Incrementar cantidad y recalcular total parcial
                 return prev.map(p =>
                     p.id === producto.id
                         ? { ...p, cantidad: p.cantidad + 1, total: (p.cantidad + 1) * (parseFloat(p.promocion) || 0) }
                         : p
                 );
             }
-            // Añadir nuevo producto con cantidad 1, total parcial inicial, y stock
-            const fullProductInfo = productos.find(p => p.id === producto.id); // Buscar stock al añadir
+            const fullProductInfo = productos.find(p => p.id === producto.id);
             return [...prev, { ...producto, cantidad: 1, total: (parseFloat(producto.promocion) || 0), stock: fullProductInfo ? (parseFloat(fullProductInfo.stock) || 0) : 0 }];
         });
     };
 
-    // Función para eliminar un producto del carrito
     const onRemoveFromCart = (productoId) => {
         setProductosVenta(prev => prev.filter(p => p.id !== productoId));
     };
 
-    // Función para ajustar la cantidad de un producto en el carrito
     const onUpdateQuantity = (productoId, newQuantity) => {
         const quantity = parseInt(newQuantity, 10);
-
         setProductosVenta(prev => {
             const productoIndex = prev.findIndex(p => p.id === productoId);
             if (productoIndex === -1) return prev;
-
             const producto = prev[productoIndex];
-            // Usar el stock guardado en el item de productosVenta (que se obtuvo al añadir/cargar presupuesto)
             const currentStock = parseFloat(producto.stock) || 0;
-
-
             if (isNaN(quantity) || quantity <= 0) {
-                // Si la cantidad es inválida o 0, eliminar el producto
                 if (window.confirm(`¿Eliminar ${producto.nombre} de la venta?`)) {
-                    return prev.filter(p => p.id !== productoId); // Eliminar si confirma
+                    return prev.filter(p => p.id !== productoId);
                 }
-                return prev; // No hacer nada si cancela o la cantidad es 0 inicialmente
+                return prev;
             }
-
-
             if (quantity > currentStock) {
                 toast.error(`Stock insuficiente para ${producto.nombre}. Máximo disponible: ${currentStock}`);
-                // Opcional: podrías establecer la cantidad al stock máximo en lugar de no hacer nada
-                // updatedProductos[productoIndex].cantidad = currentStock;
-                // updatedProductos[productoIndex].total = currentStock * (parseFloat(producto.promocion) || 0);
-                return prev; // No actualizar si excede stock
+                return prev;
             }
-
-            // Actualizar cantidad y recalcular total parcial
             const updatedProductos = [...prev];
             updatedProductos[productoIndex] = {
                 ...producto,
@@ -427,400 +373,235 @@ export default function Checkout() {
         });
     };
 
-
-    // Función para abrir el modal de venta (AHORA USA EL ESTADO ACTUAL DEL CHECKOUT)
     const openSaleModal = () => {
-        // Validación movida dentro del try/catch de handleFinalize para el procesamiento.
-        // Esta validación es solo para abrir el modal.
-        if (!currentUser || !currentUser.id) {
-            // Mensaje movido a handleFinalize si falla la validación al procesar.
-            // console.error('Debes iniciar sesión como vendedor para registrar una venta.');
-            return; // No abrir el modal si no hay usuario logueado
-        }
-
-        // Validar si hay cliente y productos en el carrito actual antes de abrir el modal
-        if (!clienteSeleccionado || productosVenta.length === 0) {
-            if (!clienteSeleccionado) {
-                toast.error('Selecciona un cliente para proceder.');
+        if (!currentUser || !currentUser.id) return;
+        if (!infoClienteConSaldo || !infoClienteConSaldo.client_id || productosVenta.length === 0) {
+            if (!infoClienteConSaldo || !infoClienteConSaldo.client_id) {
+                toast.error('Selecciona un cliente y espera a que cargue su información.');
             } else if (productosVenta.length === 0) {
                 toast.error('Agrega productos a la venta.');
             }
-            return; // No abrir el modal si falta cliente o productos
+            return;
         }
-
-        // Validar si hay forma de pago seleccionada antes de abrir el modal
-        if (!paymentType) {
-            // Permitimos abrir el modal, pero el botón Confirmar estará deshabilitado
-            console.log("Forma de pago no seleccionada. Permitiendo abrir modal para selección.");
-        }
-
-
-        // Resetear enganche y gastos de envío al abrir el modal para una nueva venta (opcional)
-        // setEnganche(0); // Puedes comentar esto si quieres que se mantenga el valor
-        // setGastosEnvio(0); // Puedes comentar esto si quieres que se mantenga el valor
-
-        console.log("Opening sale confirmation modal...");
         setShowSaleModal(true);
     };
 
-
-    // Función para finalizar la venta - Incluye registro en BD y muestra Ticket HTML
     const handleFinalize = async () => {
         setProcessing(true);
-
-        // Validaciones finales antes de procesar (más estrictas)
-        if (!currentUser || !currentUser.id) {
-            toast.error('Error de vendedor: Debes iniciar sesión.');
-            setProcessing(false);
-            return;
-        }
-        if (!clienteSeleccionado) {
-            toast.error('Error de cliente: Selecciona un cliente.');
-            setProcessing(false);
-            return;
-        }
-        if (productosVenta.length === 0) {
-            toast.error('Error de productos: Agrega productos a la venta.');
-            setProcessing(false);
-            return;
-        }
-        if (!paymentType) {
-            toast.error('Error de pago: Selecciona una forma de pago.');
-            setProcessing(false);
-            return;
-        }
-        // Validar enganche si es Crédito cliente
+        if (!currentUser || !currentUser.id) { toast.error('Error de vendedor: Debes iniciar sesión.'); setProcessing(false); return; }
+        if (!infoClienteConSaldo || !infoClienteConSaldo.client_id) { toast.error('Error de cliente: La información del cliente no está completa.'); setProcessing(false); return; }
+        if (productosVenta.length === 0) { toast.error('Error de productos: Agrega productos a la venta.'); setProcessing(false); return; }
+        if (totalFinalAPagar > 0 && !paymentType) { toast.error('Error de pago: Selecciona una forma de pago.'); setProcessing(false); return; }
         const numericEnganche = parseFloat(enganche) || 0;
-        if (paymentType === 'Crédito cliente' && numericEnganche < 0) {
-            toast.error('El enganche no puede ser negativo.');
-            setProcessing(false);
-            return;
-        }
-        // Validar gastos de envío
+        if (paymentType === 'Crédito cliente' && numericEnganche < 0) { toast.error('El enganche no puede ser negativo.'); setProcessing(false); return; }
         const numericGastosEnvio = parseFloat(gastosEnvio) || 0;
-        if (numericGastosEnvio < 0) {
-            toast.error('Los gastos de envío no pueden ser negativos.');
-            setProcessing(false);
-            return;
-        }
-        // Validar que totalFinal no sea negativo si no es crédito cliente (o si tu lógica lo requiere)
-        // La validación en el botón ya ayuda, pero una doble verificación aquí es buena.
-        if (paymentType !== 'Crédito cliente' && totalFinal < 0) {
-            toast.error('El total final no puede ser negativo para esta forma de pago.');
-            setProcessing(false);
-            return;
-        }
-
+        if (numericGastosEnvio < 0) { toast.error('Los gastos de envío no pueden ser negativos.'); setProcessing(false); return; }
+        if (paymentType !== 'Crédito cliente' && totalFinalAPagar < 0) { toast.error('El total final a pagar no puede ser negativo para esta forma de pago.'); setProcessing(false); return; }
 
         try {
-            // Declaramos 'now' una sola vez al principio del bloque try
-            const now = new Date(); // <-- Declaración única aquí
+            const now = new Date();
+            const codigo = `VT${formatDateTimeForCode(now)}`;
+            let ventaId;
 
-            // --- Implementación actual (menos robusta sin RPC atómica) ---
-            // Si no usas RPC, asegúrate de que tu secuencia de operaciones aquí maneje los errores
-            // para intentar revertir las operaciones previas si una falla.
-            // La lógica que ya tenías en handleFinalize en Checkout.jsx es un buen punto de partida,
-            // pero deberías envolverla en un try...catch más robusto y considerar cómo manejar
-            // fallos intermedios (ej: venta creada, pero stock no actualizado -> inconsistencia).
-
-            // Replicaremos la lógica que ya tenías en tu Checkout.jsx para no depender de una RPC que quizás no has creado.
-            // PERO con las correcciones para usar los nuevos estados (gastosEnvio, totalFinal, enganche)
-            // Y AÑADIENDO la actualización del estado del presupuesto si budgetSourceId existe.
-
-            // Eliminamos la lógica original para obtener ventasPrevias y nextCodigoNumber
-            // si ya no usaremos el número secuencial en favor de la fecha/hora.
-            /*
-            const { data: ventasPrevias, error: errorVentasPrevias } = await supabase
-                .from('ventas')
-                .select('codigo_venta')
-                .order('created_at', { ascending: false })
-                .limit(1);
-
-            let nextCodigoNumber = 1;
-            if (ventasPrevias && ventasPrevias.length > 0 && ventasPrevias[0].codigo_venta) {
-               const lastCodigoVenta = ventasPrevias[0].codigo_venta;
-               const lastNumberMatch = lastCodigoVenta.match(/VT(\d+)/);
-                if (lastNumberMatch && lastNumberMatch[1]) {
-                    const lastNumber = parseInt(lastNumberMatch[1], 10);
-                    if (!isNaN(lastNumber)) {
-                        nextCodigoNumber = lastNumber + 1;
-                    } else {
-                        console.warn('Código de venta previo no tiene el formato esperado. Iniciando secuencia en 1.');
-                    }
-                } else {
-                    console.warn('Código de venta previo no tiene el formato esperado. Iniciando secuencia en 1.');
+            if (usarSaldoFavor && montoAplicadoDelSaldoFavor > 0) {
+                const { data: movSaldoData, error: errorMovSaldo } = await supabase
+                    .from('movimientos_cuenta_clientes')
+                    .insert([{
+                        cliente_id: infoClienteConSaldo.client_id,
+                        tipo_movimiento: 'USO_SALDO_VENTA',
+                        monto: montoAplicadoDelSaldoFavor,
+                        descripcion: `Aplicación saldo a favor en Venta ${codigo}`,
+                    }])
+                    .select('id')
+                    .single();
+                if (errorMovSaldo || !movSaldoData) {
+                    console.error("Error al registrar uso de saldo a favor:", errorMovSaldo);
+                    toast.error("Error al aplicar el saldo a favor del cliente.");
+                    throw errorMovSaldo || new Error("No se pudo registrar el uso del saldo a favor.");
                 }
-           } else {
-                console.log('No hay ventas previas. Iniciando secuencia de código de venta en 1.');
-           }
-           const codigo = '#VT' + String(nextCodigoNumber).padStart(5, '0');
-           */
+            }
 
-            // Generar el nuevo código de venta basado en la fecha y hora (VT#aaaammddhhmmss)
-            // Usamos la variable 'now' declarada al principio del try
-            const codigo = `VT${formatDateTimeForCode(now)}`; // <-- Código generado con fecha/hora
-
-
-            // Insertar cabecera de venta (Lógica existente con correcciones)
             const { data: ventaInsertada, error: errorVenta } = await supabase
-                .from('ventas') // Nombre exacto de tu tabla de ventas
+                .from('ventas')
                 .insert([{
-                    codigo_venta: codigo, // Usar el código de venta generado con fecha/hora
-                    cliente_id: clienteSeleccionado.id,
+                    codigo_venta: codigo,
+                    cliente_id: infoClienteConSaldo.client_id,
                     vendedor_id: currentUser.id,
-                    subtotal: originalSubtotal, // Usar el subtotal original (antes de descuento en checkout)
-                    forma_pago: paymentType,
-                    tipo_descuento: discountType, // Usar el tipo de descuento seleccionado en checkout
-                    valor_descuento: discountAmount, // Usar el MONTO calculado del descuento en checkout
-                    total: totalFinal, // Usar el TOTAL FINAL (subtotal - descuento + envío)
-                    enganche: numericEnganche, // Usar el enganche ingresado
-                    gastos_envio: numericGastosEnvio, // Usar los gastos de envío ingresados
-                    presupuesto_id: budgetSourceId, // <<< Guardar el ID del presupuesto origen si existe
+                    subtotal: originalSubtotal,
+                    forma_pago: totalFinalAPagar === 0 && montoAplicadoDelSaldoFavor > 0 ? 'SALDO_A_FAVOR' : paymentType,
+                    tipo_descuento: discountType,
+                    valor_descuento: discountAmount,
+                    total: totalFinalAPagar,
+                    monto_credito_aplicado: montoAplicadoDelSaldoFavor, // Asegúrate que esta columna exista en tu tabla 'ventas'
+                    enganche: numericEnganche,
+                    gastos_envio: numericGastosEnvio,
+                    presupuesto_id: budgetSourceId,
                 }])
                 .select('id')
                 .single();
 
             if (errorVenta) {
-                console.error('Error al insertar cabecera de venta:', errorVenta.message);
-                toast.error(`Error al registrar la venta: ${errorVenta.message}`);
-                throw errorVenta; // Lanzar error para detener el proceso
-            }
-            const ventaId = ventaInsertada.id;
-
-
-            // Registrar movimientos de cuenta del cliente si es 'Crédito cliente' (Lógica existente con correcciones)
-            if (paymentType === 'Crédito cliente') {
-                const movimientos = [{
-                    cliente_id: clienteSeleccionado.id,
-                    tipo_movimiento: 'CARGO_VENTA',
-                    monto: totalFinal, // El cargo a la cuenta es el TOTAL FINAL
-                    referencia_venta_id: ventaId,
-                    descripcion: `Venta ${codigo}`,
-                }];
-                if (numericEnganche > 0) {
-                    movimientos.push({
-                        cliente_id: clienteSeleccionado.id,
-                        tipo_movimiento: 'ABONO_ENGANCHE',
-                        monto: -numericEnganche, // Monto negativo para un abono
-                        referencia_venta_id: ventaId,
-                        descripcion: `Enganche Venta ${codigo}`,
-                    });
+                if (usarSaldoFavor && montoAplicadoDelSaldoFavor > 0) {
+                    console.warn("La venta falló después de registrar el uso de saldo. Se requiere intervención manual para el movimiento de saldo.");
                 }
+                throw errorVenta;
+            }
+            ventaId = ventaInsertada.id;
 
-                const { error: errorMovimientos } = await supabase
+            if (usarSaldoFavor && montoAplicadoDelSaldoFavor > 0) {
+                 await supabase
                     .from('movimientos_cuenta_clientes')
-                    .insert(movimientos);
+                    .update({ referencia_venta_id: ventaId })
+                    .match({ cliente_id: infoClienteConSaldo.client_id, tipo_movimiento: 'USO_SALDO_VENTA', monto: montoAplicadoDelSaldoFavor, descripcion: `Aplicación saldo a favor en Venta ${codigo}` });
+            }
 
-                if (errorMovimientos) {
-                    console.error('Error al registrar movimientos de cuenta del cliente:', errorMovimientos.message);
-                    // CONSIDERAR REVERTIR LA VENTA SI ESTO FALLA
-                    await supabase.from('ventas').delete().eq('id', ventaId); // Intenta revertir
-                    toast.error('Error al registrar los movimientos en la cuenta del cliente. Venta revertida.');
-                    throw errorMovimientos;
+            if (paymentType === 'Crédito cliente') {
+                const montoACredito = totalFinalAPagar - numericEnganche;
+                const movimientosCuenta = [];
+                if (montoACredito > 0) {
+                    movimientosCuenta.push({ cliente_id: infoClienteConSaldo.client_id, tipo_movimiento: 'CARGO_VENTA', monto: montoACredito, referencia_venta_id: ventaId, descripcion: `Venta a crédito ${codigo}` });
+                }
+                if (numericEnganche > 0) {
+                    movimientosCuenta.push({ cliente_id: infoClienteConSaldo.client_id, tipo_movimiento: 'ABONO_ENGANCHE', monto: -numericEnganche, referencia_venta_id: ventaId, descripcion: `Enganche Venta ${codigo}` });
+                }
+                if (movimientosCuenta.length > 0) {
+                    const { error: errorMovimientos } = await supabase.from('movimientos_cuenta_clientes').insert(movimientosCuenta);
+                    if (errorMovimientos) {
+                        await supabase.from('ventas').delete().eq('id', ventaId);
+                        toast.error('Error al registrar movimientos en cuenta. Venta revertida.');
+                        throw errorMovimientos;
+                    }
                 }
             }
 
-
-            // Insertar detalles de venta y actualizar stock/movimientos (Lógica existente con correcciones)
             for (const p of productosVenta) {
-                // Re-verificar stock del producto antes de actualizar
-                const { data: prodCheck, error: errorProdCheck } = await supabase
-                    .from('productos')
-                    .select('stock')
-                    .eq('id', p.id)
-                    .single();
-
+                const { data: prodCheck, error: errorProdCheck } = await supabase.from('productos').select('stock').eq('id', p.id).single();
                 const currentStock = prodCheck?.stock || 0;
                 const cantidadVendida = parseFloat(p.cantidad) || 0;
-
                 if (errorProdCheck || currentStock < cantidadVendida) {
-                    console.error(`Error de stock o producto no encontrado para ${p.nombre}. Stock disponible: ${currentStock ?? 'N/A'}`);
-                    // CONSIDERAR REVERTIR LA VENTA Y MOVIMIENTOS SI ESTO FALLA
-                    await supabase.from('detalle_venta').delete().eq('venta_id', ventaId); // Intenta revertir detalles
-                    await supabase.from('movimientos_cuenta_clientes').delete().eq('referencia_venta_id', ventaId); // Intenta revertir movimientos de cuenta
-                    await supabase.from('ventas').delete().eq('id', ventaId); // Intenta revertir cabecera
+                    await supabase.from('ventas').delete().eq('id', ventaId);
                     toast.error(`Stock insuficiente para ${p.nombre}. Venta cancelada.`);
                     throw new Error(`Stock insuficiente para ${p.nombre}.`);
                 }
-
-
-                // Insertar detalle de venta
-                const { error: errorDetalle } = await supabase.from('detalle_venta').insert([{
-                    venta_id: ventaId,
-                    producto_id: p.id,
-                    cantidad: cantidadVendida,
-                    precio_unitario: parseFloat(p.promocion) || 0, // Usar precio 'promocion' del item
-                    total_parcial: parseFloat(p.total) || 0 // Usar total parcial del item
-                }]);
-                if (errorDetalle) {
-                    console.error(`Error al insertar detalle de venta para producto ${p.nombre}:`, errorDetalle.message);
-                    // CONSIDERAR REVERTIR ANTERIORES SI ESTO FALLA
-                    await supabase.from('detalle_venta').delete().eq('venta_id', ventaId); // Limpiar detalles incompletos
-                    await supabase.from('movimientos_cuenta_clientes').delete().eq('referencia_venta_id', ventaId);
-                    await supabase.from('ventas').delete().eq('id', ventaId);
-                    toast.error(`Error al guardar detalle para ${p.nombre}. Venta cancelada.`);
-                    throw errorDetalle;
-                }
-
-                // Actualizar stock del producto
+                const { error: errorDetalle } = await supabase.from('detalle_venta').insert([{ venta_id: ventaId, producto_id: p.id, cantidad: cantidadVendida, precio_unitario: parseFloat(p.promocion) || 0, total_parcial: parseFloat(p.total) || 0 }]);
+                if (errorDetalle) { await supabase.from('ventas').delete().eq('id', ventaId); throw errorDetalle; }
                 const nuevoStock = currentStock - cantidadVendida;
                 const { error: errorUpdateStock } = await supabase.from('productos').update({ stock: nuevoStock }).eq('id', p.id);
-                if (errorUpdateStock) {
-                    console.error(`Error al actualizar stock para producto ${p.nombre}:`, errorUpdateStock.message);
-                    // CONSIDERAR REVERTIR ANTERIORES SI ESTO FALLA
-                    await supabase.from('detalle_venta').delete().eq('venta_id', ventaId);
-                    await supabase.from('movimientos_cuenta_clientes').delete().eq('referencia_venta_id', ventaId);
-                    await supabase.from('ventas').delete().eq('id', ventaId);
-                    // Nota: Revertir stock es más complejo si ya se actualizaron algunos productos.
-                    // Por eso la RPC atómica es mejor.
-                    toast.error(`Error al actualizar stock para ${p.nombre}. Venta cancelada.`);
-                    throw errorUpdateStock;
-                }
+                if (errorUpdateStock) { await supabase.from('ventas').delete().eq('id', ventaId); throw errorUpdateStock; }
+                const { error: errMov } = await supabase.from('movimientos_inventario').insert([{ producto_id: p.id, tipo: 'SALIDA', cantidad: cantidadVendida, referencia: codigo, motivo: 'venta', fecha: new Date().toISOString() }]);
+                if (errMov) { await supabase.from('ventas').delete().eq('id', ventaId); throw errMov; }
+            }
 
-                // Registrar movimiento de inventario (SALIDA)
-                const { error: errMov } = await supabase
-                    .from('movimientos_inventario')
-                    .insert([{
-                        producto_id: p.id,
-                        tipo: 'SALIDA',
-                        cantidad: cantidadVendida,
-                        referencia: codigo, // Código de la venta
-                        motivo: 'venta',
-                        fecha: new Date().toISOString() // Fecha actual
-                    }]);
-                if (errMov) {
-                    console.error('Error mov_inventario (' + p.nombre + '):', errMov.message);
-                    // CONSIDERAR REVERTIR ANTERIORES SI ESTO FALLA
-                    await supabase.from('detalle_venta').delete().eq('venta_id', ventaId);
-                    await supabase.from('movimientos_cuenta_clientes').delete().eq('referencia_venta_id', ventaId);
-                    await supabase.from('ventas').delete().eq('id', ventaId);
-                    // Revertir stock actualizado también sería ideal aquí
-                    toast.error(`Error al registrar movimiento de inventario para ${p.nombre}. Venta cancelada.`);
-                    throw errMov;
-                }
-            } // Fin del loop de productosVenta
-
-
-            // >>> 4. Actualizar el estado del presupuesto si la venta proviene de uno <<<
             if (budgetSourceId) {
-                console.log(`Actualizando estado del presupuesto ${budgetSourceId} a 'Convertido a Venta'.`);
-                const { error: updateBudgetError } = await supabase
-                    .from('presupuestos')
-                    .update({ estado: 'Convertido a Venta' })
-                    .eq('id', budgetSourceId);
-
+                const { error: updateBudgetError } = await supabase.from('presupuestos').update({ estado: 'Convertido a Venta' }).eq('id', budgetSourceId);
                 if (updateBudgetError) {
                     console.error(`Error al actualizar estado del presupuesto ${budgetSourceId}:`, updateBudgetError.message);
-                    // Esto es un error menor, la venta ya se registró, pero el presupuesto no se marcó.
                     toast.warn('Advertencia: El presupuesto origen no se marcó como "Convertido a Venta".');
                 } else {
                     console.log(`Presupuesto ${budgetSourceId} marcado como 'Convertido a Venta'.`);
                 }
             }
 
-
-            // Si todo fue bien, preparar datos para el ticket HTML y mostrarlo
-            // Usamos la variable 'now' declarada al principio del try
             const formattedDate = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getFullYear()).slice(-2)} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-
+            
+            let balancePrevioCliente = infoClienteConSaldo?.balance !== undefined ? infoClienteConSaldo.balance : 0;
+            let balanceActualizadoCliente = balancePrevioCliente;
+            if (usarSaldoFavor && montoAplicadoDelSaldoFavor > 0) {
+                balanceActualizadoCliente += montoAplicadoDelSaldoFavor;
+            }
+            if (paymentType === 'Crédito cliente') {
+                const montoACredito = totalFinalAPagar - numericEnganche;
+                if (montoACredito > 0) balanceActualizadoCliente += montoACredito;
+                if (numericEnganche > 0) balanceActualizadoCliente -= numericEnganche;
+            }
 
             const ticketData = {
-                codigo_venta: codigo, // Usar el código de venta generado
-                cliente: {
-                    id: clienteSeleccionado.id,
-                    nombre: clienteSeleccionado.nombre,
-                    telefono: clienteSeleccionado.telefono || 'N/A', // Asegúrate de que tu objeto clienteSeleccionado tenga 'telefono'
-                },
-                vendedor: {
-                    nombre: vendedorInfo?.nombre || currentUser?.email || 'N/A', // Usar nombre del vendedor o email
-                },
+                codigo_venta: codigo,
+                cliente: { id: infoClienteConSaldo.client_id, nombre: infoClienteConSaldo.client_name, telefono: infoClienteConSaldo.telefono || clienteSeleccionado?.telefono || 'N/A' },
+                vendedor: { nombre: vendedorInfo?.nombre || currentUser?.email || 'N/A' },
                 fecha: formattedDate,
-                // Mapear productosVenta para tener solo datos necesarios en el ticket
-                productosVenta: productosVenta.map(p => ({
-                    id: p.id, // ID del producto
-                    nombre: p.nombre,
-                    cantidad: p.cantidad,
-                    precio_unitario: parseFloat(p.promocion) || 0, // Precio unitario usado en la venta
-                    total_parcial: parseFloat(p.total) || 0, // Total parcial calculado
-                })),
-                originalSubtotal: originalSubtotal, // Subtotal antes de descuento
-                discountAmount: discountAmount, // Monto del descuento aplicado
-                forma_pago: paymentType,
-                enganche: numericEnganche, // Enganche real usado
-                gastos_envio: numericGastosEnvio, // Gastos de envío reales usados
-                total_final: totalFinal, // Total Final de la venta
-                balance_cuenta: (parseFloat(clienteBalance) || 0) + totalFinal - numericEnganche, // Calcular nuevo balance para mostrar en ticket
+                productosVenta: productosVenta.map(p => ({ id: p.id, nombre: p.nombre, cantidad: p.cantidad, precio_unitario: parseFloat(p.promocion) || 0, total_parcial: parseFloat(p.total) || 0 })),
+                originalSubtotal, discountAmount,
+                forma_pago: totalFinalAPagar === 0 && montoAplicadoDelSaldoFavor > 0 ? 'SALDO_A_FAVOR' : paymentType,
+                enganche: numericEnganche, gastos_envio: numericGastosEnvio, total_final: totalFinalAPagar,
+                monto_credito_aplicado: montoAplicadoDelSaldoFavor,
+                balance_cuenta: balanceActualizadoCliente,
             };
-
-            setHtmlTicketData(ticketData); // Guardar los datos del ticket
-            setShowHtmlTicket(true); // Mostrar el modal del ticket HTML
-            setShowSaleModal(false); // Cerrar el modal de confirmación de venta
-
-            // Limpiar estados de la venta actual para una nueva venta
+            setHtmlTicketData(ticketData);
+            setShowHtmlTicket(true);
+            setShowSaleModal(false);
+            
             setProductosVenta([]);
-            setClienteSeleccionado(null); // Limpiar cliente seleccionado
+            setClienteSeleccionado(null);
             setPaymentType('');
             setDiscountType('Sin descuento');
             setDiscountValue(0);
             setEnganche(0);
             setGastosEnvio(0);
-            setBudgetSourceId(null); // Limpiar ID de presupuesto origen
-            setClienteBalance(ticketData.balance_cuenta); // Actualizar el balance del cliente en el estado
-
+            setBudgetSourceId(null);
 
             toast.success(`Venta ${codigo} registrada exitosamente!`);
-
         } catch (err) {
             console.error('Error general al finalizar venta:', err.message);
-            // Si err es un objeto Error con un mensaje específico, úsalo
-            toast.error(`Error al procesar la venta: ${err.message || 'Error desconocido'}. Por favor, revisa el log de errores.`);
-            // No limpiar estados aquí para permitir al usuario revisar qué falló,
-            // a menos que decidas revertir completamente la transacción.
+            toast.error(`Error al procesar la venta: ${err.message || 'Error desconocido'}.`);
         } finally {
             setProcessing(false);
         }
     };
 
-    // Función para cerrar el modal del ticket HTML
     const closeHtmlTicket = () => {
         setShowHtmlTicket(false);
-        setHtmlTicketData(null); // Limpiar datos del ticket al cerrar
+        setHtmlTicketData(null);
     };
+    
+    // --- NUEVO/MODIFICADO: Lista de clientes para el selector, excluyendo el ya seleccionado ---
+    const clientesParaSelector = useMemo(() => {
+        if (!clienteSeleccionado) {
+            return clientes; // Si no hay cliente seleccionado, muestra todos
+        }
+        // Filtra la lista de clientes para excluir el que ya está seleccionado
+        return clientes.filter(c => c.id !== clienteSeleccionado.id);
+    }, [clientes, clienteSeleccionado]);
 
-    // --- Renderizado (JSX) ---
+
     return (
         <div className="min-h-screen bg-gray-100 p-4 md:p-8 lg:p-12">
-            {/* Encabezado responsive */}
+            {/* Encabezado */}
             <div className="flex flex-col md:flex-row items-center justify-between gap-6 mb-8">
-                {/* Botón Volver al inicio */}
                 <button
                     onClick={() => navigate('/')}
                     className="px-6 py-2 bg-gray-700 text-white font-semibold rounded-lg shadow-md hover:bg-gray-800 transition duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-opacity-50"
                 >
                     Volver al inicio
                 </button>
-
-                {/* Título */}
                 <h1 className="text-3xl font-bold text-gray-800 text-center w-full md:w-auto">
                     Gestión de Ventas
                 </h1>
-
-                {/* Spacer para md+ */}
                 <div className="w-full md:w-[150px]" />
             </div>
 
-            {/* Selector de Cliente y Modales */}
+            {/* Selector de Cliente */}
             <div className="mb-6">
                 <ClientSelector
-                    clientes={clientes}
+                    clientes={clientesParaSelector} /* --- NUEVO/MODIFICADO: Usar la lista filtrada --- */
                     clienteSeleccionado={clienteSeleccionado}
                     onSelect={setClienteSeleccionado}
                     onCreateNew={() => setShowNewClient(true)}
                 />
-                {/* Mostrar balance del cliente si está seleccionado */}
-                {clienteSeleccionado && (
+                {loadingSaldoCliente && clienteSeleccionado && (
+                    <p className="mt-2 text-sm text-gray-600">Cargando saldo del cliente...</p>
+                )}
+                {infoClienteConSaldo && infoClienteConSaldo.balance !== undefined && !loadingSaldoCliente && (
+                     // --- MODIFICADO: Se quita el nombre del cliente de aquí para evitar duplicidad ---
                     <p className="mt-2 text-sm text-gray-700">
-                        Balance del cliente: <span className={`font-semibold ${clienteBalance >= 0 ? 'text-green-700' : 'text-red-600'}`}>{formatCurrency(clienteBalance)}</span>
+                        Balance Actual:
+                        <span className={`font-semibold ${
+                            infoClienteConSaldo.balance === 0 ? 'text-gray-700' :
+                            infoClienteConSaldo.balance < 0 ? 'text-green-600' : 'text-red-600'
+                        }`}>
+                            {' '}{formatCurrency(infoClienteConSaldo.balance)}
+                            {infoClienteConSaldo.balance < 0 ? ' (a favor)' : infoClienteConSaldo.balance > 0 ? ' (por cobrar)' : ''}
+                        </span>
                     </p>
                 )}
                 <NewClientModal
@@ -829,263 +610,195 @@ export default function Checkout() {
                     onClientAdded={(newClient) => {
                         if (newClient && newClient.id) {
                             setClienteSeleccionado(newClient);
-                            setClientes(prev => [...prev, newClient]); // Añadir el nuevo cliente a la lista local
+                            setClientes(prev => [...prev, newClient]);
                         }
                         setShowNewClient(false);
                     }}
                 />
             </div>
 
-            {/* Barra de búsqueda rápida y Modal de Venta Rápida */}
-            <div className="mb-6">
-                <QuickEntryBar
-                    busqueda={busqueda}
-                    onChangeBusqueda={e => setBusqueda(e.target.value)}
-                    onQuickSaleClick={() => setShowQuickSale(true)}
-                />
-                {/* QuickSaleModal - parece ser para añadir productos rápidamente, no para finalizar */}
-                <QuickSaleModal
-                    isOpen={showQuickSale}
-                    onClose={() => setShowQuickSale(false)}
-                    onAdd={onAddToCart}
-                    productos={productos} // Pasar la lista completa de productos
-                    // Asegurarse de que este modal usa la validación de stock también
-                />
+            {/* Barra de búsqueda, filtro de productos y switch de stock */}
+            <div className="mb-6 flex flex-col md:flex-row md:items-center gap-4">
+                <div className="flex-grow">
+                    <QuickEntryBar busqueda={busqueda} onChangeBusqueda={e => setBusqueda(e.target.value)} onQuickSaleClick={() => setShowQuickSale(true)} />
+                </div>
+                {/* --- NUEVO/MODIFICADO: Switch para mostrar/ocultar productos sin stock --- */}
+                <div className="flex items-center space-x-2 whitespace-nowrap">
+                    {showOutOfStock ? <EyeOff size={20} className="text-gray-600"/> : <Eye size={20} className="text-gray-600"/>}
+                    <span className="text-sm text-gray-700 select-none">
+                        {showOutOfStock ? 'Ocultar sin stock' : 'Mostrar sin stock'}
+                    </span>
+                    <label htmlFor="stockToggle" className="flex items-center cursor-pointer">
+                        <div className="relative">
+                            <input 
+                                type="checkbox" 
+                                id="stockToggle" 
+                                className="sr-only" 
+                                checked={showOutOfStock}
+                                onChange={() => setShowOutOfStock(!showOutOfStock)}
+                            />
+                            <div className={`block w-10 h-6 rounded-full transition-colors ${showOutOfStock ? 'bg-blue-600' : 'bg-gray-300'}`}></div>
+                            <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${showOutOfStock ? 'translate-x-full' : ''}`}></div>
+                        </div>
+                    </label>
+                </div>
             </div>
-
-
-            {/* Tabs de Filtro */}
+            <QuickSaleModal isOpen={showQuickSale} onClose={() => setShowQuickSale(false)} onAdd={onAddToCart} productos={productos} />
+            
             <div className="mb-6">
                 <FilterTabs filtro={filtro} setFiltro={setFiltro} />
             </div>
-
-
-            {/* Grid de Productos */}
-            {/* Ajusta el margen inferior para dejar espacio al footer fijo */}
             <div className="mb-20">
-                <ProductGrid
-                    productos={productosFiltrados} // Usa productosFiltrados aquí
-                    onAddToCart={onAddToCart}
-                    showStock
-                />
+                <ProductGrid productos={productosFiltrados} onAddToCart={onAddToCart} showStock />
             </div>
 
-
-            {/* Footer Fijo con Resumen de Venta y Botón que abre el ModalCheckout */}
-            {/* Este div ahora actúa como el botón verde del footer */}
+            {/* Footer Fijo */}
             <div
                 className={`
                     fixed bottom-0 left-0 right-0 p-4 text-center rounded-t-xl shadow-lg
                     flex justify-between items-center
                     transition-colors duration-300 ease-in-out
-                    ${productosVenta.length === 0 || !clienteSeleccionado || processing
+                    ${productosVenta.length === 0 || !infoClienteConSaldo || !infoClienteConSaldo.client_id || processing
                         ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
                         : 'bg-green-600 text-white cursor-pointer hover:bg-green-700'
                     }
                 `}
-                onClick={openSaleModal} // Llama a openSaleModal
-                // Deshabilitar si no hay productos, cliente seleccionado, o si está procesando
-                aria-disabled={productosVenta.length === 0 || !clienteSeleccionado || processing}
+                onClick={openSaleModal}
+                aria-disabled={productosVenta.length === 0 || !infoClienteConSaldo || !infoClienteConSaldo.client_id || processing}
             >
-                {/* Información del resumen */}
                 <div className="flex-1 text-left">
-                    {/* Usar productosVenta.length para el conteo de ítems */}
-                    <span className="font-semibold text-lg">{productosVenta.length} item{productosVenta.length !== 1 ? 's' : ''}</span>
-                    {clienteSeleccionado && (
-                        <span className="ml-4 text-sm text-gray-200">Cliente: {clienteSeleccionado.nombre}</span>
+                    <span className="font-semibold text-lg">{totalItems} item{totalItems !== 1 ? 's' : ''}</span>
+                    {infoClienteConSaldo && infoClienteConSaldo.client_name && (
+                        <span className="ml-4 text-sm text-gray-200">Cliente: {infoClienteConSaldo.client_name}</span>
                     )}
                 </div>
                 <div className="flex-1 text-right">
-                    {/* Usar totalFinal para el total */}
-                    <span className="font-bold text-xl">{formatCurrency(totalFinal)}</span>
+                    <span className="font-bold text-xl">{formatCurrency(totalFinalAPagar)}</span>
                 </div>
                 {processing && (
                     <div className="ml-4 text-sm font-semibold">Procesando…</div>
                 )}
-                {/* Opcional: Añadir un icono de flecha aquí si quieres */}
                 <div className="ml-4">
                     <ChevronRight className="w-6 h-6" />
                 </div>
             </div>
 
-            {/* Modal de Checkout (para confirmar la venta) */}
-            {/* El contenido de este modal es el 'Detalle de venta' de la imagen */}
-            <ModalCheckout
-                isOpen={showSaleModal}
-                onClose={() => setShowSaleModal(false)} // Cerrar el modal
-                title="Detalle de venta"
-                footer={
-                    <>
-                        <button
-                            onClick={() => setShowSaleModal(false)} // Cerrar el modal
-                            className="px-4 py-2 bg-gray-300 text-gray-800 rounded-md hover:bg-gray-400 transition duration-200 ease-in-out"
-                            disabled={processing} // Deshabilitar durante el procesamiento
-                        >
-                            Cancelar
-                        </button>
-                        <button
-                            onClick={handleFinalize} // Llama a handleFinalize para procesar y mostrar ticket HTML
-                            disabled={!paymentType || processing || totalFinal < 0} // Deshabilitar si no hay forma de pago, está procesando, o total es negativo (ajusta según tu lógica si permites total negativo en crédito)
-                            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition duration-200 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
-                        >
-                            {processing ? 'Confirmando…' : 'Confirmar'}
-                        </button>
-                    </>
-                }
-            >
-                {/* Contenido del Modal de Checkout (detalle de venta, pago, descuento, gastos de envío) */}
-                {/* Asegúrate de que este contenido refleje fielmente la imagen que mostraste */}
-                <div className="mb-4 max-h-80 overflow-y-auto pr-2">
-                    <h4 className="text-md font-semibold mb-2">Productos:</h4>
-                    {productosVenta.length === 0 ? (
-                        <p className="text-gray-600">No hay productos en la venta.</p>
-                    ) : (
-                        <ul className="space-y-2">
-                            {productosVenta.map(p => (
-                                <li key={p.id} className="flex justify-between items-center text-sm text-gray-800 border-b pb-2 last:border-b-0">
+            {/* Modal de Checkout */}
+            {showSaleModal && infoClienteConSaldo && (
+                <ModalCheckout
+                    isOpen={showSaleModal}
+                    onClose={() => setShowSaleModal(false)}
+                    title="Detalle de venta"
+                    footer={
+                        <>
+                            <button onClick={() => setShowSaleModal(false)} className="px-4 py-2 bg-gray-300 text-gray-800 rounded-md hover:bg-gray-400" disabled={processing}>
+                                Cancelar
+                            </button>
+                            <button onClick={handleFinalize}
+                                disabled={
+                                    processing ||
+                                    (totalFinalAPagar > 0 && !paymentType) ||
+                                    (paymentType === 'Crédito cliente' && (totalFinalAPagar - (parseFloat(enganche) || 0)) < 0 && totalFinalAPagar !==0)
+                                }
+                                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+                            >
+                                {processing ? 'Confirmando…' : 'Confirmar Venta'}
+                            </button>
+                        </>
+                    }
+                >
+                    <div className="mb-4 max-h-80 overflow-y-auto pr-2">
+                        <h4 className="text-md font-semibold mb-2">Productos:</h4>
+                        {productosVenta.length === 0 ?
+                            (<p>No hay productos.</p>)
+                            : (<ul className="space-y-2">{productosVenta.map(p => (
+                                <li key={p.id} className="flex justify-between items-center text-sm border-b pb-2 last:border-b-0">
                                     <div className="flex-1 mr-4">
                                         <span className="font-medium">{p.nombre}</span>
-                                        <div className="text-xs text-gray-500">{formatCurrency(p.promocion ?? 0)} c/u</div> {/* Usar p.promocion */}
+                                        <div className="text-xs text-gray-500">{formatCurrency(p.promocion ?? 0)} c/u</div>
                                     </div>
                                     <div className="flex items-center">
+                                        <input type="number" min="1" value={p.cantidad} onChange={(e) => onUpdateQuantity(p.id, e.target.value)}
+                                            className="w-12 text-center border rounded-md mr-2 text-sm py-1" disabled={processing} />
+                                        <span className="font-semibold w-20 text-right">{formatCurrency(p.total ?? 0)}</span>
+                                        <button onClick={() => onRemoveFromCart(p.id)} className="ml-2 text-red-600 hover:text-red-800 disabled:opacity-50" disabled={processing}>✕</button>
+                                    </div></li>))}</ul>)}
+                        <hr className="my-4" />
+                        <div className="text-right text-sm space-y-1">
+                            <p>Subtotal Original: <span className="font-medium">{formatCurrency(originalSubtotal)}</span></p>
+                            <p className="text-red-600">Descuento: <span className="font-medium">- {formatCurrency(discountAmount)}</span></p>
+                            <p>Subtotal (con desc.): <span className="font-medium">{formatCurrency(subtotalConDescuento)}</span></p>
+                            <div className="flex justify-end items-center mt-2">
+                                <label htmlFor="modalGastosEnvio" className="text-sm font-medium text-gray-700 mr-2">Gastos de Envío:</label>
+                                <input id="modalGastosEnvio" type="number" step="0.01" min="0" value={gastosEnvio} onChange={e => setGastosEnvio(parseFloat(e.target.value) || 0)}
+                                    className="w-24 text-right border rounded-md text-sm py-1" disabled={processing} />
+                            </div>
+                            <p className="text-lg font-semibold mt-1">Total (antes de saldo a favor): <span className="font-medium">{formatCurrency(totalAntesDeCredito)}</span></p>
+
+                            {/* --- NUEVO: Opción para usar saldo a favor --- */}
+                            {!loadingSaldoCliente && saldoAFavorDisponible > 0 && (
+                                <div className="text-left mt-3 pt-3 border-t">
+                                    <label className="flex items-center cursor-pointer">
                                         <input
-                                            type="number"
-                                            min="1"
-                                            value={p.cantidad}
-                                            onChange={(e) => onUpdateQuantity(p.id, e.target.value)}
-                                            className="w-12 text-center border rounded-md mr-2 text-sm py-1"
-                                            disabled={processing} // Deshabilitar input durante procesamiento
+                                            type="checkbox"
+                                            checked={usarSaldoFavor}
+                                            onChange={(e) => setUsarSaldoFavor(e.target.checked)}
+                                            className="form-checkbox h-5 w-5 text-blue-600 rounded focus:ring-blue-500"
+                                            disabled={processing}
                                         />
-                                        <span className="font-semibold w-20 text-right">{formatCurrency(p.total ?? 0)}</span> {/* Usar p.total */}
-                                        <button
-                                            onClick={() => onRemoveFromCart(p.id)}
-                                            className="ml-2 text-red-600 hover:text-red-800 disabled:opacity-50"
-                                            disabled={processing} // Deshabilitar botón durante procesamiento
-                                        >
-                                            ✕
-                                        </button>
-                                    </div>
-                                </li>
-                            ))}
-                        </ul>
-                    )}
+                                        <span className="ml-2 text-sm text-gray-700">
+                                            Usar saldo a favor ({formatCurrency(saldoAFavorDisponible)} disponibles)
+                                        </span>
+                                    </label>
+                                    {usarSaldoFavor && (
+                                        <p className="text-sm text-green-600 font-medium mt-1">
+                                            Se aplicarán {formatCurrency(montoAplicadoDelSaldoFavor)} de saldo a favor.
+                                        </p>
+                                    )}
+                                </div>
+                            )}
+                            {loadingSaldoCliente && <p className="text-left text-sm text-gray-500 mt-1">Verificando saldo del cliente...</p>}
+                            {/* --- FIN NUEVO --- */}
 
-                    <hr className="my-4" />
-
-                    {/* Sección de Totales con Gastos de Envío */}
-                    <div className="text-right text-sm space-y-1">
-                        {/* Recalcular Subtotal original para mostrar en el modal */}
-                        <p>Subtotal original: <span className="font-medium">{formatCurrency(productosVenta.reduce((sum, p) => sum + (parseFloat(p.cantidad) || 0) * (parseFloat(p.promocion) || 0), 0))}</span></p>
-                        <p className="text-red-600">Descuento: <span className="font-medium">- {formatCurrency(discountAmount)}</span></p>
-                        {/* Mostrar subtotal después del descuento */}
-                        <p>Subtotal (con descuento): <span className="font-medium">{formatCurrency(subtotal)}</span></p>
-                        {/* Campo para Gastos de Envío */}
-                        <div className="flex justify-end items-center mt-2">
-                            <label htmlFor="modalGastosEnvio" className="text-sm font-medium text-gray-700 mr-2">Gastos de Envío:</label> {/* Usar ID único */}
-                            <input
-                                id="modalGastosEnvio" // Usar ID único para el input dentro del modal
-                                type="number"
-                                step="0.01"
-                                min="0"
-                                value={gastosEnvio} // Vincular al estado gastosEnvio
-                                onChange={e => setGastosEnvio(parseFloat(e.target.value) || 0)} // Actualizar estado gastosEnvio
-                                className="w-24 text-right border rounded-md text-sm py-1"
-                                disabled={processing}
-                            />
+                            <p className="text-xl font-bold mt-2 pt-2 border-t border-gray-300">Total Final a Pagar: <span className="text-green-700">{formatCurrency(totalFinalAPagar)}</span></p>
                         </div>
-                        {/* Total Final */}
-                        <p className="text-lg font-bold mt-2 pt-2 border-t border-gray-300">Total Final: <span className="text-green-700">{formatCurrency(totalFinal)}</span></p>
-                    </div>
-
-                    <hr className="my-4" />
-
-                    {/* Sección de Forma de Pago, Descuento y Enganche */}
-                    <div className="space-y-4">
-                        <div>
-                            <label htmlFor="modalPaymentType" className="block text-sm font-medium text-gray-700 mb-1">Forma de Pago:</label> {/* Usar ID único */}
-                            <select
-                                id="modalPaymentType" // Usar ID único
-                                value={paymentType} // Vincular al estado paymentType
-                                onChange={e => setPaymentType(e.target.value)} // Actualizar estado paymentType
-                                className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50"
-                                disabled={processing}
-                            >
-                                <option value="">Selecciona una forma de pago</option>
-                                <option value="Efectivo">Efectivo</option>
-                                <option value="Tarjeta">Tarjeta</option>
-                                <option value="Transferencia">Transferencia</option>
-                                <option value="Crédito cliente">Crédito cliente</option>
-                                {/* Agrega otras opciones si tienes */}
-                            </select>
-                        </div>
-
-                        {/* El selector de descuento dentro del modal DEBE estar vinculado a los mismos estados
-                            discountType y discountValue para que los cálculos de useMemo funcionen. */}
-                        <div>
-                            <label htmlFor="modalDiscountType" className="block text-sm font-medium text-gray-700 mb-1">Descuento:</label> {/* Usar ID único */}
-                            <select
-                                id="modalDiscountType" // Usar ID único
-                                value={discountType} // Vincular al estado discountType
-                                onChange={e => {
-                                    setDiscountType(e.target.value);
-                                    setDiscountValue(0); // Resetear valor al cambiar tipo
-                                }}
-                                className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50"
-                                disabled={processing}
-                            >
-                                <option value="Sin descuento">Sin descuento</option>
-                                <option value="Por importe">Por importe ($)</option>
-                                <option value="Por porcentaje">Por porcentaje (%)</option>
-                            </select>
-                        </div>
-
-                        {discountType !== 'Sin descuento' && (
+                        <hr className="my-4" />
+                        <div className="space-y-4">
                             <div>
-                                <label htmlFor="modalDiscountValue" className="block text-sm font-medium text-gray-700 mb-1"> {/* Usar ID único */}
-                                    Valor del Descuento ({discountType === 'Por importe' ? '$' : '%'}):
-                                </label>
-                                <input
-                                    id="modalDiscountValue" // Usar ID único
-                                    type="number"
-                                    step={discountType === 'Porcentaje' ? "1" : "0.01"}
-                                    min={discountType === 'Porcentaje' ? "0" : "0"}
-                                    max={discountType === 'Porcentaje' ? "100" : undefined}
-                                    value={discountValue} // Vincular al estado discountValue
-                                    onChange={e => setDiscountValue(parseFloat(e.target.value) || 0)} // Actualizar estado discountValue
+                                <label htmlFor="modalPaymentType" className="block text-sm font-medium text-gray-700 mb-1">Forma de Pago:</label>
+                                <select id="modalPaymentType" value={paymentType} onChange={e => setPaymentType(e.target.value)}
                                     className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50"
-                                    disabled={processing}
-                                />
-                            </div>
-                        )}
-
-                        {/* Input para Enganche si es Crédito Cliente */}
-                        {paymentType === 'Crédito cliente' && (
+                                    disabled={processing || (totalFinalAPagar === 0 && montoAplicadoDelSaldoFavor > 0)}
+                                >
+                                    <option value="">Selecciona una forma de pago</option>
+                                    <option value="Efectivo">Efectivo</option>
+                                    <option value="Tarjeta">Tarjeta</option>
+                                    <option value="Transferencia">Transferencia</option>
+                                    <option value="Crédito cliente">Crédito cliente</option>
+                                </select></div>
                             <div>
-                                <label htmlFor="modalEnganche" className="block text-sm font-medium text-gray-700 mb-1"> {/* Usar ID único */}
-                                    Enganche:
-                                </label>
-                                <input
-                                    id="modalEnganche" // Usar ID único
-                                    type="number"
-                                    step="0.01"
-                                    min="0"
-                                    value={enganche} // Vincular con el estado enganche
-                                    onChange={e => setEnganche(parseFloat(e.target.value) || 0)} // Actualizar el estado enganche
-                                    className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50"
-                                    disabled={processing}
-                                />
-                            </div>
-                        )}
-                    </div>
-                </div>
-            </ModalCheckout>
-
-
-            {/* Componente para mostrar el ticket HTML (modal independiente) */}
-            {showHtmlTicket && htmlTicketData && (
-                <HtmlTicketDisplay saleData={htmlTicketData} onClose={closeHtmlTicket} />
-            )}
-
+                                <label htmlFor="modalDiscountType" className="block text-sm font-medium text-gray-700 mb-1">Descuento:</label>
+                                <select id="modalDiscountType" value={discountType} onChange={e => { setDiscountType(e.target.value); setDiscountValue(0); }}
+                                    className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm disabled:opacity-50" disabled={processing}>
+                                    <option value="Sin descuento">Sin descuento</option>
+                                    <option value="Por importe">Por importe ($)</option>
+                                    <option value="Por porcentaje">Por porcentaje (%)</option>
+                                </select></div>
+                            {discountType !== 'Sin descuento' && (<div>
+                                <label htmlFor="modalDiscountValue" className="block text-sm font-medium text-gray-700 mb-1">
+                                    Valor del Descuento ({discountType === 'Por importe' ? '$' : '%'}):</label>
+                                <input id="modalDiscountValue" type="number" step={discountType === 'Porcentaje' ? "1" : "0.01"} min={discountType === 'Porcentaje' ? "0" : "0"} max={discountType === 'Porcentaje' ? "100" : undefined}
+                                    value={discountValue} onChange={e => setDiscountValue(parseFloat(e.target.value) || 0)}
+                                    className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm disabled:opacity-50" disabled={processing} />
+                            </div>)}
+                            {paymentType === 'Crédito cliente' && (<div>
+                                <label htmlFor="modalEnganche" className="block text-sm font-medium text-gray-700 mb-1">Enganche:</label>
+                                <input id="modalEnganche" type="number" step="0.01" min="0" value={enganche} onChange={e => setEnganche(parseFloat(e.target.value) || 0)}
+                                    className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm disabled:opacity-50" disabled={processing} />
+                            </div>)}</div>
+                    </div></ModalCheckout>)}
+            {showHtmlTicket && htmlTicketData && (<HtmlTicketDisplay saleData={htmlTicketData} onClose={closeHtmlTicket} />)}
         </div>
     );
 }
+

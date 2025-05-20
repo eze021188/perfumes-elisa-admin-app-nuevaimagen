@@ -736,27 +736,21 @@ export default function Ventas() {
       ) : (
         <div className="bg-white shadow-lg rounded-lg overflow-hidden mb-6">
           <table className="min-w-full divide-y divide-gray-200">
-            {/* Eliminando espacios innecesarios alrededor de thead */}
             <thead className="bg-gray-200"><tr>
               <th className="p-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Código</th>
               <th className="p-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Cliente</th>
               <th className="p-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider hidden md:table-cell">Fecha</th>
               <th className="p-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider hidden sm:table-cell">Pago</th>
               <th className="p-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Total</th>
-              <th className="p-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Acciones</th> {/* Columna de acciones */}
+              <th className="p-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Acciones</th>
             </tr></thead>
-            {/* Eliminando espacios innecesarios alrededor de tbody */}
             <tbody>{ventasFiltradas.map(venta => (
-              // Eliminando espacios innecesarios alrededor de tr
               <tr key={venta.id} className="border-b hover:bg-gray-50 transition duration-150 ease-in-out cursor-pointer">
-                {/* Eliminando espacios innecesarios alrededor de td */}
                 <td className="p-4 whitespace-nowrap text-sm font-medium text-gray-900">{venta.codigo_venta}</td>
                 <td className="p-4 whitespace-nowrap text-sm text-gray-700">{venta.cliente_nombre}</td>
                 <td className="p-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">{venta.fecha ? new Date(venta.fecha).toLocaleString() : 'Fecha desconocida'}</td>
                 <td className="p-4 whitespace-nowrap text-sm text-gray-500 hidden sm:table-cell">{venta.forma_pago}</td>
-                {/* Mostrar el total final de la venta (que incluye gastos de envío y enganche) */}
                 <td className="p-4 whitespace-nowrap text-sm font-semibold text-gray-900 text-right">{formatCurrency(venta.total ?? 0)}</td>
-                 {/* Celda de acciones */}
                  <td className="p-4 whitespace-nowrap text-center text-sm font-medium">
                       <button
                           onClick={(e) => { e.stopPropagation(); handleSelectSale(venta); }}
@@ -766,7 +760,6 @@ export default function Ventas() {
                       </button>
                  </td>
               </tr>
-              // Eliminando espacios innecesarios alrededor de tr
             ))}</tbody>
           </table>
         </div>
@@ -782,17 +775,11 @@ export default function Ventas() {
             ) : (
               <>
                 <div className="mb-6 text-gray-700 space-y-2">
-                  {/* Usar la info del cliente cargada para el ticket */}
                   <p><strong>Cliente:</strong> {clienteInfoTicket?.nombre || 'Público General'}</p>
-                   {/* Mostrar teléfono si está disponible */}
                    {clienteInfoTicket?.telefono && <p><strong>Teléfono:</strong> {clienteInfoTicket.telefono}</p>}
-                   {/* Mostrar correo si está disponible */}
                    {clienteInfoTicket?.correo && <p><strong>Correo:</strong> {clienteInfoTicket.correo}</p>}
-                   {/* Mostrar dirección si está disponible */}
                    {clienteInfoTicket?.direccion && <p><strong>Dirección:</strong> {clienteInfoTicket.direccion}</p>}
-
                   <p><strong>Fecha:</strong> {ventaSeleccionada.fecha ? new Date(ventaSeleccionada.fecha).toLocaleString() : 'Fecha desconocida'}</p>
-                   {/* Usar la info del vendedor cargada para el ticket */}
                    <p><strong>Vendedor:</strong> {vendedorInfoTicket?.nombre || 'N/A'}</p>
                   <p><strong>Forma de Pago:</strong> {ventaSeleccionada.forma_pago}</p>
                 </div>
@@ -800,40 +787,30 @@ export default function Ventas() {
                 <h3 className="text-xl font-semibold text-gray-800 mb-4">Productos:</h3>
                 <div className="overflow-x-auto shadow-sm rounded-md mb-6">
                   <table className="w-full text-sm border-collapse">
-                    {/* Eliminando espacios innecesarios alrededor de thead */}
                     <thead className="bg-gray-100"><tr>
                       <th className="p-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Producto</th>
                       <th className="p-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Cantidad</th>
                       <th className="p-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Precio</th>
                       <th className="p-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Subtotal</th>
                     </tr></thead>
-                    {/* Eliminando espacios innecesarios alrededor de tbody */}
                     <tbody>{ventaSeleccionada.productos.map((p, i) => (
-                      // Eliminando espacios innecesarios alrededor de tr
                       <tr key={i} className="border-b hover:bg-gray-50">
-                        {/* Eliminando espacios innecesarios alrededor de td */}
                         <td className="p-3">{p.nombre}</td>
                         <td className="p-3 text-center">{p.cantidad}</td>
-                        <td className="p-3 text-right">{formatCurrency(p.precio_unitario ?? 0)}</td> {/* Usar formatCurrency */}
-                        <td className="p-3 text-right">{formatCurrency(p.total_parcial ?? 0)}</td> {/* Usar formatCurrency */}
+                        <td className="p-3 text-right">{formatCurrency(p.precio_unitario ?? 0)}</td>
+                        <td className="p-3 text-right">{formatCurrency(p.total_parcial ?? 0)}</td>
                       </tr>
-                      // Eliminando espacios innecesarios alrededor de tr
                     ))}</tbody>
                   </table>
                 </div>
-                 {/* >>> Sección de Totales en el Modal de Detalle de Venta <<< */}
                  <div className="text-right text-gray-800 space-y-1 mb-6">
-                     {/* Mostrar Enganche si es Crédito cliente y > 0 (Antes del subtotal) */}
                      {ventaSeleccionada.forma_pago === 'Crédito cliente' && (ventaSeleccionada.enganche ?? 0) > 0 && (
                          <p className="font-semibold">Enganche: {formatCurrency(ventaSeleccionada.enganche ?? 0)}</p>
                      )}
-                      {/* Mostrar Gastos de Envío si son > 0 (Antes del subtotal) */}
                      {(ventaSeleccionada.gastos_envio ?? 0) > 0 && (
                          <p className="font-semibold">Gastos de Envío: {formatCurrency(ventaSeleccionada.gastos_envio ?? 0)}</p>
                      )}
-                     {/* Mostrar Subtotal original */}
                      <p className="font-semibold">Subtotal: {formatCurrency(ventaSeleccionada.subtotal ?? 0)}</p>
-                     {/* Mostrar Descuento si aplica */}
                      {((ventaSeleccionada.tipo_descuento === 'porcentaje' && (ventaSeleccionada.valor_descuento ?? 0) > 0) || (ventaSeleccionada.tipo_descuento === 'fijo' && (ventaSeleccionada.valor_descuento ?? 0) > 0)) && (
                          <p className="font-semibold text-red-600">
                              Descuento:{' '}
@@ -842,24 +819,16 @@ export default function Ventas() {
                                  : `- ${formatCurrency(ventaSeleccionada.valor_descuento ?? 0)}`}
                          </p>
                      )}
-                      {/* Mostrar Subtotal con descuento si aplica */}
-                      {/* Solo mostrar si hay descuento aplicado, para evitar duplicar el subtotal original */}
                       {((ventaSeleccionada.tipo_descuento === 'porcentaje' && (ventaSeleccionada.valor_descuento ?? 0) > 0) || (ventaSeleccionada.tipo_descuento === 'fijo' && (ventaSeleccionada.valor_descuento ?? 0) > 0)) && (
                            <p className="font-semibold">Subtotal (con descuento): {formatCurrency((ventaSeleccionada.subtotal ?? 0) - (ventaSeleccionada.valor_descuento ?? 0))}</p>
                       )}
-
-                     {/* Mostrar Total Final */}
-                     <p className="font-bold text-xl text-green-700 mt-2 pt-2 border-t border-gray-300">Total Venta: {formatCurrency(ventaSeleccionada.total ?? 0)}</p> {/* ventaSeleccionada.total ya es el total final */}
+                     <p className="font-bold text-xl text-green-700 mt-2 pt-2 border-t border-gray-300">Total Venta: {formatCurrency(ventaSeleccionada.total ?? 0)}</p>
                  </div>
-                  {/* Fin Sección de Totales en el Modal de Detalle de Venta */}
-
-                           {/* Sección de Balance de Cuenta (solo si es Crédito cliente) */}
                            {ventaSeleccionada.forma_pago === 'Crédito cliente' && (
                                 <div className="text-center text-gray-800 mb-6">
                                    <p className="font-semibold mb-1">Balance de Cuenta:</p>
-                                   {/* Aplicar clase condicional para el color */}
                                    <p className={`text-xl font-bold ${clienteBalanceTicket > 0 ? 'text-red-600' : 'text-green-700'}`}>
-                                       {formatCurrency(Math.abs(clienteBalanceTicket ?? 0))} {/* Mostrar valor absoluto */}
+                                       {formatCurrency(Math.abs(clienteBalanceTicket ?? 0))}
                                    </p>
                                    <p className="text-xs text-gray-500 mt-1">
                                        {(clienteBalanceTicket ?? 0) > 0
@@ -868,21 +837,16 @@ export default function Ventas() {
                                    </p>
                                </div>
                            )}
-
                 <div className="flex flex-wrap justify-end gap-3">
-                    {/* >>> Botón "Ver ticket" <<< */}
                     <button
-                        onClick={handleShowHtmlTicket} // Llama a la función para mostrar el ticket HTML
+                        onClick={handleShowHtmlTicket}
                         className="px-6 py-2 bg-blue-600 text-white rounded-lg shadow-md hover:bg-blue-700 transition duration-200"
                     >
                         Ver ticket
                     </button>
-                    {/* ------------------------- */}
-                  {/* >>> Botón "Ver PDF" que llama a la nueva función generarPDF <<< */}
                   <button onClick={generarPDF} className="px-6 py-2 bg-green-600 text-white rounded-lg shadow-md hover:bg-green-700 transition duration-200">
                     Ver PDF
                   </button>
-                  {/* ---------------------------------------------------------- */}
                   <button
                     onClick={() => cancelarVenta(ventaSeleccionada)}
                     disabled={cancelLoading}
@@ -897,11 +861,9 @@ export default function Ventas() {
         </div>
       )}
 
-      {/* >>> Componente para mostrar el ticket HTML <<< */}
       {showHtmlTicket && htmlTicketData && (
           <HtmlTicketDisplay saleData={htmlTicketData} onClose={closeHtmlTicket} />
       )}
-      {/* ------------------------------------------ */}
 
     </div>
   );
