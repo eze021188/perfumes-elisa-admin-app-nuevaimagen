@@ -9,11 +9,11 @@ import 'jspdf-autotable';
 import toast from 'react-hot-toast';
 
 // Componentes divididos
-import ClientesAccionesBarra from '../components/clientes_temp/ClientesAccionesBarra';
-import ClientesTabla from '../components/clientes_temp/ClientesTabla';
-import ClientesPaginacion from '../components/clientes_temp/ClientesPaginacion';
-import ClienteVentasModal from '../components/clientes_temp/ClienteVentasModal';
-import ClienteVentaDetalleModal from '../components/clientes_temp/ClienteVentaDetalleModal'; // El que está en el Canvas
+import ClientesAccionesBarra from '../components/clientes/ClientesAccionesBarra';
+import ClientesTabla from '../components/clientes/ClientesTabla';
+import ClientesPaginacion from '../components/clientes/ClientesPaginacion';
+import ClienteVentasModal from '../components/clientes/ClienteVentasModal';
+import ClienteVentaDetalleModal from '../components/clientes/ClienteVentaDetalleModal'; // El que está en el Canvas
 import HtmlTicketDisplay from '../components/HtmlTicketDisplay'; // Para el ticket HTML
 
 import { useAuth } from '../contexts/AuthContext'; // Para info del vendedor
