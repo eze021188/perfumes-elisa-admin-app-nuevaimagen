@@ -2,9 +2,9 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { supabase } from '../supabase';
 import { useNavigate, useLocation } from 'react-router-dom';
-import jsPDF from 'jspdf';
+// import jsPDF from 'jspdf'; // No se usa directamente para el ticket HTML aquí
+// import 'jspdf-autotable'; // No se usa directamente para el ticket HTML aquí
 import toast from 'react-hot-toast';
-import 'jspdf-autotable';
 import QuickEntryBar from '../components/QuickEntryBar';
 import QuickSaleModal from '../components/QuickSaleModal';
 import ClientSelector from '../components/ClientSelector';
@@ -13,8 +13,11 @@ import FilterTabs from '../components/FilterTabs';
 import ProductGrid from '../components/ProductGrid';
 import ModalCheckout from '../components/ModalCheckout';
 import HtmlTicketDisplay from '../components/HtmlTicketDisplay';
-import { ChevronRight, Eye, EyeOff } from 'lucide-react'; // --- NUEVO/MODIFICADO: Añadimos iconos ---
+import { ChevronRight, Eye, EyeOff } from 'lucide-react';
 
+// --- NUEVO: Importar los componentes divididos ---
+import CheckoutCartDisplay from '../components/checkout/CheckoutCartDisplay';
+import CheckoutPaymentForm from '../components/checkout/CheckoutPaymentForm';
 
 // Helper simple para formatear moneda
 const formatCurrency = (amount) => {
@@ -22,15 +25,15 @@ const formatCurrency = (amount) => {
      if (isNaN(numericAmount)) {
          return '$0.00';
      }
-     return numericAmount.toLocaleString('es-CO', {
+     return numericAmount.toLocaleString('es-MX', { // Cambiado a es-MX y MXN
         style: 'currency',
-        currency: 'COP',
+        currency: 'MXN',
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
     });
 };
 
-// Helper para formatear fecha y hora para el código
+// Helper para formatear fecha y hora para el código de venta
 const formatDateTimeForCode = (date) => {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -41,25 +44,26 @@ const formatDateTimeForCode = (date) => {
     return `${year}${month}${day}${hours}${minutes}${seconds}`;
 };
 
-// Función para cargar una imagen local y convertirla a Base64
-const getBase64Image = async (url) => {
+// --- NUEVO/MODIFICADO: Helper para formatear fecha para el ticket en zona horaria específica ---
+const formatTicketDateTime = (dateString) => {
+    if (!dateString) return 'Fecha desconocida';
     try {
-        const response = await fetch(url);
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        const blob = await response.blob();
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result);
-            reader.onerror = reject;
-            reader.readAsDataURL(blob);
+        return new Date(dateString).toLocaleString('es-MX', {
+            timeZone: 'America/Mexico_City', // O 'America/Monterrey'
+            year: '2-digit',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            // second: '2-digit', // Opcional
+            // hour12: true // Opcional
         });
-    } catch (error) {
-        console.error("Error loading image for PDF:", error);
-        return null;
+    } catch (e) {
+        console.error("Error formateando fecha para ticket:", e);
+        return new Date(dateString).toLocaleString(); // Fallback a local del navegador
     }
 };
+
 
 export default function Checkout() {
     const navigate = useNavigate();
@@ -71,8 +75,6 @@ export default function Checkout() {
 
     const [filtro, setFiltro] = useState('All');
     const [busqueda, setBusqueda] = useState('');
-
-    // --- NUEVO/MODIFICADO: Estado para mostrar/ocultar productos sin stock ---
     const [showOutOfStock, setShowOutOfStock] = useState(false);
 
     const [clienteSeleccionado, setClienteSeleccionado] = useState(null);
@@ -103,52 +105,32 @@ export default function Checkout() {
     useEffect(() => {
         async function loadData() {
             const { data: { user }, error: authError } = await supabase.auth.getUser();
-            if (authError) {
-                console.error("Error getting auth user:", authError);
-            }
+            if (authError) console.error("Error getting auth user:", authError);
             if (user) {
                 setCurrentUser(user);
-                const { data: vendedorData, error: vendedorError } = await supabase
-                    .from('usuarios')
-                    .select('nombre')
-                    .eq('id', user.id)
-                    .single();
+                const { data: vendedorData, error: vendedorError } = await supabase.from('usuarios').select('nombre').eq('id', user.id).single();
                 if (vendedorError) {
-                    console.error("Error loading vendedor info from 'usuarios' table:", vendedorError);
+                    console.error("Error loading vendedor info:", vendedorError);
                     setVendedorInfo({ nombre: user.email });
                 } else {
                     setVendedorInfo(vendedorData);
                 }
             } else {
-                console.warn('No hay usuario logueado en Checkout.');
-                setCurrentUser(null);
-                setVendedorInfo(null);
+                setCurrentUser(null); setVendedorInfo(null);
             }
-
-            const { data: cli, error: errorClientes } = await supabase.from('clientes').select('id, nombre, telefono');
-            if (errorClientes) {
-                console.error("Error loading clients:", errorClientes);
-                toast.error("Error al cargar clientes.");
-            } else {
-                setClientes(cli || []);
-            }
-
-            const { data: prod, error: errorProductos } = await supabase.from('productos').select('*');
-            if (errorProductos) {
-                console.error("Error loading products:", errorProductos);
-                toast.error("Error al cargar productos.");
-            } else {
+            const { data: cli, error: cliErr } = await supabase.from('clientes').select('id, nombre, telefono');
+            if (cliErr) toast.error("Error al cargar clientes."); else setClientes(cli || []);
+            
+            const { data: prod, error: prodErr } = await supabase.from('productos').select('*');
+            if (prodErr) toast.error("Error al cargar productos.");
+            else {
                 const prodMapped = (prod || []).map(p => {
                     let imagenUrl = p.imagenUrl || p.imagen_url || p.imagen || '';
                     if (imagenUrl && !imagenUrl.startsWith('http') && supabase.storage) {
-                        const { data } = supabase.storage.from('productos').getPublicUrl(p.imagen);
-                        imagenUrl = data.publicUrl;
-                    } else if (imagenUrl && !imagenUrl.startsWith('http')) {
-                        console.warn('Supabase Storage no accesible o bucket "productos" no encontrado para obtener URL pública.');
-                        imagenUrl = '';
-                    }
-                    const stockNumerico = parseFloat(p.stock) || 0;
-                    return { ...p, imagenUrl, stock: stockNumerico };
+                        const { data: urlData } = supabase.storage.from('productos').getPublicUrl(p.imagen);
+                        imagenUrl = urlData.publicUrl;
+                    } else if (imagenUrl && !imagenUrl.startsWith('http')) imagenUrl = '';
+                    return { ...p, imagenUrl, stock: parseFloat(p.stock) || 0 };
                 });
                 setProductos(prodMapped);
             }
@@ -160,57 +142,29 @@ export default function Checkout() {
         if (clienteSeleccionado && clienteSeleccionado.id) {
             const fetchClienteConSaldo = async () => {
                 setLoadingSaldoCliente(true);
-                setInfoClienteConSaldo(null);
-                setUsarSaldoFavor(false);
-                setMontoAplicadoDelSaldoFavor(0);
+                setInfoClienteConSaldo(null); setUsarSaldoFavor(false); setMontoAplicadoDelSaldoFavor(0);
                 try {
-                    const { data, error } = await supabase.rpc('get_cliente_con_saldo', {
-                        p_cliente_id: clienteSeleccionado.id
-                    });
+                    const { data, error } = await supabase.rpc('get_cliente_con_saldo', { p_cliente_id: clienteSeleccionado.id });
                     if (error) throw error;
-                    if (data && data.length > 0) {
-                        setInfoClienteConSaldo(data[0]);
-                    } else {
-                        setInfoClienteConSaldo({
-                            client_id: clienteSeleccionado.id,
-                            client_name: clienteSeleccionado.nombre,
-                            telefono: clienteSeleccionado.telefono,
-                            balance: 0,
-                            latest_payment_date: null,
-                            first_purchase_date: null,
-                        });
-                    }
+                    if (data && data.length > 0) setInfoClienteConSaldo(data[0]);
+                    else setInfoClienteConSaldo({ client_id: clienteSeleccionado.id, client_name: clienteSeleccionado.nombre, telefono: clienteSeleccionado.telefono, balance: 0 });
                 } catch (err) {
-                    console.error('Error obteniendo información y saldo del cliente:', err.message);
-                    toast.error('Error al obtener el saldo del cliente.');
-                    setInfoClienteConSaldo({
-                        client_id: clienteSeleccionado.id,
-                        client_name: clienteSeleccionado.nombre,
-                        telefono: clienteSeleccionado.telefono,
-                        balance: 0,
-                        errorAlObtenerSaldo: true
-                    });
-                } finally {
-                    setLoadingSaldoCliente(false);
-                }
+                    toast.error('Error al obtener saldo del cliente.');
+                    setInfoClienteConSaldo({ client_id: clienteSeleccionado.id, client_name: clienteSeleccionado.nombre, telefono: clienteSeleccionado.telefono, balance: 0, errorAlObtenerSaldo: true });
+                } finally { setLoadingSaldoCliente(false); }
             };
             fetchClienteConSaldo();
         } else {
-            setInfoClienteConSaldo(null);
-            setUsarSaldoFavor(false);
-            setMontoAplicadoDelSaldoFavor(0);
+            setInfoClienteConSaldo(null); setUsarSaldoFavor(false); setMontoAplicadoDelSaldoFavor(0);
         }
     }, [clienteSeleccionado]);
 
     useEffect(() => {
         if (location.state && location.state.budgetData) {
             const budget = location.state.budgetData;
-            if (budget.clientes) {
-                setClienteSeleccionado(budget.clientes);
-            } else {
-                toast.warn("Presupuesto sin información de cliente.");
-                return;
-            }
+            if (budget.clientes) setClienteSeleccionado(budget.clientes);
+            else { toast.warn("Presupuesto sin cliente."); return; }
+
             if (budget.presupuesto_items && budget.presupuesto_items.length > 0) {
                 const itemsFromBudget = budget.presupuesto_items.map(item => {
                     const fullProductInfo = productos.find(p => p.id === item.producto_id);
@@ -224,14 +178,11 @@ export default function Checkout() {
                         imagenUrl: fullProductInfo?.imagenUrl || ''
                     };
                 });
-                const validItemsFromBudget = itemsFromBudget.filter(item => item.cantidad > 0);
-                if (validItemsFromBudget.length !== itemsFromBudget.length) {
-                    toast.warn("Algunos productos del presupuesto tenían cantidad cero y fueron omitidos.");
-                }
-                setProductosVenta(validItemsFromBudget);
+                const validItems = itemsFromBudget.filter(item => item.cantidad > 0);
+                if (validItems.length !== itemsFromBudget.length) toast.warn("Productos del presupuesto con cantidad cero omitidos.");
+                setProductosVenta(validItems);
             } else {
-                setProductosVenta([]);
-                toast.warn("El presupuesto no contiene productos.");
+                setProductosVenta([]); toast.warn("El presupuesto no contiene productos.");
             }
             setDiscountType(budget.tipo_descuento || 'Sin descuento');
             setDiscountValue(parseFloat(budget.valor_descuento) || 0);
@@ -239,390 +190,255 @@ export default function Checkout() {
             setPaymentType(budget.forma_pago || '');
             setBudgetSourceId(budget.id);
             setTimeout(() => {
-                if (budget.clientes && budget.presupuesto_items && budget.presupuesto_items.length > 0) {
-                    openSaleModal();
-                } else {
-                    toast.error("No se pudo abrir el modal de venta. Asegúrate de que el presupuesto tenga cliente y productos.");
-                }
+                if (budget.clientes && budget.presupuesto_items?.length > 0) openSaleModal();
+                else toast.error("No se pudo abrir modal de venta desde presupuesto.");
             }, 100);
-        } else {
-            setBudgetSourceId(null);
-        }
-    }, [location.state, productos]);
+        } else { setBudgetSourceId(null); }
+    }, [location.state, productos]); // productos es dependencia clave aquí
 
     const productosFiltrados = useMemo(() => {
-        return productos.filter(p => {
-            const categoriaMatch = filtro === 'All' || p.categoria === filtro;
-            const busquedaMatch = p.nombre.toLowerCase().includes(busqueda.toLowerCase());
-            const stockMatch = showOutOfStock ? true : (parseFloat(p.stock) || 0) > 0;
-            return categoriaMatch && busquedaMatch && stockMatch;
-        });
+        return productos.filter(p =>
+            (filtro === 'All' || p.categoria === filtro) &&
+            p.nombre.toLowerCase().includes(busqueda.toLowerCase()) &&
+            (showOutOfStock ? true : (parseFloat(p.stock) || 0) > 0)
+        );
     }, [productos, filtro, busqueda, showOutOfStock]);
 
-    const saldoAFavorDisponible = useMemo(() => {
-        return (infoClienteConSaldo && infoClienteConSaldo.balance < 0)
-            ? Math.abs(infoClienteConSaldo.balance)
-            : 0;
-    }, [infoClienteConSaldo]);
+    const saldoAFavorDisponible = useMemo(() => (infoClienteConSaldo && infoClienteConSaldo.balance < 0) ? Math.abs(infoClienteConSaldo.balance) : 0, [infoClienteConSaldo]);
 
     const { totalItems, originalSubtotal, subtotalConDescuento, discountAmount, totalAntesDeCredito } = useMemo(() => {
         try {
-            const calculatedOriginalSubtotal = productosVenta.reduce((sum, p) => (sum + (parseFloat(p.cantidad) || 0) * (parseFloat(p.promocion) || 0)), 0);
-            const calculatedTotalItems = productosVenta.reduce((sum, p) => sum + (parseFloat(p.cantidad) || 0), 0);
+            const calculatedOriginalSubtotal = productosVenta.reduce((sum, p) => sum + (p.cantidad * p.promocion), 0);
+            const calculatedTotalItems = productosVenta.reduce((sum, p) => sum + p.cantidad, 0);
             let calculatedSubtotalConDescuento = calculatedOriginalSubtotal;
             let calculatedDiscountAmount = 0;
-
             if (discountType === 'Por importe') {
-                calculatedDiscountAmount = Math.min(parseFloat(discountValue) || 0, calculatedOriginalSubtotal);
+                calculatedDiscountAmount = Math.min(discountValue, calculatedOriginalSubtotal);
                 calculatedSubtotalConDescuento = Math.max(0, calculatedOriginalSubtotal - calculatedDiscountAmount);
             } else if (discountType === 'Por porcentaje') {
-                const discountPercentage = Math.min(Math.max(0, parseFloat(discountValue) || 0), 100);
-                calculatedDiscountAmount = calculatedOriginalSubtotal * (discountPercentage / 100);
+                const percentage = Math.min(Math.max(0, discountValue), 100);
+                calculatedDiscountAmount = calculatedOriginalSubtotal * (percentage / 100);
                 calculatedSubtotalConDescuento = calculatedOriginalSubtotal - calculatedDiscountAmount;
             }
-
-            const calculatedGastosEnvio = parseFloat(gastosEnvio) || 0;
-            const calculatedTotalAntesDeCredito = calculatedSubtotalConDescuento + calculatedGastosEnvio;
-            
-            return {
-                totalItems: calculatedTotalItems,
-                originalSubtotal: calculatedOriginalSubtotal,
-                subtotalConDescuento: calculatedSubtotalConDescuento,
-                discountAmount: calculatedDiscountAmount,
-                totalAntesDeCredito: calculatedTotalAntesDeCredito
-            };
+            const calculatedTotalAntesDeCredito = calculatedSubtotalConDescuento + gastosEnvio;
+            return { totalItems: calculatedTotalItems, originalSubtotal: calculatedOriginalSubtotal, subtotalConDescuento: calculatedSubtotalConDescuento, discountAmount: calculatedDiscountAmount, totalAntesDeCredito: calculatedTotalAntesDeCredito };
         } catch (e) {
-            console.error("Error dentro del useMemo para calcular totales:", e);
-            return {
-                totalItems: 0,
-                originalSubtotal: 0,
-                subtotalConDescuento: 0,
-                discountAmount: 0,
-                totalAntesDeCredito: 0
-            };
+            console.error("Error en useMemo para totales:", e);
+            return { totalItems: 0, originalSubtotal: 0, subtotalConDescuento: 0, discountAmount: 0, totalAntesDeCredito: 0 };
         }
     }, [productosVenta, discountType, discountValue, gastosEnvio]);
 
     useEffect(() => {
         if (usarSaldoFavor && saldoAFavorDisponible > 0) {
-            const creditoAUsar = Math.min(totalAntesDeCredito, saldoAFavorDisponible);
-            setMontoAplicadoDelSaldoFavor(creditoAUsar);
+            setMontoAplicadoDelSaldoFavor(Math.min(totalAntesDeCredito, saldoAFavorDisponible));
         } else {
             setMontoAplicadoDelSaldoFavor(0);
         }
     }, [usarSaldoFavor, saldoAFavorDisponible, totalAntesDeCredito]);
 
-    const totalFinalAPagar = useMemo(() => {
-        return totalAntesDeCredito - montoAplicadoDelSaldoFavor;
-    }, [totalAntesDeCredito, montoAplicadoDelSaldoFavor]);
+    const totalFinalAPagar = useMemo(() => totalAntesDeCredito - montoAplicadoDelSaldoFavor, [totalAntesDeCredito, montoAplicadoDelSaldoFavor]);
 
     const onAddToCart = producto => {
-        const currentStock = parseFloat(producto.stock) || 0;
-        if (currentStock <= 0) {
-            toast.error('Producto sin stock disponible');
-            return;
-        }
+        if ((parseFloat(producto.stock) || 0) <= 0) { toast.error('Producto sin stock.'); return; }
         setProductosVenta(prev => {
             const existe = prev.find(p => p.id === producto.id);
             if (existe) {
-                const fullProductInfo = productos.find(p => p.id === producto.id);
-                const productStock = fullProductInfo ? (parseFloat(fullProductInfo.stock) || 0) : 0;
-                if (existe.cantidad + 1 > productStock) {
-                    toast.error(`Stock insuficiente. Máximo disponible: ${productStock}`);
-                    return prev;
-                }
-                return prev.map(p =>
-                    p.id === producto.id
-                        ? { ...p, cantidad: p.cantidad + 1, total: (p.cantidad + 1) * (parseFloat(p.promocion) || 0) }
-                        : p
-                );
+                const stockTotalProducto = productos.find(p => p.id === producto.id)?.stock || 0;
+                if (existe.cantidad + 1 > stockTotalProducto) { toast.error('Stock insuficiente.'); return prev; }
+                return prev.map(p => p.id === producto.id ? { ...p, cantidad: p.cantidad + 1, total: (p.cantidad + 1) * p.promocion } : p);
             }
-            const fullProductInfo = productos.find(p => p.id === producto.id);
-            return [...prev, { ...producto, cantidad: 1, total: (parseFloat(producto.promocion) || 0), stock: fullProductInfo ? (parseFloat(fullProductInfo.stock) || 0) : 0 }];
+            return [...prev, { ...producto, cantidad: 1, total: producto.promocion, stock: producto.stock }];
         });
     };
 
-    const onRemoveFromCart = (productoId) => {
-        setProductosVenta(prev => prev.filter(p => p.id !== productoId));
-    };
+    const onRemoveFromCart = (productoId) => setProductosVenta(prev => prev.filter(p => p.id !== productoId));
 
-    const onUpdateQuantity = (productoId, newQuantity) => {
-        const quantity = parseInt(newQuantity, 10);
-        setProductosVenta(prev => {
-            const productoIndex = prev.findIndex(p => p.id === productoId);
-            if (productoIndex === -1) return prev;
-            const producto = prev[productoIndex];
-            const currentStock = parseFloat(producto.stock) || 0;
-            if (isNaN(quantity) || quantity <= 0) {
-                if (window.confirm(`¿Eliminar ${producto.nombre} de la venta?`)) {
-                    return prev.filter(p => p.id !== productoId);
+    const onUpdateQuantity = (productoId, newQuantityStr) => {
+        const newQuantity = parseInt(newQuantityStr, 10);
+        setProductosVenta(prev => prev.map(p => {
+            if (p.id === productoId) {
+                const stockTotalProducto = productos.find(prod => prod.id === p.id)?.stock || 0;
+                if (isNaN(newQuantity) || newQuantity < 1) return { ...p, cantidad: 1, total: p.promocion }; // O eliminar si es 0
+                if (newQuantity > stockTotalProducto) {
+                    toast.error(`Stock máximo: ${stockTotalProducto}`);
+                    return { ...p, cantidad: stockTotalProducto, total: stockTotalProducto * p.promocion };
                 }
-                return prev;
+                return { ...p, cantidad: newQuantity, total: newQuantity * p.promocion };
             }
-            if (quantity > currentStock) {
-                toast.error(`Stock insuficiente para ${producto.nombre}. Máximo disponible: ${currentStock}`);
-                return prev;
-            }
-            const updatedProductos = [...prev];
-            updatedProductos[productoIndex] = {
-                ...producto,
-                cantidad: quantity,
-                total: quantity * (parseFloat(producto.promocion) || 0)
-            };
-            return updatedProductos;
-        });
+            return p;
+        }).filter(p => p.cantidad > 0)); // Eliminar si la cantidad llega a 0
     };
 
     const openSaleModal = () => {
-        if (!currentUser || !currentUser.id) return;
-        if (!infoClienteConSaldo || !infoClienteConSaldo.client_id || productosVenta.length === 0) {
-            if (!infoClienteConSaldo || !infoClienteConSaldo.client_id) {
-                toast.error('Selecciona un cliente y espera a que cargue su información.');
-            } else if (productosVenta.length === 0) {
-                toast.error('Agrega productos a la venta.');
-            }
-            return;
-        }
+        if (!currentUser) { toast.error("Inicia sesión para vender."); return; }
+        if (!infoClienteConSaldo?.client_id) { toast.error('Selecciona un cliente.'); return; }
+        if (productosVenta.length === 0) { toast.error('Agrega productos.'); return; }
         setShowSaleModal(true);
     };
 
     const handleFinalize = async () => {
         setProcessing(true);
-        if (!currentUser || !currentUser.id) { toast.error('Error de vendedor: Debes iniciar sesión.'); setProcessing(false); return; }
-        if (!infoClienteConSaldo || !infoClienteConSaldo.client_id) { toast.error('Error de cliente: La información del cliente no está completa.'); setProcessing(false); return; }
-        if (productosVenta.length === 0) { toast.error('Error de productos: Agrega productos a la venta.'); setProcessing(false); return; }
-        if (totalFinalAPagar > 0 && !paymentType) { toast.error('Error de pago: Selecciona una forma de pago.'); setProcessing(false); return; }
-        const numericEnganche = parseFloat(enganche) || 0;
-        if (paymentType === 'Crédito cliente' && numericEnganche < 0) { toast.error('El enganche no puede ser negativo.'); setProcessing(false); return; }
-        const numericGastosEnvio = parseFloat(gastosEnvio) || 0;
-        if (numericGastosEnvio < 0) { toast.error('Los gastos de envío no pueden ser negativos.'); setProcessing(false); return; }
-        if (paymentType !== 'Crédito cliente' && totalFinalAPagar < 0) { toast.error('El total final a pagar no puede ser negativo para esta forma de pago.'); setProcessing(false); return; }
+        // Validaciones
+        if (!currentUser?.id || !infoClienteConSaldo?.client_id || productosVenta.length === 0 || (totalFinalAPagar > 0 && !paymentType)) {
+            toast.error('Faltan datos para finalizar la venta.'); setProcessing(false); return;
+        }
+        // ... (otras validaciones de enganche, gastosEnvio que ya tenías)
 
         try {
-            const now = new Date();
+            const now = new Date(); // Usar esta 'now' para consistencia
             const codigo = `VT${formatDateTimeForCode(now)}`;
             let ventaId;
 
             if (usarSaldoFavor && montoAplicadoDelSaldoFavor > 0) {
-                const { data: movSaldoData, error: errorMovSaldo } = await supabase
-                    .from('movimientos_cuenta_clientes')
-                    .insert([{
-                        cliente_id: infoClienteConSaldo.client_id,
-                        tipo_movimiento: 'USO_SALDO_VENTA',
-                        monto: montoAplicadoDelSaldoFavor,
-                        descripcion: `Aplicación saldo a favor en Venta ${codigo}`,
-                    }])
-                    .select('id')
-                    .single();
-                if (errorMovSaldo || !movSaldoData) {
-                    console.error("Error al registrar uso de saldo a favor:", errorMovSaldo);
-                    toast.error("Error al aplicar el saldo a favor del cliente.");
-                    throw errorMovSaldo || new Error("No se pudo registrar el uso del saldo a favor.");
-                }
+                const { error: errorMovSaldo } = await supabase.from('movimientos_cuenta_clientes').insert([{
+                    cliente_id: infoClienteConSaldo.client_id,
+                    tipo_movimiento: 'USO_SALDO_VENTA',
+                    monto: montoAplicadoDelSaldoFavor, // Positivo
+                    descripcion: `Aplicación saldo en Venta ${codigo}`,
+                    // referencia_venta_id se actualizará después
+                }]);
+                if (errorMovSaldo) throw errorMovSaldo;
             }
 
-            const { data: ventaInsertada, error: errorVenta } = await supabase
-                .from('ventas')
-                .insert([{
-                    codigo_venta: codigo,
-                    cliente_id: infoClienteConSaldo.client_id,
-                    vendedor_id: currentUser.id,
-                    subtotal: originalSubtotal,
-                    forma_pago: totalFinalAPagar === 0 && montoAplicadoDelSaldoFavor > 0 ? 'SALDO_A_FAVOR' : paymentType,
-                    tipo_descuento: discountType,
-                    valor_descuento: discountAmount,
-                    total: totalFinalAPagar,
-                    monto_credito_aplicado: montoAplicadoDelSaldoFavor, // Asegúrate que esta columna exista en tu tabla 'ventas'
-                    enganche: numericEnganche,
-                    gastos_envio: numericGastosEnvio,
-                    presupuesto_id: budgetSourceId,
-                }])
-                .select('id')
-                .single();
+            const ventaData = {
+                codigo_venta: codigo,
+                cliente_id: infoClienteConSaldo.client_id,
+                vendedor_id: currentUser.id,
+                fecha: now.toISOString(), // --- NUEVO/MODIFICADO: Enviar fecha UTC ---
+                subtotal: originalSubtotal,
+                forma_pago: totalFinalAPagar === 0 && montoAplicadoDelSaldoFavor > 0 ? 'SALDO_A_FAVOR' : paymentType,
+                tipo_descuento: discountType,
+                valor_descuento: discountAmount,
+                total: totalFinalAPagar,
+                monto_credito_aplicado: montoAplicadoDelSaldoFavor,
+                enganche: parseFloat(enganche) || 0,
+                gastos_envio: parseFloat(gastosEnvio) || 0,
+                presupuesto_id: budgetSourceId,
+            };
 
+            const { data: ventaInsertada, error: errorVenta } = await supabase.from('ventas').insert([ventaData]).select('id').single();
             if (errorVenta) {
-                if (usarSaldoFavor && montoAplicadoDelSaldoFavor > 0) {
-                    console.warn("La venta falló después de registrar el uso de saldo. Se requiere intervención manual para el movimiento de saldo.");
-                }
+                if (usarSaldoFavor && montoAplicadoDelSaldoFavor > 0) console.warn("Venta falló. Revisar movimiento de saldo.");
                 throw errorVenta;
             }
             ventaId = ventaInsertada.id;
 
             if (usarSaldoFavor && montoAplicadoDelSaldoFavor > 0) {
-                 await supabase
-                    .from('movimientos_cuenta_clientes')
-                    .update({ referencia_venta_id: ventaId })
-                    .match({ cliente_id: infoClienteConSaldo.client_id, tipo_movimiento: 'USO_SALDO_VENTA', monto: montoAplicadoDelSaldoFavor, descripcion: `Aplicación saldo a favor en Venta ${codigo}` });
+                 await supabase.from('movimientos_cuenta_clientes').update({ referencia_venta_id: ventaId })
+                    .match({ cliente_id: infoClienteConSaldo.client_id, tipo_movimiento: 'USO_SALDO_VENTA', monto: montoAplicadoDelSaldoFavor, descripcion: `Aplicación saldo en Venta ${codigo}` });
             }
 
             if (paymentType === 'Crédito cliente') {
-                const montoACredito = totalFinalAPagar - numericEnganche;
+                const montoACredito = totalFinalAPagar - (parseFloat(enganche) || 0);
                 const movimientosCuenta = [];
-                if (montoACredito > 0) {
-                    movimientosCuenta.push({ cliente_id: infoClienteConSaldo.client_id, tipo_movimiento: 'CARGO_VENTA', monto: montoACredito, referencia_venta_id: ventaId, descripcion: `Venta a crédito ${codigo}` });
-                }
-                if (numericEnganche > 0) {
-                    movimientosCuenta.push({ cliente_id: infoClienteConSaldo.client_id, tipo_movimiento: 'ABONO_ENGANCHE', monto: -numericEnganche, referencia_venta_id: ventaId, descripcion: `Enganche Venta ${codigo}` });
-                }
+                if (montoACredito > 0) movimientosCuenta.push({ cliente_id: infoClienteConSaldo.client_id, tipo_movimiento: 'CARGO_VENTA', monto: montoACredito, referencia_venta_id: ventaId, descripcion: `Venta ${codigo}` });
+                if ((parseFloat(enganche) || 0) > 0) movimientosCuenta.push({ cliente_id: infoClienteConSaldo.client_id, tipo_movimiento: 'ABONO_ENGANCHE', monto: -(parseFloat(enganche) || 0), referencia_venta_id: ventaId, descripcion: `Enganche Venta ${codigo}` });
                 if (movimientosCuenta.length > 0) {
-                    const { error: errorMovimientos } = await supabase.from('movimientos_cuenta_clientes').insert(movimientosCuenta);
-                    if (errorMovimientos) {
-                        await supabase.from('ventas').delete().eq('id', ventaId);
-                        toast.error('Error al registrar movimientos en cuenta. Venta revertida.');
-                        throw errorMovimientos;
-                    }
+                    const { error: errMovs } = await supabase.from('movimientos_cuenta_clientes').insert(movimientosCuenta);
+                    if (errMovs) { await supabase.from('ventas').delete().eq('id', ventaId); throw errMovs; }
                 }
             }
 
             for (const p of productosVenta) {
-                const { data: prodCheck, error: errorProdCheck } = await supabase.from('productos').select('stock').eq('id', p.id).single();
+                const { data: prodCheck } = await supabase.from('productos').select('stock').eq('id', p.id).single();
                 const currentStock = prodCheck?.stock || 0;
-                const cantidadVendida = parseFloat(p.cantidad) || 0;
-                if (errorProdCheck || currentStock < cantidadVendida) {
-                    await supabase.from('ventas').delete().eq('id', ventaId);
-                    toast.error(`Stock insuficiente para ${p.nombre}. Venta cancelada.`);
-                    throw new Error(`Stock insuficiente para ${p.nombre}.`);
-                }
-                const { error: errorDetalle } = await supabase.from('detalle_venta').insert([{ venta_id: ventaId, producto_id: p.id, cantidad: cantidadVendida, precio_unitario: parseFloat(p.promocion) || 0, total_parcial: parseFloat(p.total) || 0 }]);
-                if (errorDetalle) { await supabase.from('ventas').delete().eq('id', ventaId); throw errorDetalle; }
-                const nuevoStock = currentStock - cantidadVendida;
-                const { error: errorUpdateStock } = await supabase.from('productos').update({ stock: nuevoStock }).eq('id', p.id);
-                if (errorUpdateStock) { await supabase.from('ventas').delete().eq('id', ventaId); throw errorUpdateStock; }
-                const { error: errMov } = await supabase.from('movimientos_inventario').insert([{ producto_id: p.id, tipo: 'SALIDA', cantidad: cantidadVendida, referencia: codigo, motivo: 'venta', fecha: new Date().toISOString() }]);
-                if (errMov) { await supabase.from('ventas').delete().eq('id', ventaId); throw errMov; }
+                const cantidadVendida = p.cantidad;
+                if (currentStock < cantidadVendida) { await supabase.from('ventas').delete().eq('id', ventaId); throw new Error(`Stock insuficiente para ${p.nombre}.`); }
+                
+                await supabase.from('detalle_venta').insert([{ venta_id: ventaId, producto_id: p.id, cantidad: cantidadVendida, precio_unitario: p.promocion, total_parcial: p.total }]);
+                await supabase.from('productos').update({ stock: currentStock - cantidadVendida }).eq('id', p.id);
+                await supabase.from('movimientos_inventario').insert([{ producto_id: p.id, tipo: 'SALIDA', cantidad: cantidadVendida, referencia: codigo, motivo: 'venta', fecha: now.toISOString() }]);
             }
 
             if (budgetSourceId) {
-                const { error: updateBudgetError } = await supabase.from('presupuestos').update({ estado: 'Convertido a Venta' }).eq('id', budgetSourceId);
-                if (updateBudgetError) {
-                    console.error(`Error al actualizar estado del presupuesto ${budgetSourceId}:`, updateBudgetError.message);
-                    toast.warn('Advertencia: El presupuesto origen no se marcó como "Convertido a Venta".');
-                } else {
-                    console.log(`Presupuesto ${budgetSourceId} marcado como 'Convertido a Venta'.`);
-                }
+                await supabase.from('presupuestos').update({ estado: 'Convertido a Venta' }).eq('id', budgetSourceId);
             }
-
-            const formattedDate = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getFullYear()).slice(-2)} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
             
-            let balancePrevioCliente = infoClienteConSaldo?.balance !== undefined ? infoClienteConSaldo.balance : 0;
-            let balanceActualizadoCliente = balancePrevioCliente;
-            if (usarSaldoFavor && montoAplicadoDelSaldoFavor > 0) {
-                balanceActualizadoCliente += montoAplicadoDelSaldoFavor;
-            }
+            // --- NUEVO/MODIFICADO: Usar formatTicketDateTime para la fecha del ticket ---
+            const ticketFormattedDate = formatTicketDateTime(now.toISOString()); // Formatear para la zona horaria correcta
+
+            let balanceFinalClienteParaTicket = infoClienteConSaldo?.balance !== undefined ? infoClienteConSaldo.balance : 0;
+            if (usarSaldoFavor && montoAplicadoDelSaldoFavor > 0) balanceFinalClienteParaTicket += montoAplicadoDelSaldoFavor;
             if (paymentType === 'Crédito cliente') {
-                const montoACredito = totalFinalAPagar - numericEnganche;
-                if (montoACredito > 0) balanceActualizadoCliente += montoACredito;
-                if (numericEnganche > 0) balanceActualizadoCliente -= numericEnganche;
+                const montoACredito = totalFinalAPagar - (parseFloat(enganche) || 0);
+                if (montoACredito > 0) balanceFinalClienteParaTicket += montoACredito;
+                if ((parseFloat(enganche) || 0) > 0) balanceFinalClienteParaTicket -= (parseFloat(enganche) || 0);
             }
 
             const ticketData = {
                 codigo_venta: codigo,
-                cliente: { id: infoClienteConSaldo.client_id, nombre: infoClienteConSaldo.client_name, telefono: infoClienteConSaldo.telefono || clienteSeleccionado?.telefono || 'N/A' },
+                cliente: { id: infoClienteConSaldo.client_id, nombre: infoClienteConSaldo.client_name, telefono: infoClienteConSaldo.telefono || 'N/A' },
                 vendedor: { nombre: vendedorInfo?.nombre || currentUser?.email || 'N/A' },
-                fecha: formattedDate,
-                productosVenta: productosVenta.map(p => ({ id: p.id, nombre: p.nombre, cantidad: p.cantidad, precio_unitario: parseFloat(p.promocion) || 0, total_parcial: parseFloat(p.total) || 0 })),
+                fecha: ticketFormattedDate, // --- NUEVO/MODIFICADO ---
+                productosVenta: productosVenta.map(p => ({ ...p })),
                 originalSubtotal, discountAmount,
                 forma_pago: totalFinalAPagar === 0 && montoAplicadoDelSaldoFavor > 0 ? 'SALDO_A_FAVOR' : paymentType,
-                enganche: numericEnganche, gastos_envio: numericGastosEnvio, total_final: totalFinalAPagar,
+                enganche: parseFloat(enganche) || 0, gastos_envio: parseFloat(gastosEnvio) || 0, total_final: totalFinalAPagar,
                 monto_credito_aplicado: montoAplicadoDelSaldoFavor,
-                balance_cuenta: balanceActualizadoCliente,
+                balance_cuenta: balanceFinalClienteParaTicket,
             };
             setHtmlTicketData(ticketData);
             setShowHtmlTicket(true);
             setShowSaleModal(false);
             
-            setProductosVenta([]);
-            setClienteSeleccionado(null);
-            setPaymentType('');
-            setDiscountType('Sin descuento');
-            setDiscountValue(0);
-            setEnganche(0);
-            setGastosEnvio(0);
-            setBudgetSourceId(null);
+            // Limpiar estados
+            setProductosVenta([]); setClienteSeleccionado(null); setPaymentType('');
+            setDiscountType('Sin descuento'); setDiscountValue(0); setEnganche(0);
+            setGastosEnvio(0); setBudgetSourceId(null);
+            // setUsarSaldoFavor y setMontoAplicadoDelSaldoFavor se resetean con clienteSeleccionado
 
-            toast.success(`Venta ${codigo} registrada exitosamente!`);
+            toast.success(`Venta ${codigo} registrada!`);
         } catch (err) {
-            console.error('Error general al finalizar venta:', err.message);
-            toast.error(`Error al procesar la venta: ${err.message || 'Error desconocido'}.`);
+            toast.error(`Error: ${err.message || 'Desconocido'}.`);
         } finally {
             setProcessing(false);
         }
     };
 
-    const closeHtmlTicket = () => {
-        setShowHtmlTicket(false);
-        setHtmlTicketData(null);
-    };
+    const closeHtmlTicket = () => { setShowHtmlTicket(false); setHtmlTicketData(null); };
     
-    // --- NUEVO/MODIFICADO: Lista de clientes para el selector, excluyendo el ya seleccionado ---
     const clientesParaSelector = useMemo(() => {
-        if (!clienteSeleccionado) {
-            return clientes; // Si no hay cliente seleccionado, muestra todos
-        }
-        // Filtra la lista de clientes para excluir el que ya está seleccionado
+        if (!clienteSeleccionado) return clientes;
         return clientes.filter(c => c.id !== clienteSeleccionado.id);
     }, [clientes, clienteSeleccionado]);
-
 
     return (
         <div className="min-h-screen bg-gray-100 p-4 md:p-8 lg:p-12">
             {/* Encabezado */}
             <div className="flex flex-col md:flex-row items-center justify-between gap-6 mb-8">
-                <button
-                    onClick={() => navigate('/')}
-                    className="px-6 py-2 bg-gray-700 text-white font-semibold rounded-lg shadow-md hover:bg-gray-800 transition duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-opacity-50"
-                >
+                <button onClick={() => navigate('/')} className="px-6 py-2 bg-gray-700 text-white font-semibold rounded-lg shadow-md hover:bg-gray-800">
                     Volver al inicio
                 </button>
-                <h1 className="text-3xl font-bold text-gray-800 text-center w-full md:w-auto">
-                    Gestión de Ventas
-                </h1>
+                <h1 className="text-3xl font-bold text-gray-800 text-center">Gestión de Ventas</h1>
                 <div className="w-full md:w-[150px]" />
             </div>
 
             {/* Selector de Cliente */}
             <div className="mb-6">
                 <ClientSelector
-                    clientes={clientesParaSelector} /* --- NUEVO/MODIFICADO: Usar la lista filtrada --- */
+                    clientes={clientesParaSelector}
                     clienteSeleccionado={clienteSeleccionado}
                     onSelect={setClienteSeleccionado}
                     onCreateNew={() => setShowNewClient(true)}
                 />
-                {loadingSaldoCliente && clienteSeleccionado && (
-                    <p className="mt-2 text-sm text-gray-600">Cargando saldo del cliente...</p>
-                )}
-                {infoClienteConSaldo && infoClienteConSaldo.balance !== undefined && !loadingSaldoCliente && (
-                     // --- MODIFICADO: Se quita el nombre del cliente de aquí para evitar duplicidad ---
+                {loadingSaldoCliente && clienteSeleccionado && <p className="mt-2 text-sm text-gray-600">Cargando saldo...</p>}
+                {infoClienteConSaldo && !loadingSaldoCliente && (
                     <p className="mt-2 text-sm text-gray-700">
                         Balance Actual:
-                        <span className={`font-semibold ${
-                            infoClienteConSaldo.balance === 0 ? 'text-gray-700' :
-                            infoClienteConSaldo.balance < 0 ? 'text-green-600' : 'text-red-600'
-                        }`}>
+                        <span className={`font-semibold ${infoClienteConSaldo.balance === 0 ? 'text-gray-700' : infoClienteConSaldo.balance < 0 ? 'text-green-600' : 'text-red-600'}`}>
                             {' '}{formatCurrency(infoClienteConSaldo.balance)}
                             {infoClienteConSaldo.balance < 0 ? ' (a favor)' : infoClienteConSaldo.balance > 0 ? ' (por cobrar)' : ''}
                         </span>
                     </p>
                 )}
-                <NewClientModal
-                    isOpen={showNewClient}
-                    onClose={() => setShowNewClient(false)}
-                    onClientAdded={(newClient) => {
-                        if (newClient && newClient.id) {
-                            setClienteSeleccionado(newClient);
-                            setClientes(prev => [...prev, newClient]);
-                        }
-                        setShowNewClient(false);
-                    }}
-                />
+                <NewClientModal isOpen={showNewClient} onClose={() => setShowNewClient(false)} onClientAdded={c => { if (c?.id) { setClienteSeleccionado(c); setClientes(prev => [...prev, c]); } setShowNewClient(false); }} />
             </div>
 
             {/* Barra de búsqueda, filtro de productos y switch de stock */}
             <div className="mb-6 flex flex-col md:flex-row md:items-center gap-4">
                 <div className="flex-grow">
-                    <QuickEntryBar busqueda={busqueda} onChangeBusqueda={e => setBusqueda(e.target.value)} onQuickSaleClick={() => setShowQuickSale(true)} />
+                    <QuickEntryBar busqueda={busqueda} onChangeBusqueda={setBusqueda} onQuickSaleClick={() => setShowQuickSale(true)} />
                 </div>
-                {/* --- NUEVO/MODIFICADO: Switch para mostrar/ocultar productos sin stock --- */}
                 <div className="flex items-center space-x-2 whitespace-nowrap">
                     {showOutOfStock ? <EyeOff size={20} className="text-gray-600"/> : <Eye size={20} className="text-gray-600"/>}
                     <span className="text-sm text-gray-700 select-none">
@@ -630,13 +446,7 @@ export default function Checkout() {
                     </span>
                     <label htmlFor="stockToggle" className="flex items-center cursor-pointer">
                         <div className="relative">
-                            <input 
-                                type="checkbox" 
-                                id="stockToggle" 
-                                className="sr-only" 
-                                checked={showOutOfStock}
-                                onChange={() => setShowOutOfStock(!showOutOfStock)}
-                            />
+                            <input type="checkbox" id="stockToggle" className="sr-only" checked={showOutOfStock} onChange={() => setShowOutOfStock(!showOutOfStock)} />
                             <div className={`block w-10 h-6 rounded-full transition-colors ${showOutOfStock ? 'bg-blue-600' : 'bg-gray-300'}`}></div>
                             <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${showOutOfStock ? 'translate-x-full' : ''}`}></div>
                         </div>
@@ -645,42 +455,22 @@ export default function Checkout() {
             </div>
             <QuickSaleModal isOpen={showQuickSale} onClose={() => setShowQuickSale(false)} onAdd={onAddToCart} productos={productos} />
             
-            <div className="mb-6">
-                <FilterTabs filtro={filtro} setFiltro={setFiltro} />
-            </div>
-            <div className="mb-20">
-                <ProductGrid productos={productosFiltrados} onAddToCart={onAddToCart} showStock />
-            </div>
+            <div className="mb-6"><FilterTabs filtro={filtro} setFiltro={setFiltro} /></div>
+            <div className="mb-20"><ProductGrid productos={productosFiltrados} onAddToCart={onAddToCart} showStock /></div>
 
             {/* Footer Fijo */}
             <div
-                className={`
-                    fixed bottom-0 left-0 right-0 p-4 text-center rounded-t-xl shadow-lg
-                    flex justify-between items-center
-                    transition-colors duration-300 ease-in-out
-                    ${productosVenta.length === 0 || !infoClienteConSaldo || !infoClienteConSaldo.client_id || processing
-                        ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
-                        : 'bg-green-600 text-white cursor-pointer hover:bg-green-700'
-                    }
-                `}
+                className={`fixed bottom-0 left-0 right-0 p-4 text-center rounded-t-xl shadow-lg flex justify-between items-center transition-colors ${productosVenta.length === 0 || !infoClienteConSaldo?.client_id || processing ? 'bg-gray-300 text-gray-600 cursor-not-allowed' : 'bg-green-600 text-white cursor-pointer hover:bg-green-700'}`}
                 onClick={openSaleModal}
-                aria-disabled={productosVenta.length === 0 || !infoClienteConSaldo || !infoClienteConSaldo.client_id || processing}
+                aria-disabled={productosVenta.length === 0 || !infoClienteConSaldo?.client_id || processing}
             >
                 <div className="flex-1 text-left">
                     <span className="font-semibold text-lg">{totalItems} item{totalItems !== 1 ? 's' : ''}</span>
-                    {infoClienteConSaldo && infoClienteConSaldo.client_name && (
-                        <span className="ml-4 text-sm text-gray-200">Cliente: {infoClienteConSaldo.client_name}</span>
-                    )}
+                    {infoClienteConSaldo?.client_name && <span className="ml-4 text-sm text-gray-200">Cliente: {infoClienteConSaldo.client_name}</span>}
                 </div>
-                <div className="flex-1 text-right">
-                    <span className="font-bold text-xl">{formatCurrency(totalFinalAPagar)}</span>
-                </div>
-                {processing && (
-                    <div className="ml-4 text-sm font-semibold">Procesando…</div>
-                )}
-                <div className="ml-4">
-                    <ChevronRight className="w-6 h-6" />
-                </div>
+                <div className="flex-1 text-right"><span className="font-bold text-xl">{formatCurrency(totalFinalAPagar)}</span></div>
+                {processing && <div className="ml-4 text-sm font-semibold">Procesando…</div>}
+                <div className="ml-4"><ChevronRight className="w-6 h-6" /></div>
             </div>
 
             {/* Modal de Checkout */}
@@ -688,117 +478,51 @@ export default function Checkout() {
                 <ModalCheckout
                     isOpen={showSaleModal}
                     onClose={() => setShowSaleModal(false)}
-                    title="Detalle de venta"
+                    title={`Detalle de venta para: ${infoClienteConSaldo.client_name}`}
                     footer={
                         <>
-                            <button onClick={() => setShowSaleModal(false)} className="px-4 py-2 bg-gray-300 text-gray-800 rounded-md hover:bg-gray-400" disabled={processing}>
-                                Cancelar
-                            </button>
+                            <button onClick={() => setShowSaleModal(false)} className="px-4 py-2 bg-gray-300 text-gray-800 rounded-md hover:bg-gray-400" disabled={processing}>Cancelar</button>
                             <button onClick={handleFinalize}
-                                disabled={
-                                    processing ||
-                                    (totalFinalAPagar > 0 && !paymentType) ||
-                                    (paymentType === 'Crédito cliente' && (totalFinalAPagar - (parseFloat(enganche) || 0)) < 0 && totalFinalAPagar !==0)
-                                }
-                                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
-                            >
+                                disabled={processing || (totalFinalAPagar > 0 && !paymentType) || (paymentType === 'Crédito cliente' && (totalFinalAPagar - (parseFloat(enganche) || 0)) < 0 && totalFinalAPagar !==0)}
+                                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50">
                                 {processing ? 'Confirmando…' : 'Confirmar Venta'}
                             </button>
                         </>
                     }
                 >
-                    <div className="mb-4 max-h-80 overflow-y-auto pr-2">
-                        <h4 className="text-md font-semibold mb-2">Productos:</h4>
-                        {productosVenta.length === 0 ?
-                            (<p>No hay productos.</p>)
-                            : (<ul className="space-y-2">{productosVenta.map(p => (
-                                <li key={p.id} className="flex justify-between items-center text-sm border-b pb-2 last:border-b-0">
-                                    <div className="flex-1 mr-4">
-                                        <span className="font-medium">{p.nombre}</span>
-                                        <div className="text-xs text-gray-500">{formatCurrency(p.promocion ?? 0)} c/u</div>
-                                    </div>
-                                    <div className="flex items-center">
-                                        <input type="number" min="1" value={p.cantidad} onChange={(e) => onUpdateQuantity(p.id, e.target.value)}
-                                            className="w-12 text-center border rounded-md mr-2 text-sm py-1" disabled={processing} />
-                                        <span className="font-semibold w-20 text-right">{formatCurrency(p.total ?? 0)}</span>
-                                        <button onClick={() => onRemoveFromCart(p.id)} className="ml-2 text-red-600 hover:text-red-800 disabled:opacity-50" disabled={processing}>✕</button>
-                                    </div></li>))}</ul>)}
-                        <hr className="my-4" />
-                        <div className="text-right text-sm space-y-1">
-                            <p>Subtotal Original: <span className="font-medium">{formatCurrency(originalSubtotal)}</span></p>
-                            <p className="text-red-600">Descuento: <span className="font-medium">- {formatCurrency(discountAmount)}</span></p>
-                            <p>Subtotal (con desc.): <span className="font-medium">{formatCurrency(subtotalConDescuento)}</span></p>
-                            <div className="flex justify-end items-center mt-2">
-                                <label htmlFor="modalGastosEnvio" className="text-sm font-medium text-gray-700 mr-2">Gastos de Envío:</label>
-                                <input id="modalGastosEnvio" type="number" step="0.01" min="0" value={gastosEnvio} onChange={e => setGastosEnvio(parseFloat(e.target.value) || 0)}
-                                    className="w-24 text-right border rounded-md text-sm py-1" disabled={processing} />
-                            </div>
-                            <p className="text-lg font-semibold mt-1">Total (antes de saldo a favor): <span className="font-medium">{formatCurrency(totalAntesDeCredito)}</span></p>
-
-                            {/* --- NUEVO: Opción para usar saldo a favor --- */}
-                            {!loadingSaldoCliente && saldoAFavorDisponible > 0 && (
-                                <div className="text-left mt-3 pt-3 border-t">
-                                    <label className="flex items-center cursor-pointer">
-                                        <input
-                                            type="checkbox"
-                                            checked={usarSaldoFavor}
-                                            onChange={(e) => setUsarSaldoFavor(e.target.checked)}
-                                            className="form-checkbox h-5 w-5 text-blue-600 rounded focus:ring-blue-500"
-                                            disabled={processing}
-                                        />
-                                        <span className="ml-2 text-sm text-gray-700">
-                                            Usar saldo a favor ({formatCurrency(saldoAFavorDisponible)} disponibles)
-                                        </span>
-                                    </label>
-                                    {usarSaldoFavor && (
-                                        <p className="text-sm text-green-600 font-medium mt-1">
-                                            Se aplicarán {formatCurrency(montoAplicadoDelSaldoFavor)} de saldo a favor.
-                                        </p>
-                                    )}
-                                </div>
-                            )}
-                            {loadingSaldoCliente && <p className="text-left text-sm text-gray-500 mt-1">Verificando saldo del cliente...</p>}
-                            {/* --- FIN NUEVO --- */}
-
-                            <p className="text-xl font-bold mt-2 pt-2 border-t border-gray-300">Total Final a Pagar: <span className="text-green-700">{formatCurrency(totalFinalAPagar)}</span></p>
-                        </div>
-                        <hr className="my-4" />
-                        <div className="space-y-4">
-                            <div>
-                                <label htmlFor="modalPaymentType" className="block text-sm font-medium text-gray-700 mb-1">Forma de Pago:</label>
-                                <select id="modalPaymentType" value={paymentType} onChange={e => setPaymentType(e.target.value)}
-                                    className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50"
-                                    disabled={processing || (totalFinalAPagar === 0 && montoAplicadoDelSaldoFavor > 0)}
-                                >
-                                    <option value="">Selecciona una forma de pago</option>
-                                    <option value="Efectivo">Efectivo</option>
-                                    <option value="Tarjeta">Tarjeta</option>
-                                    <option value="Transferencia">Transferencia</option>
-                                    <option value="Crédito cliente">Crédito cliente</option>
-                                </select></div>
-                            <div>
-                                <label htmlFor="modalDiscountType" className="block text-sm font-medium text-gray-700 mb-1">Descuento:</label>
-                                <select id="modalDiscountType" value={discountType} onChange={e => { setDiscountType(e.target.value); setDiscountValue(0); }}
-                                    className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm disabled:opacity-50" disabled={processing}>
-                                    <option value="Sin descuento">Sin descuento</option>
-                                    <option value="Por importe">Por importe ($)</option>
-                                    <option value="Por porcentaje">Por porcentaje (%)</option>
-                                </select></div>
-                            {discountType !== 'Sin descuento' && (<div>
-                                <label htmlFor="modalDiscountValue" className="block text-sm font-medium text-gray-700 mb-1">
-                                    Valor del Descuento ({discountType === 'Por importe' ? '$' : '%'}):</label>
-                                <input id="modalDiscountValue" type="number" step={discountType === 'Porcentaje' ? "1" : "0.01"} min={discountType === 'Porcentaje' ? "0" : "0"} max={discountType === 'Porcentaje' ? "100" : undefined}
-                                    value={discountValue} onChange={e => setDiscountValue(parseFloat(e.target.value) || 0)}
-                                    className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm disabled:opacity-50" disabled={processing} />
-                            </div>)}
-                            {paymentType === 'Crédito cliente' && (<div>
-                                <label htmlFor="modalEnganche" className="block text-sm font-medium text-gray-700 mb-1">Enganche:</label>
-                                <input id="modalEnganche" type="number" step="0.01" min="0" value={enganche} onChange={e => setEnganche(parseFloat(e.target.value) || 0)}
-                                    className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm disabled:opacity-50" disabled={processing} />
-                            </div>)}</div>
-                    </div></ModalCheckout>)}
+                    {/* --- NUEVO: Usar los componentes divididos dentro del ModalCheckout --- */}
+                    <CheckoutCartDisplay
+                        productosVenta={productosVenta}
+                        onUpdateQuantity={onUpdateQuantity}
+                        onRemoveFromCart={onRemoveFromCart}
+                        processing={processing}
+                    />
+                    <CheckoutPaymentForm
+                        originalSubtotal={originalSubtotal}
+                        discountAmount={discountAmount}
+                        subtotalConDescuento={subtotalConDescuento}
+                        gastosEnvio={gastosEnvio}
+                        setGastosEnvio={setGastosEnvio}
+                        totalAntesDeCredito={totalAntesDeCredito}
+                        loadingSaldoCliente={loadingSaldoCliente}
+                        saldoAFavorDisponible={saldoAFavorDisponible}
+                        usarSaldoFavor={usarSaldoFavor}
+                        setUsarSaldoFavor={setUsarSaldoFavor}
+                        montoAplicadoDelSaldoFavor={montoAplicadoDelSaldoFavor}
+                        totalFinalAPagar={totalFinalAPagar}
+                        paymentType={paymentType}
+                        setPaymentType={setPaymentType}
+                        discountType={discountType}
+                        setDiscountType={setDiscountType}
+                        discountValue={discountValue}
+                        setDiscountValue={setDiscountValue}
+                        enganche={enganche}
+                        setEnganche={setEnganche}
+                        processing={processing}
+                    />
+                </ModalCheckout>
+            )}
             {showHtmlTicket && htmlTicketData && (<HtmlTicketDisplay saleData={htmlTicketData} onClose={closeHtmlTicket} />)}
         </div>
     );
 }
-

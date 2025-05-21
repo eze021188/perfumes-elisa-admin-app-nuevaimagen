@@ -1,40 +1,34 @@
 // src/pages/Clientes.jsx
-import React, { useEffect, useState, useMemo } from 'react'; // Importar useMemo
+import React, { useEffect, useState, useMemo } from 'react';
 import { supabase } from '../supabase';
 import { useNavigate } from 'react-router-dom';
-import { useClientes } from '../contexts/ClientesContext';
-import NewClientModal from '../components/NewClientModal';
+import { useClientes } from '../contexts/ClientesContext'; // Contexto para clientes
+import NewClientModal from '../components/NewClientModal'; // Para agregar/editar clientes
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import toast from 'react-hot-toast';
-// Importar el componente HtmlTicketDisplay
-import HtmlTicketDisplay from '../components/HtmlTicketDisplay';
-// Importar useAuth para obtener info del vendedor
-import { useAuth } from '../contexts/AuthContext';
 
+// Componentes divididos
+import ClientesAccionesBarra from '../components/clientes_temp/ClientesAccionesBarra';
+import ClientesTabla from '../components/clientes_temp/ClientesTabla';
+import ClientesPaginacion from '../components/clientes_temp/ClientesPaginacion';
+import ClienteVentasModal from '../components/clientes_temp/ClienteVentasModal';
+import ClienteVentaDetalleModal from '../components/clientes_temp/ClienteVentaDetalleModal'; // El que está en el Canvas
+import HtmlTicketDisplay from '../components/HtmlTicketDisplay'; // Para el ticket HTML
 
-// Helper simple para formatear moneda (si no está global)
+import { useAuth } from '../contexts/AuthContext'; // Para info del vendedor
+
+// Helpers (podrían estar en un archivo utils/)
 const formatCurrency = (amount) => {
-     const numericAmount = parseFloat(amount);
-     if (isNaN(numericAmount)) {
-         return '$0.00';
-     }
-     return numericAmount.toLocaleString('en-US', {
-        style: 'currency',
-        currency: 'USD', // Ajusta según tu moneda
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-    });
+    const numericAmount = parseFloat(amount);
+    if (isNaN(numericAmount)) return '$0.00';
+    return numericAmount.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
-// Función para cargar una imagen local y convertirla a Base64 para jsPDF
-// Esta función es necesaria si quieres incluir el logo en el PDF
 const getBase64Image = async (url) => {
     try {
         const response = await fetch(url);
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         const blob = await response.blob();
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
@@ -48,844 +42,366 @@ const getBase64Image = async (url) => {
     }
 };
 
-
 export default function Clientes() {
   const navigate = useNavigate();
-  const { clientes, loading: clientesLoading, actualizarCliente, eliminarCliente } = useClientes();
-  // Obtener usuario logueado (vendedor) del contexto
+  // Usamos el contexto para obtener y manipular la lista global de clientes
+  const { clientes, loading: clientesLoadingFromContext, addCliente, actualizarCliente, eliminarCliente: eliminarClienteContext } = useClientes();
   const { user: currentUser } = useAuth();
 
   const [busqueda, setBusqueda] = useState('');
   const [selectedIds, setSelectedIds] = useState([]);
-  const [clienteActual, setClienteActual] = useState(null); // Información del cliente seleccionado en la lista
-  const [ventasCliente, setVentasCliente] = useState([]);
-  const [modalOpen, setModalOpen] = useState(false);
+  
+  // Para el modal de "Ventas de [Cliente]"
+  const [clienteActualParaVentas, setClienteActualParaVentas] = useState(null); 
+  const [ventasDelClienteSeleccionado, setVentasDelClienteSeleccionado] = useState([]);
+  const [clientSalesLoading, setClientSalesLoading] = useState(false);
+  
+  // Para el modal de "Agregar/Editar Cliente"
+  const [showNewOrEditClientModal, setShowNewOrEditClientModal] = useState(false);
   const [editingClient, setEditingClient] = useState(null);
+  
+  // Para el modal de "Detalle de Venta" (que se abre desde el modal de ventas del cliente)
+  const [showSaleDetailModal, setShowSaleDetailModal] = useState(false);
+  const [selectedSaleForDetail, setSelectedSaleForDetail] = useState(null);
+  const [selectedSaleDetailsItems, setSelectedSaleDetailsItems] = useState([]);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [cancelSaleLoading, setCancelSaleLoading] = useState(false);
+
+  // Para tickets
+  const [showHtmlTicket, setShowHtmlTicket] = useState(false);
+  const [htmlTicketData, setHtmlTicketData] = useState(null);
+  const [logoBase64, setLogoBase64] = useState(null);
+  const [clienteInfoForTicket, setClienteInfoForTicket] = useState(null);
+  const [vendedorInfoForTicket, setVendedorInfoForTicket] = useState(null);
+  const [clienteBalanceForTicket, setClienteBalanceForTicket] = useState(0);
+
+  // Paginación y ordenamiento para la tabla de clientes
   const [pagina, setPagina] = useState(1);
   const [porPagina, setPorPagina] = useState(25);
+  const [sortColumn, setSortColumn] = useState('nombre');
+  const [sortDirection, setSortDirection] = useState('asc');
 
-  const [showSaleDetailModal, setShowSaleDetailModal] = useState(false);
-  const [selectedSale, setSelectedSale] = useState(null); // Venta seleccionada en el modal de detalle
-  const [selectedSaleDetails, setSelectedSaleDetails] = useState([]); // Detalles de la venta seleccionada
-  const [cancelLoading, setCancelLoading] = useState(false);
-  const [clientSalesLoading, setClientSalesLoading] = useState(false);
-  const [detailLoading, setDetailLoading] = useState(false);
-
-  // Estados para mostrar el ticket HTML
-   const [showHtmlTicket, setShowHtmlTicket] = useState(false);
-   const [htmlTicketData, setHtmlTicketData] = useState(null);
-
-   // Estado para almacenar la imagen del logo en Base64 para el PDF
-   const [logoBase64, setLogoBase64] = useState(null);
-
-    // Estados para almacenar información adicional para el PDF/Ticket
-    // Nota: Estos estados se cargan en handleSelectSale y se usan en PDF/HTML
-    const [clienteInfoTicket, setClienteInfoTicket] = useState(null); // Información del cliente de la venta seleccionada
-    const [vendedorInfoTicket, setVendedorInfoTicket] = useState(null); // Información del vendedor de la venta seleccionada
-    const [clienteBalanceTicket, setClienteBalanceTicket] = useState(0); // Balance del cliente de la venta seleccionada
-
-    // --- Estados para el ordenamiento ---
-    const [sortColumn, setSortColumn] = useState('nombre'); // Columna por defecto para ordenar
-    const [sortDirection, setSortDirection] = useState('asc'); // Dirección por defecto (ascendente)
-
-    // Función para manejar el cambio de ordenamiento
-    const handleSort = (column) => {
-        if (sortColumn === column) {
-            // Si es la misma columna, cambiar la dirección
-            setSortDirection(prevDirection => (prevDirection === 'asc' ? 'desc' : 'asc'));
-        } else {
-            // Si es una nueva columna, establecerla y ordenar ascendente por defecto
-            setSortColumn(column);
-            setSortDirection('asc');
-        }
-        setPagina(1); // Volver a la primera página al cambiar el ordenamiento
-    };
-
-    // Lógica de filtrado y ordenamiento usando useMemo para optimizar
-    const clientesFiltradosYOrdenados = useMemo(() => {
-        let clientesTrabajo = [...clientes]; // Copia para no mutar el estado original
-
-        // 1. Filtrar por búsqueda
-        if (busqueda) {
-            clientesTrabajo = clientesTrabajo.filter(c =>
-                (c.nombre || '').toLowerCase().includes(busqueda.toLowerCase()) ||
-                (c.telefono || '').toLowerCase().includes(busqueda.toLowerCase()) ||
-                (c.correo || '').toLowerCase().includes(busqueda.toLowerCase()) ||
-                (c.direccion || '').toLowerCase().includes(busqueda.toLowerCase())
-            );
-        }
-
-        // 2. Ordenar
-        if (sortColumn) {
-            clientesTrabajo.sort((a, b) => {
-                const aValue = a[sortColumn] || '';
-                const bValue = b[sortColumn] || '';
-
-                if (aValue < bValue) {
-                    return sortDirection === 'asc' ? -1 : 1;
-                }
-                if (aValue > bValue) {
-                    return sortDirection === 'asc' ? 1 : -1;
-                }
-                return 0; // Son iguales
-            });
-        }
-
-        return clientesTrabajo;
-    }, [clientes, busqueda, sortColumn, sortDirection]); // Dependencias del useMemo
-
-    // Calcular paginación basada en la lista filtrada y ordenada
-    const inicio = (pagina - 1) * porPagina;
-    const clientesPag = clientesFiltradosYOrdenados.slice(inicio, inicio + porPagina);
-    const totalPaginas = Math.ceil(clientesFiltradosYOrdenados.length / porPagina);
-
-
-  // Cargar logo al iniciar
   useEffect(() => {
-      async function loadLogo() {
-          const logoUrl = '/images/PERFUMESELISAwhite.jpg'; // Asegúrate que esta ruta sea correcta
-          const base64 = await getBase64Image(logoUrl);
+      async function loadLogoImg() {
+          const base64 = await getBase64Image('/images/PERFUMESELISAwhite.jpg');
           setLogoBase64(base64);
       }
-      loadLogo();
-  }, []); // Solo se ejecuta una vez al montar
+      loadLogoImg();
+  }, []);
 
+  const handleSort = (column) => {
+      setSortDirection(prevDirection => (sortColumn === column && prevDirection === 'asc' ? 'desc' : 'asc'));
+      setSortColumn(column);
+      setPagina(1);
+  };
 
-  const handleVerCompras = async c => {
-    setClienteActual(c); // Establecer el cliente seleccionado en la lista
-    setVentasCliente([]);
+  const clientesFiltradosYOrdenados = useMemo(() => {
+      let clientesTrabajo = [...clientes];
+      if (busqueda) {
+          clientesTrabajo = clientesTrabajo.filter(c =>
+              Object.values(c).some(val => 
+                  String(val).toLowerCase().includes(busqueda.toLowerCase())
+              )
+          );
+      }
+      if (sortColumn) {
+          clientesTrabajo.sort((a, b) => {
+              const aValue = a[sortColumn] || '';
+              const bValue = b[sortColumn] || '';
+              if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
+              if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
+              return 0;
+          });
+      }
+      return clientesTrabajo;
+  }, [clientes, busqueda, sortColumn, sortDirection]);
+
+  const inicio = (pagina - 1) * porPagina;
+  const clientesPag = clientesFiltradosYOrdenados.slice(inicio, inicio + porPagina);
+  const totalPaginas = Math.ceil(clientesFiltradosYOrdenados.length / porPagina);
+
+  const handleVerCompras = async (cliente) => {
+    setClienteActualParaVentas(cliente);
+    setVentasDelClienteSeleccionado([]);
     setClientSalesLoading(true);
-    // --- MODIFICADO: Asegurar que se selecciona monto_credito_aplicado ---
-    const { data, error } = await supabase
-      .from('ventas')
-      .select('*, enganche, gastos_envio, monto_credito_aplicado') // <<< CORREGIDO AQUÍ
-      .eq('cliente_id', c.id)
-      .order('fecha', { ascending: false });
-    if (error) {
-      console.error('Error al obtener ventas del cliente:', error.message);
-      toast.error('Error al cargar historial de ventas.');
-      setVentasCliente([]);
-    } else {
-      setVentasCliente(data || []);
-    }
-    setClientSalesLoading(false);
-  };
-
-  const handlePaginaAnterior = () => {
-    if (pagina > 1) setPagina(pagina - 1);
-  };
-
-  const handlePaginaSiguiente = () => {
-    if (pagina < totalPaginas) setPagina(pagina + 1);
-  };
-
-  // --- Funciones de detalle de venta (para el modal) ---
-  const handleSelectSale = async (venta) => { // 'venta' aquí ya debería tener monto_credito_aplicado
-    setSelectedSale(venta); 
-    setDetailLoading(true); 
-    setSelectedSaleDetails([]); 
-    setClienteInfoTicket(null);
-    setVendedorInfoTicket(null);
-    setClienteBalanceTicket(0);
-
-    console.log(`[handleSelectSale] Fetching details for venta ID: ${venta.id}. Venta object:`, venta); // Log para ver el objeto venta
-
-    // 1. Cargar detalles de la venta
-    const { data: detalle, error: errDetalle } = await supabase
-        .from('detalle_venta')
-        .select('*, productos(nombre)') 
-        .eq('venta_id', venta.id);
-
-    if (errDetalle) {
-        console.error('[handleSelectSale] Error al obtener detalles de la venta:', errDetalle.message);
-        toast.error('Error al cargar detalles de la venta.');
-        setSelectedSaleDetails([]);
-        setDetailLoading(false);
-        setSelectedSale(null); 
-        return; 
-    }
-
-    const mappedDetails = (detalle || []).map(item => ({
-        ...item,
-        nombreProducto: item.productos ? item.productos.nombre : 'Producto desconocido'
-    }));
-    setSelectedSaleDetails(mappedDetails);
-
-    let clienteData = null;
-    if (venta.cliente_id) {
-         const { data: cliData, error: cliError } = await supabase
-             .from('clientes')
-             .select('id, nombre, telefono, correo, direccion') 
-             .eq('id', venta.cliente_id)
-             .single();
-         if (cliError) {
-             console.error('Error cargando info cliente para ticket:', cliError.message);
-             clienteData = { id: venta.cliente_id, nombre: venta.cliente_nombre || 'Público General', telefono: 'N/A' };
-         } else {
-             clienteData = cliData;
-         }
-    } else {
-         clienteData = { id: null, nombre: venta.cliente_nombre || 'Público General', telefono: 'N/A' };
-    }
-     setClienteInfoTicket(clienteData);
-
-
-     let vendedorData = null;
-     if (venta.vendedor_id) {
-         const { data: vendData, error: vendError } = await supabase
-             .from('usuarios')
-             .select('id, nombre') 
-             .eq('id', venta.vendedor_id)
-             .single();
-         if (vendError) {
-             console.error('Error cargando info vendedor para ticket:', vendError.message);
-             vendedorData = { id: venta.vendedor_id, nombre: currentUser?.email || 'N/A' }; 
-         } else {
-             vendedorData = vendData;
-         }
-     } else {
-         vendedorData = { id: currentUser?.id || null, nombre: currentUser?.email || 'N/A' };
-     }
-     setVendedorInfoTicket(vendedorData); 
-
-
-    let currentClientBalance = 0;
-     if (clienteData?.id) { 
-        const { data: balanceData, error: balanceError } = await supabase
-            .from('movimientos_cuenta_clientes')
-            .select('monto')
-            .eq('cliente_id', clienteData.id); 
-
-        if (balanceError) {
-            console.error("Error loading client balance for ticket:", balanceError);
-        } else {
-            currentClientBalance = (balanceData || []).reduce((sum, mov) => sum + (parseFloat(mov.monto) || 0), 0);
-        }
-     }
-     setClienteBalanceTicket(currentClientBalance); 
-
-
-    setSelectedSale(prev => ({ // prev aquí es el mismo objeto 'venta' que se pasó al inicio de la función
-        ...prev, 
-        productos: mappedDetails, 
-        // Los campos como subtotal, total, monto_credito_aplicado, etc., ya deberían estar en 'prev' (que es 'venta')
-        // si se cargaron correctamente en handleVerCompras.
-        // No es necesario reasignarlos aquí si ya vienen bien.
-        // Solo nos aseguramos de que 'productos' (los detalles) se actualice.
-    }));
-
-
-    setDetailLoading(false); 
-    setShowSaleDetailModal(true); 
-};
-
-const handleCloseSaleDetailModal = () => {
-    setShowSaleDetailModal(false);
-    setSelectedSale(null);
-    setSelectedSaleDetails([]);
-    setClienteInfoTicket(null);
-    setVendedorInfoTicket(null);
-    setClienteBalanceTicket(0);
-    closeHtmlTicket();
-};
-
-const handleCancelSale = async () => {
-    if (cancelLoading || !selectedSale) return;
-    if (!window.confirm(`¿Estás seguro de cancelar la venta ${selectedSale.codigo_venta || selectedSale.id}? Esta acción eliminará permanentemente la venta y devolverá el stock.`)) return;
-    setCancelLoading(true);
     try {
-        for (const item of selectedSaleDetails) { // Usar selectedSaleDetails que tiene la info de productos
-            if (!item.producto_id) {
-                toast.error(`Falta ID de producto para un ítem. No se actualizará el stock.`, { duration: 6000 });
-                continue;
-            }
-            const { data: producto, error: errorGetProduct } = await supabase
-                .from('productos')
-                .select('id, stock')
-                .eq('id', item.producto_id)
-                .single();
-            if (errorGetProduct) {
-                console.error(`Error al obtener stock para producto ${item.producto_id}:`, errorGetProduct.message);
-                toast.error(`Error al obtener stock del producto. La cancelación podría ser parcial.`, { duration: 6000 });
-                continue;
-            }
-            const nuevoStock = (producto?.stock ?? 0) + (item.cantidad ?? 0);
-             const { error: errorUpdateStock } = await supabase
-                .from('productos')
-                .update({ stock: nuevoStock })
-                .eq('id', item.producto_id);
-            if (errorUpdateStock) {
-                console.error(`Error actualizando stock para producto ${item.producto_id}:`, errorUpdateStock.message);
-                toast.error(`Error actualizando stock del producto. La cancelación podría ser parcial.`, { duration: 6000 });
-                continue;
-            }
-        }
-        const { error: errorDeleteDetails } = await supabase.from('detalle_venta').delete().eq('venta_id', selectedSale.id);
-        if (errorDeleteDetails) {
-             console.error('Error eliminando detalles de venta:', errorDeleteDetails.message);
-             toast.error('Error al eliminar detalles de la venta.');
-             throw new Error('Error al eliminar detalles de la venta.');
-        }
-        const { error: errorDeleteSale } = await supabase.from('ventas').delete().eq('id', selectedSale.id);
-         if (errorDeleteSale) {
-            console.error('Error eliminando venta principal:', errorDeleteSale.message);
-            toast.error('Error al eliminar la venta principal.');
-             throw new Error('Error al eliminar la venta principal.');
-         }
-        setVentasCliente(prev => prev.filter(v => v.id !== selectedSale.id));
-        handleCloseSaleDetailModal();
-        toast.success(`✅ Venta cancelada y eliminada exitosamente.`);
+        const { data, error } = await supabase
+          .from('ventas')
+          .select('*, monto_credito_aplicado, enganche, gastos_envio') // Asegurar que se traen estos campos
+          .eq('cliente_id', cliente.id)
+          .order('fecha', { ascending: false });
+        if (error) throw error;
+        setVentasDelClienteSeleccionado(data || []);
     } catch (error) {
-        console.error('Error general en cancelación:', error.message);
-        toast.error(`Fallo al cancelar venta: ${error.message || 'Error desconocido'}`);
+        console.error('Error al obtener ventas del cliente:', error.message);
+        toast.error('Error al cargar historial de ventas.');
     } finally {
-        setCancelLoading(false);
+        setClientSalesLoading(false);
     }
-};
-
-  const generarPDF = async () => {
-      if (!selectedSale || !selectedSaleDetails.length || !clienteInfoTicket || !vendedorInfoTicket || selectedSale.enganche === undefined || selectedSale.gastos_envio === undefined) {
-          toast.error("Datos incompletos para generar el PDF.");
-          return;
-      }
-      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'letter' });
-      const margin = 15; let yOffset = margin;
-      const logoWidth = 30; const logoHeight = 30;
-      const companyInfoX = margin + logoWidth + 10;
-
-      if (logoBase64) {
-          doc.addImage(logoBase64, 'JPEG', margin, yOffset, logoWidth, logoHeight);
-      } else {
-           doc.setFontSize(10);
-           doc.text("Logo Aquí", margin + logoWidth / 2, yOffset + logoHeight / 2, { align: 'center' });
-      }
-      doc.setFontSize(14); doc.setFont(undefined, 'bold'); doc.text('PERFUMES ELISA', companyInfoX, yOffset + 5);
-      doc.setFontSize(10); doc.setFont(undefined, 'normal');
-      doc.text('Ciudad Apodaca, N.L., C.P. 66640', companyInfoX, yOffset + 17);
-      doc.text('Teléfono: 81 3080 4010', companyInfoX, yOffset + 22);
-      doc.setFontSize(20); doc.setFont(undefined, 'bold'); doc.text('TICKET DE VENTA', doc.internal.pageSize.getWidth() - margin, yOffset + 10, { align: 'right' });
-      doc.setFontSize(12); doc.setFont(undefined, 'normal'); doc.text(`Código: ${selectedSale.codigo_venta || 'N/A'}`, doc.internal.pageSize.getWidth() - margin, yOffset + 17, { align: 'right' });
-      yOffset += Math.max(logoHeight, 30) + 15;
-      doc.line(margin, yOffset, doc.internal.pageSize.getWidth() - margin, yOffset);
-      yOffset += 10;
-      const infoLabelFontSize = 9; const infoValueFontSize = 10; const infoLineHeight = 6;
-      doc.setFontSize(infoLabelFontSize); doc.setFont(undefined, 'bold'); doc.text('CLIENTE:', margin, yOffset);
-      doc.setFontSize(infoValueFontSize); doc.setFont(undefined, 'normal'); doc.text(clienteInfoTicket?.nombre || 'Público General', margin + doc.getTextWidth('CLIENTE:') + 5, yOffset);
-      yOffset += infoLineHeight;
-      doc.setFontSize(infoLabelFontSize); doc.setFont(undefined, 'bold'); doc.text('TELÉFONO:', margin, yOffset);
-      doc.setFontSize(infoValueFontSize); doc.setFont(undefined, 'normal'); doc.text(clienteInfoTicket?.telefono || 'N/A', margin + doc.getTextWidth('TELÉFONO:') + 5, yOffset);
-      yOffset += infoLineHeight;
-      doc.setFontSize(infoLabelFontSize); doc.setFont(undefined, 'bold'); doc.text('CORREO:', margin, yOffset);
-      doc.setFontSize(infoValueFontSize); doc.setFont(undefined, 'normal'); doc.text(clienteInfoTicket?.correo || 'N/A', margin + doc.getTextWidth('CORREO:') + 5, yOffset);
-      yOffset += infoLineHeight;
-      doc.setFontSize(infoLabelFontSize); doc.setFont(undefined, 'bold'); doc.text('DIRECCIÓN:', margin, yOffset);
-      const direccionCliente = clienteInfoTicket?.direccion || 'N/A';
-      const splitDir = doc.splitTextToSize(direccionCliente, doc.internal.pageSize.getWidth() - margin - (margin + doc.getTextWidth('DIRECCIÓN:') + 5));
-      doc.setFontSize(infoValueFontSize); doc.setFont(undefined, 'normal'); doc.text(splitDir, margin + doc.getTextWidth('DIRECCIÓN:') + 5, yOffset);
-      yOffset += (splitDir.length * infoLineHeight) + infoLineHeight;
-      yOffset += infoLineHeight;
-      doc.setFontSize(infoLabelFontSize); doc.setFont(undefined, 'bold'); doc.text('FECHA:', margin, yOffset);
-      doc.setFontSize(infoValueFontSize); doc.setFont(undefined, 'normal'); doc.text(((selectedSale.fecha || selectedSale.created_at) ? new Date(selectedSale.fecha || selectedSale.created_at).toLocaleString() : 'Fecha desconocida'), margin + doc.getTextWidth('FECHA:') + 5, yOffset);
-      yOffset += infoLineHeight;
-      doc.setFontSize(infoLabelFontSize); doc.setFont(undefined, 'bold'); doc.text('VENDEDOR:', margin, yOffset);
-      doc.setFontSize(infoValueFontSize); doc.setFont(undefined, 'normal'); doc.text(vendedorInfoTicket?.nombre || 'N/A', margin + doc.getTextWidth('VENDEDOR:') + 5, yOffset);
-      yOffset += infoLineHeight * 2;
-      const productsHead = [['Producto', 'Cant.', 'P. Unitario', 'Total Item']];
-      const productsRows = selectedSaleDetails.map(p => [ // Usar selectedSaleDetails
-          p.nombreProducto || '–', // Usar nombreProducto
-          (parseFloat(p.cantidad ?? 0)).toString(),
-          formatCurrency(p.precio_unitario ?? 0),
-          formatCurrency(p.total_parcial ?? 0)
-      ]);
-      doc.autoTable({
-          head: productsHead, body: productsRows, startY: yOffset, theme: 'striped',
-          styles: { fontSize: 9, cellPadding: 3, overflow: 'linebreak' },
-          headStyles: { fillColor: [220, 220, 220], textColor: [0, 0, 0], fontStyle: 'bold' },
-          columnStyles: { 0: { cellWidth: 80 }, 1: { cellWidth: 15, halign: 'center' }, 2: { cellWidth: 25, halign: 'right' }, 3: { cellWidth: 30, halign: 'right' }},
-          margin: { left: margin, right: margin },
-          didDrawPage: (data) => { doc.setFontSize(8); doc.text('Página ' + data.pageNumber, doc.internal.pageSize.getWidth() - margin, doc.internal.pageSize.getHeight() - margin, { align: 'right' }); }
-      });
-      yOffset = doc.lastAutoTable?.finalY ? doc.lastAutoTable.finalY + 10 : yOffset + 10;
-      const totalsLabelWidth = 45;
-      const totalsValueStartX = doc.internal.pageSize.getWidth() - margin;
-      const totalsLineHeight = 6; const totalsFontSize = 10; const finalTotalFontSize = 14;
-      doc.setFontSize(totalsFontSize); doc.setFont(undefined, 'normal');
-
-      doc.text('Subtotal (Productos):', totalsValueStartX - totalsLabelWidth, yOffset, { align: 'right' });
-      doc.text(formatCurrency(selectedSale.subtotal ?? 0), totalsValueStartX, yOffset, { align: 'right' });
-      yOffset += totalsLineHeight;
-
-      if ((selectedSale.valor_descuento ?? 0) > 0) {
-          let discountLabel = 'Descuento:';
-          doc.text(discountLabel, totalsValueStartX - totalsLabelWidth, yOffset, { align: 'right' });
-          doc.setTextColor(220, 53, 69);
-          doc.text(`- ${formatCurrency(selectedSale.valor_descuento ?? 0)}`, totalsValueStartX, yOffset, { align: 'right' });
-          doc.setTextColor(0, 0, 0);
-          yOffset += totalsLineHeight;
-      }
-      if ((selectedSale.gastos_envio ?? 0) > 0) {
-           doc.text('Gastos de Envío:', totalsValueStartX - totalsLabelWidth, yOffset, { align: 'right' });
-           doc.text(formatCurrency(selectedSale.gastos_envio ?? 0), totalsValueStartX, yOffset, { align: 'right' });
-           yOffset += totalsLineHeight;
-       }
-      if ((selectedSale.monto_credito_aplicado ?? 0) > 0) {
-          doc.text('Saldo a Favor Aplicado:', totalsValueStartX - totalsLabelWidth, yOffset, { align: 'right' });
-          doc.setTextColor(40, 167, 69);
-          doc.text(`- ${formatCurrency(selectedSale.monto_credito_aplicado ?? 0)}`, totalsValueStartX, yOffset, { align: 'right' });
-          doc.setTextColor(0, 0, 0);
-          yOffset += totalsLineHeight;
-      }
-      if (selectedSale.forma_pago === 'Crédito cliente' && (selectedSale.enganche ?? 0) > 0) {
-           doc.text('Enganche Pagado:', totalsValueStartX - totalsLabelWidth, yOffset, { align: 'right' });
-           doc.text(formatCurrency(selectedSale.enganche ?? 0), totalsValueStartX, yOffset, { align: 'right' });
-           yOffset += totalsLineHeight;
-       }
-      doc.text('Forma de Pago:', totalsValueStartX - totalsLabelWidth, yOffset, { align: 'right' });
-      doc.text(selectedSale.forma_pago || 'Desconocida', totalsValueStartX, yOffset, { align: 'right' });
-      yOffset += totalsLineHeight * 1.5;
-      doc.setFontSize(finalTotalFontSize); doc.setFont(undefined, 'bold');
-      doc.text('TOTAL PAGADO:', totalsValueStartX - totalsLabelWidth, yOffset, { align: 'right' });
-      doc.setTextColor(40, 167, 69);
-      doc.text(formatCurrency(selectedSale.total ?? 0), totalsValueStartX, yOffset, { align: 'right' });
-      doc.setTextColor(0, 0, 0);
-      yOffset += finalTotalFontSize + 15;
-       if (selectedSale.forma_pago === 'Crédito cliente') {
-           const balanceLabelFontSize = 10; const balanceValueFontSize = 12; const balanceNoteFontSize = 8; const balanceLineHeight = 5;
-           const currentBalance = (clienteBalanceTicket ?? 0);
-           doc.setFontSize(balanceLabelFontSize); doc.setFont(undefined, 'bold');
-           doc.text('BALANCE DE CUENTA ACTUAL', margin, yOffset);
-           yOffset += balanceLineHeight * 2;
-           doc.setFontSize(balanceValueFontSize + 2); doc.setFont(undefined, 'bold');
-           doc.text('Saldo Actual Cliente:', margin + 10, yOffset);
-           if (currentBalance > 0) doc.setTextColor(220, 53, 69); else doc.setTextColor(40, 167, 69);
-           doc.text(formatCurrency(currentBalance), doc.internal.pageSize.getWidth() - margin, yOffset, { align: 'right' });
-           doc.setTextColor(0, 0, 0);
-           yOffset += balanceLineHeight * 2;
-           doc.setFontSize(balanceNoteFontSize); doc.setFont(undefined, 'normal');
-           const balanceNoteText = currentBalance > 0 ? '(Saldo positivo indica deuda del cliente)' : '(Saldo negativo indica crédito a favor del cliente)';
-           doc.text(balanceNoteText, margin, yOffset);
-           yOffset += balanceLineHeight * 2;
-       }
-      const footerFontSize = 8; const footerLineHeight = 4;
-      doc.setFontSize(footerFontSize); doc.setFont(undefined, 'normal');
-      doc.text('¡Gracias por tu compra!', margin, yOffset);
-      yOffset += footerLineHeight;
-      doc.text('Visítanos de nuevo pronto.', margin, yOffset);
-      doc.output('dataurlnewwindow');
   };
 
-    const handleShowHtmlTicket = async () => {
-        if (!selectedSale || !selectedSaleDetails.length || !clienteInfoTicket || !vendedorInfoTicket) {
-            toast.error("Datos incompletos para mostrar el ticket HTML.");
-            return;
+  const handleSelectSaleForDetail = async (venta) => {
+    setSelectedSaleForDetail(venta); // Objeto venta completo, incluyendo monto_credito_aplicado
+    setDetailLoading(true);
+    setSelectedSaleDetailsItems([]);
+    setClienteInfoForTicket(null);
+    setVendedorInfoForTicket(null);
+    setClienteBalanceForTicket(0);
+
+    try {
+        // 1. Cargar detalles de la venta (productos)
+        const { data: detalleItems, error: errDetalle } = await supabase
+            .from('detalle_venta')
+            .select('*, productos(nombre)')
+            .eq('venta_id', venta.id);
+        if (errDetalle) throw errDetalle;
+        const mappedDetails = (detalleItems || []).map(item => ({
+            ...item,
+            nombreProducto: item.productos?.nombre || 'Producto desconocido'
+        }));
+        setSelectedSaleDetailsItems(mappedDetails);
+
+        // 2. Cargar info del cliente para el ticket (el cliente de esta venta específica)
+        if (venta.cliente_id) {
+            const { data: cliData, error: cliError } = await supabase.from('clientes')
+                .select('id, nombre, telefono, correo, direccion').eq('id', venta.cliente_id).single();
+            if (cliError) console.error("Error cargando cliente para ticket:", cliError);
+            setClienteInfoForTicket(cliData || { id: venta.cliente_id, nombre: venta.cliente_nombre || 'Público General' });
+        } else {
+            setClienteInfoForTicket({ id: null, nombre: venta.cliente_nombre || 'Público General' });
         }
-         const now = selectedSale.fecha || selectedSale.created_at ? new Date(selectedSale.fecha || selectedSale.created_at) : new Date();
-         const formattedDate = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getFullYear()).slice(-2)} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-         const enganchePagado = selectedSale.enganche ?? 0;
-         const gastosEnvioVenta = selectedSale.gastos_envio ?? 0;
-         const montoCreditoAplicadoVenta = selectedSale.monto_credito_aplicado ?? 0; // <<< Obtener de selectedSale
 
-        const ticketData = {
-             codigo_venta: selectedSale.codigo_venta,
-             cliente: { id: clienteInfoTicket.id, nombre: clienteInfoTicket.nombre, telefono: clienteInfoTicket.telefono || 'N/A' },
-             vendedor: { nombre: vendedorInfoTicket?.nombre || 'N/A' },
-             fecha: formattedDate,
-             productosVenta: selectedSaleDetails.map(item => ({ // Usar selectedSaleDetails
-                 id: item.producto_id, nombre: item.nombreProducto, cantidad: item.cantidad,
-                 precio_unitario: item.precio_unitario, total_parcial: item.total_parcial,
-             })),
-             originalSubtotal: selectedSale.subtotal,
-             discountAmount: selectedSale.valor_descuento,
-             monto_credito_aplicado: montoCreditoAplicadoVenta, // <<< Pasar al ticket HTML
-             forma_pago: selectedSale.forma_pago,
-             enganche: enganchePagado,
-             gastos_envio: gastosEnvioVenta,
-             total_final: selectedSale.total,
-             balance_cuenta: clienteBalanceTicket,
-         };
-         setHtmlTicketData(ticketData);
-         setShowHtmlTicket(true);
-    };
+        // 3. Cargar info del vendedor para el ticket
+        if (venta.vendedor_id) {
+            const { data: vendData, error: vendError } = await supabase.from('usuarios')
+                .select('id, nombre').eq('id', venta.vendedor_id).single();
+            if (vendError) console.error("Error cargando vendedor para ticket:", vendError);
+            setVendedorInfoForTicket(vendData || { nombre: 'N/A' });
+        } else {
+            setVendedorInfoForTicket({ nombre: currentUser?.email || 'N/A' });
+        }
+        
+        // 4. Cargar balance actual del cliente de la venta
+        if (venta.cliente_id) {
+            const { data: balanceData, error: balanceError } = await supabase.rpc('get_cliente_con_saldo', { p_cliente_id: venta.cliente_id });
+            if (balanceError) console.error("Error cargando balance para ticket:", balanceError);
+            setClienteBalanceForTicket(balanceData && balanceData.length > 0 ? balanceData[0].balance : 0);
+        }
 
-    const closeHtmlTicket = () => {
-        setShowHtmlTicket(false);
-        setHtmlTicketData(null);
-    };
 
-  const onClientSaved = async (clienteData) => { // Renombrado para claridad
-    if (editingClient) {
-      await actualizarCliente(editingClient.id, clienteData); // Asumiendo que actualizarCliente viene del contexto y actualiza la lista 'clientes'
+    } catch (error) {
+        toast.error(`Error al cargar detalles: ${error.message}`);
+    } finally {
+        setDetailLoading(false);
+        setShowSaleDetailModal(true); // Abrir el modal de detalle de venta
     }
-    // No es necesario añadirlo manualmente si el contexto actualiza 'clientes' y el useMemo reacciona
-    setModalOpen(false);
-    setEditingClient(null); // Limpiar el cliente en edición
+  };
+  
+  const handleCancelSale = async (ventaACancelar) => {
+    if (cancelSaleLoading) return;
+    if (!window.confirm(`¿Seguro que quieres cancelar la venta ${ventaACancelar.codigo_venta}? Se restaurará el stock.`)) return;
+    setCancelSaleLoading(true);
+    try {
+      // Reutilizar la lógica de cancelación que ya tenías, asegurándote que usa selectedSaleDetailsItems
+      // y el ID de ventaACancelar
+      const { data: detallesVenta = [] } = await supabase.from('detalle_venta').select('producto_id, cantidad').eq('venta_id', ventaACancelar.id);
+      for (const item of detallesVenta) {
+        const { data: prodActual } = await supabase.from('productos').select('stock').eq('id', item.producto_id).single();
+        const nuevoStock = (prodActual?.stock || 0) + (item.cantidad ?? 0);
+        await supabase.from('productos').update({ stock: nuevoStock }).eq('id', item.producto_id);
+      }
+      await supabase.from('movimientos_cuenta_clientes').delete().eq('referencia_venta_id', ventaACancelar.id);
+      await supabase.from('detalle_venta').delete().eq('venta_id', ventaACancelar.id);
+      await supabase.from('ventas').delete().eq('id', ventaACancelar.id);
+
+      toast.success(`Venta ${ventaACancelar.codigo_venta} cancelada.`);
+      setShowSaleDetailModal(false); // Cerrar modal de detalle
+      setVentasDelClienteSeleccionado(prev => prev.filter(v => v.id !== ventaACancelar.id)); // Actualizar lista en modal de ventas del cliente
+      // Opcional: Recargar todas las ventas si la cancelación afecta listas globales
+      // cargarVentas(); 
+    } catch (err) {
+      toast.error(`Error al cancelar venta: ${err.message}`);
+    } finally {
+      setCancelSaleLoading(false);
+    }
   };
 
-  const abrirNuevo = () => {
-    setEditingClient(null);
-    setModalOpen(true);
+  const handleGeneratePDFFromDetail = () => {
+      // La función generarPDF ya está definida en el componente ClienteVentaDetalleModal
+      // y usa selectedSale, clienteInfoForTicket, vendedorInfoForTicket, clienteBalanceForTicket, logoBase64
+      // que se le pasan como props. Aquí solo necesitamos invocarla.
+      // Esta función se pasará como prop al ClienteVentaDetalleModal.
+      // La lógica de generación del PDF ya está en el componente ClienteVentaDetalleModal.
+      // Aquí solo nos aseguramos de que los datos estén listos.
+      if (selectedSaleForDetail && clienteInfoForTicket && vendedorInfoForTicket) {
+        // La generación real ocurre dentro de ClienteVentaDetalleModal
+        // Esta función podría no ser necesaria aquí si el botón está en el modal hijo.
+        // Si el botón "Ver PDF" estuviera en Clientes.jsx, aquí llamaríamos a la lógica de jsPDF.
+        console.log("Preparando para generar PDF desde Clientes.jsx (los datos se pasan al modal)");
+      } else {
+        toast.error("Faltan datos para generar el PDF del detalle.");
+      }
   };
 
-  const abrirEditar = c => {
-    setEditingClient(c);
-    setModalOpen(true);
+  const handleShowHtmlTicketFromDetail = () => {
+    if (selectedSaleForDetail && clienteInfoForTicket && vendedorInfoForTicket && selectedSaleDetailsItems.length > 0) {
+        const fechaVenta = selectedSaleForDetail.fecha || selectedSaleForDetail.created_at;
+        const ticketData = {
+            codigo_venta: selectedSaleForDetail.codigo_venta,
+            cliente: clienteInfoForTicket,
+            vendedor: vendedorInfoForTicket,
+            fecha: fechaVenta ? new Date(fechaVenta).toLocaleString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'N/A',
+            productosVenta: selectedSaleDetailsItems.map(item => ({
+                 id: item.producto_id,
+                 nombre: item.nombreProducto,
+                 cantidad: item.cantidad,
+                 precio_unitario: item.precio_unitario,
+                 total_parcial: item.total_parcial,
+            })),
+            originalSubtotal: selectedSaleForDetail.subtotal,
+            discountAmount: selectedSaleForDetail.valor_descuento,
+            monto_credito_aplicado: selectedSaleForDetail.monto_credito_aplicado, // Asegurarse que esto viene de la BD
+            forma_pago: selectedSaleForDetail.forma_pago,
+            enganche: selectedSaleForDetail.enganche,
+            gastos_envio: selectedSaleForDetail.gastos_envio,
+            total_final: selectedSaleForDetail.total,
+            balance_cuenta: clienteBalanceForTicket,
+        };
+        setHtmlTicketData(ticketData);
+        setShowHtmlTicket(true);
+    } else {
+        toast.error("Datos incompletos para mostrar el ticket.");
+    }
+  };
+  
+  const closeHtmlTicket = () => {
+    setShowHtmlTicket(false);
+    setHtmlTicketData(null);
   };
 
-  if (clientesLoading) {
-     return (
-        <div className="flex justify-center items-center min-h-screen bg-gray-100 p-4 md:p-8 lg:p-12">
-           <p className="text-lg font-semibold text-gray-700">Cargando clientes…</p>
-        </div>
-     );
+  const handleSelectClienteCheckbox = (clienteId) => {
+    setSelectedIds(prev => 
+      prev.includes(clienteId) 
+        ? prev.filter(id => id !== clienteId) 
+        : [...prev, clienteId]
+    );
+  };
+
+  const handleSelectTodosClientesVisibles = (e) => {
+    if (e.target.checked) {
+      setSelectedIds(clientesPag.map(c => c.id));
+    } else {
+      setSelectedIds([]);
+    }
+  };
+
+  const handleEliminarSeleccionados = () => {
+    if (selectedIds.length === 0) {
+        toast.info("No hay clientes seleccionados para eliminar.");
+        return;
+    }
+    if (window.confirm(`¿Seguro que quieres eliminar ${selectedIds.length} cliente(s) seleccionados? Esta acción también podría eliminar sus ventas y movimientos asociados.`)) {
+        // Usar la función del contexto para eliminar múltiples clientes
+        // Asumiendo que eliminarClienteContext puede manejar un array o se llama en un loop
+        Promise.all(selectedIds.map(id => eliminarClienteContext(id)))
+            .then(() => {
+                toast.success(`${selectedIds.length} cliente(s) eliminado(s) exitosamente.`);
+                setSelectedIds([]); // Limpiar selección
+                // El contexto debería actualizar la lista de 'clientes', y el useMemo reaccionará
+            })
+            .catch(error => {
+                console.error("Error eliminando clientes seleccionados:", error);
+                toast.error("Error al eliminar algunos clientes.");
+            });
+    }
+  };
+
+
+  if (clientesLoadingFromContext) {
+     return <div className="text-center p-10">Cargando clientes...</div>;
   }
 
   return (
     <div className="min-h-screen bg-gray-100 p-4 md:p-8 lg:p-12">
       <div className="flex flex-col md:flex-row items-center justify-between mb-6 gap-4">
-      <button
-          onClick={() => navigate('/')}
-          className="px-6 py-2 bg-gray-700 text-white font-semibold rounded-lg shadow-md hover:bg-gray-800 transition duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-opacity-50"
-        >
+        <button onClick={() => navigate('/')} className="px-6 py-2 bg-gray-700 text-white font-semibold rounded-lg shadow-md hover:bg-gray-800">
           Volver al inicio
         </button>
-        <h1 className="text-3xl font-bold text-gray-800 text-center w-full md:w-auto">
-          Gestión de Clientes
-        </h1>
-        <div className="flex flex-col md:flex-row items-center gap-4 w-full md:w-auto">
-          <input
-            type="text"
-            placeholder="Buscar cliente..."
-            value={busqueda}
-            onChange={e => { setBusqueda(e.target.value); setPagina(1); }}
-            className="w-full md:w-64 border p-2 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-          />
-          <button onClick={abrirNuevo} className="w-full md:w-auto px-6 py-2 bg-blue-600 text-white rounded-lg shadow-md hover:bg-blue-700 transition duration-200">
-            Agregar cliente
-          </button>
-        </div>
-      </div>
-      <div className="flex flex-col md:flex-row items-center justify-between mb-6 gap-4">
-        <div className="flex items-center gap-2">
-          <label htmlFor="items-per-page" className="text-gray-700 text-sm">Mostrar:</label>
-          <select
-            id="items-per-page"
-            value={porPagina}
-            onChange={e => { setPorPagina(Number(e.target.value)); setPagina(1); }}
-            className="border p-2 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm"
-          >
-            {[10, 25, 50, 100].map(n => <option key={n} value={n}>{n} por página</option>)}
-          </select>
-        </div>
-        <button
-          disabled={selectedIds.length === 0}
-          onClick={() => {
-            if (window.confirm(`¿Seguro que quieres eliminar ${selectedIds.length} cliente(s)? Esta acción también eliminará sus ventas.`)) {
-              selectedIds.forEach(id => eliminarCliente(id));
-              setSelectedIds([]); 
-            }
-          }}
-          className={`px-4 py-2 rounded-md shadow-sm transition duration-200 ease-in-out text-sm ${
-            selectedIds.length === 0
-              ? 'bg-gray-400 cursor-not-allowed'
-              : 'bg-red-600 text-white hover:bg-red-700'
-          }`}
-        >
-          Eliminar seleccionados ({selectedIds.length})
-        </button>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handlePaginaAnterior}
-            disabled={pagina === 1}
-            className="px-3 py-1 bg-gray-300 text-gray-800 rounded-md shadow-sm hover:bg-gray-400 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-          >
-            Anterior
-          </button>
-          <span className="text-gray-700 text-sm">Página {pagina} de {totalPaginas}</span>
-          <button
-            onClick={handlePaginaSiguiente}
-            disabled={pagina === totalPaginas}
-            className="px-3 py-1 bg-gray-300 text-gray-800 rounded-md shadow-sm hover:bg-gray-400 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-          >
-            Siguiente
-          </button>
-        </div>
+        <h1 className="text-3xl font-bold text-gray-800 text-center">Gestión de Clientes</h1>
+        <div className="w-full md:w-auto md:min-w-[150px]"></div> {/* Spacer */}
       </div>
 
-      <div className="bg-white shadow-lg rounded-lg overflow-hidden mb-6">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-200">
-            <tr>
-              <th className="p-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                <input
-                  type="checkbox"
-                  onChange={e => {
-                    if (e.target.checked) {
-                      setSelectedIds(clientesPag.map(c => c.id));
-                    } else {
-                      setSelectedIds([]);
-                    }
-                  }}
-                  checked={selectedIds.length === clientesPag.length && clientesPag.length > 0}
-                  disabled={clientesPag.length === 0}
-                  className="rounded text-blue-600 focus:ring-blue-500"
-                />
-              </th>
-              <th
-                className="p-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-800"
-                onClick={() => handleSort('nombre')}
-              >
-                Nombre
-                {sortColumn === 'nombre' && (
-                  <span className="ml-1">
-                    {sortDirection === 'asc' ? '▲' : '▼'}
-                  </span>
-                )}
-              </th>
-              <th
-                className="p-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider hidden sm:table-cell cursor-pointer hover:text-gray-800"
-                onClick={() => handleSort('telefono')}
-              >
-                Teléfono
-                 {sortColumn === 'telefono' && (
-                  <span className="ml-1">
-                    {sortDirection === 'asc' ? '▲' : '▼'}
-                  </span>
-                )}
-              </th>
-              <th
-                className="p-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider hidden md:table-cell cursor-pointer hover:text-gray-800"
-                onClick={() => handleSort('correo')}
-              >
-                Correo
-                 {sortColumn === 'correo' && (
-                  <span className="ml-1">
-                    {sortDirection === 'asc' ? '▲' : '▼'}
-                  </span>
-                )}
-              </th>
-              <th
-                className="p-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider hidden lg:table-cell cursor-pointer hover:text-gray-800"
-                onClick={() => handleSort('direccion')}
-              >
-                Dirección
-                 {sortColumn === 'direccion' && (
-                  <span className="ml-1">
-                    {sortDirection === 'asc' ? '▲' : '▼'}
-                  </span>
-                )}
-              </th>
-              <th className="p-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Acciones</th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {clientesPag.length === 0 ? (
-              <tr>
-                <td colSpan="6" className="p-4 text-center text-gray-500 italic">No hay clientes encontrados.</td>
-              </tr>
-            ) : (
-              clientesPag.map(cliente => (
-                <tr key={cliente.id}>
-                  <td className="p-4 whitespace-nowrap">
-                    <input
-                      type="checkbox"
-                      checked={selectedIds.includes(cliente.id)}
-                      onChange={() => {
-                        setSelectedIds(prev =>
-                          prev.includes(cliente.id)
-                            ? prev.filter(id => id !== cliente.id)
-                            : [...prev, cliente.id]
-                        );
-                      }}
-                      className="rounded text-blue-600 focus:ring-blue-500"
-                    />
-                  </td>
-                  <td className="p-4 whitespace-nowrap text-sm font-medium text-gray-900">{cliente.nombre}</td>
-                  <td className="p-4 whitespace-nowrap text-sm text-gray-700 hidden sm:table-cell">{cliente.telefono || 'N/A'}</td>
-                  <td className="p-4 whitespace-nowrap text-sm text-gray-700 hidden md:table-cell">{cliente.correo || 'N/A'}</td>
-                  <td className="p-4 whitespace-nowrap text-sm text-gray-700 hidden lg:table-cell">{cliente.direccion || 'N/A'}</td>
-                  <td className="p-4 whitespace-nowrap text-center text-sm font-medium flex justify-center space-x-2">
-                    <button
-                      onClick={() => abrirEditar(cliente)}
-                      className="px-3 py-1 bg-yellow-500 text-white rounded-md shadow-sm hover:bg-yellow-600 transition duration-200 ease-in-out text-xs"
-                    >
-                      Editar
-                    </button>
-                    <button
-                      onClick={() => handleVerCompras(cliente)}
-                      className="px-3 py-1 bg-purple-600 text-white rounded-md shadow-sm hover:bg-purple-700 transition duration-200 ease-in-out text-xs"
-                    >
-                      Ver Ventas
-                    </button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      <NewClientModal
-        isOpen={modalOpen}
-        onClose={() => setModalOpen(false)}
-        onClientAdded={(newClient) => {
-             if (newClient) {
-                // La actualización de 'clientes' debe ser manejada por useClientes si es posible
-             }
-            setModalOpen(false);
-        }}
-         onClientUpdated={(updatedClient) => {
-             if (updatedClient) {
-                // La actualización de 'clientes' debe ser manejada por useClientes si es posible
-             }
-             setModalOpen(false);
-         }}
-        editingClient={editingClient}
+      <ClientesAccionesBarra
+        busqueda={busqueda}
+        onBusquedaChange={(text) => { setBusqueda(text); setPagina(1);}}
+        onAbrirNuevoCliente={() => { setEditingClient(null); setShowNewOrEditClientModal(true); }}
+        porPagina={porPagina}
+        onPorPaginaChange={(num) => { setPorPagina(num); setPagina(1); }}
+        onEliminarSeleccionados={handleEliminarSeleccionados}
+        selectedIdsCount={selectedIds.length}
+        disabledEliminar={selectedIds.length === 0}
       />
 
-      {clienteActual && (
-          <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-40 flex items-center justify-center p-4" onClick={() => setClienteActual(null)}>
-              <div className="bg-white p-8 rounded-lg shadow-xl w-full max-w-2xl relative max-h-[95vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-                  <button onClick={() => setClienteActual(null)} className="absolute top-4 right-4 text-gray-600 hover:text-gray-800 text-3xl font-bold leading-none">&times;</button>
-                  <h2 className="text-2xl font-bold text-gray-800 mb-6">Ventas de {clienteActual.nombre}</h2>
-                  {clientSalesLoading ? (
-                      <p className="text-center text-blue-600 font-semibold">Cargando ventas...</p>
-                  ) : ventasCliente.length === 0 ? (
-                      <p className="text-center text-gray-500 italic">Este cliente no tiene ventas registradas.</p>
-                  ) : (
-                      <div className="bg-white shadow-lg rounded-lg overflow-hidden">
-                          <table className="min-w-full divide-y divide-gray-200">
-                              <thead className="bg-gray-200">
-                                  <tr>
-                                      <th className="p-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Código</th>
-                                      <th className="p-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider hidden md:table-cell">Fecha</th>
-                                      <th className="p-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider hidden sm:table-cell">Pago</th>
-                                      <th className="p-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Total</th>
-                                      <th className="p-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Acciones</th>
-                                  </tr>
-                              </thead>
-                              <tbody className="bg-white divide-y divide-gray-200">
-                                  {ventasCliente.map(venta => (
-                                      <tr key={venta.id} className="hover:bg-gray-50 transition duration-150 ease-in-out">
-                                          <td className="p-3 whitespace-nowrap text-sm font-medium text-gray-900">{venta.codigo_venta}</td>
-                                          <td className="p-3 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">{venta.fecha ? new Date(venta.fecha).toLocaleString() : 'Fecha desconocida'}</td>
-                                          <td className="p-3 whitespace-nowrap text-sm text-gray-500 hidden sm:table-cell">{venta.forma_pago}</td>
-                                          <td className="p-3 whitespace-nowrap text-sm font-semibold text-gray-900 text-right">{formatCurrency(venta.total ?? 0)}</td>
-                                          <td className="p-3 whitespace-nowrap text-center text-sm font-medium">
-                                              <button
-                                                  onClick={() => handleSelectSale(venta)}
-                                                  className="px-3 py-1 bg-blue-600 text-white rounded-md shadow-sm hover:bg-blue-700 transition duration-200 ease-in-out text-xs"
-                                              >
-                                                  Ver Detalle
-                                              </button>
-                                          </td>
-                                      </tr>
-                                  ))}
-                              </tbody>
-                          </table>
-                      </div>
-                  )}
-              </div>
-          </div>
+      <ClientesTabla
+        clientesPag={clientesPag}
+        selectedIds={selectedIds}
+        onSelectCliente={handleSelectClienteCheckbox}
+        onSelectTodosClientes={handleSelectTodosClientesVisibles}
+        onAbrirEditar={(cliente) => { setEditingClient(cliente); setShowNewOrEditClientModal(true); }}
+        onHandleVerCompras={handleVerCompras}
+        sortColumn={sortColumn}
+        sortDirection={sortDirection}
+        onSort={handleSort}
+        areAnyClientesVisible={clientesPag.length > 0}
+      />
+      
+      <ClientesPaginacion
+        pagina={pagina}
+        totalPaginas={totalPaginas}
+        onPaginaAnterior={() => setPagina(p => Math.max(1, p - 1))}
+        onPaginaSiguiente={() => setPagina(p => Math.min(totalPaginas, p + 1))}
+        disabledAnterior={pagina === 1}
+        disabledSiguiente={pagina === totalPaginas || totalPaginas === 0}
+      />
+
+      <NewClientModal
+        isOpen={showNewOrEditClientModal}
+        onClose={() => { setShowNewOrEditClientModal(false); setEditingClient(null); }}
+        editingClient={editingClient}
+        onClientSaved={() => {
+            // La lógica de useClientes debería recargar/actualizar la lista de clientes
+            setShowNewOrEditClientModal(false);
+            setEditingClient(null);
+        }}
+      />
+
+      {clienteActualParaVentas && (
+        <ClienteVentasModal
+          isOpen={!!clienteActualParaVentas}
+          onClose={() => setClienteActualParaVentas(null)}
+          clienteActual={clienteActualParaVentas}
+          ventasCliente={ventasDelClienteSeleccionado}
+          onSelectSale={handleSelectSaleForDetail}
+          loading={clientSalesLoading}
+        />
       )}
 
-      {showSaleDetailModal && selectedSale && (
-          <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50 flex items-center justify-center p-4" onClick={handleCloseSaleDetailModal}>
-              <div className="bg-white p-8 rounded-lg shadow-xl w-full max-w-lg relative max-h-[95vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-                  <button onClick={handleCloseSaleDetailModal} className="absolute top-4 right-4 text-gray-600 hover:text-gray-800 text-3xl font-bold leading-none">&times;</button>
-                  <h2 className="text-2xl font-bold text-gray-800 mb-6">Detalle de Venta - {selectedSale.codigo_venta}</h2>
-                  {detailLoading ? (
-                      <p className="text-center text-blue-600 font-semibold">Cargando detalles...</p>
-                  ) : (
-                      <>
-                          <div className="mb-6 text-gray-700 space-y-2">
-                              <p><strong>Cliente:</strong> {clienteInfoTicket?.nombre || 'Público General'}</p>
-                              {clienteInfoTicket?.telefono && <p><strong>Teléfono:</strong> {clienteInfoTicket.telefono}</p>}
-                              {clienteInfoTicket?.correo && <p><strong>Correo:</strong> {clienteInfoTicket.correo}</p>}
-                              {clienteInfoTicket?.direccion && <p><strong>Dirección:</strong> {clienteInfoTicket.direccion}</p>}
-                              <p><strong>Fecha:</strong> {selectedSale.fecha ? new Date(selectedSale.fecha).toLocaleString() : 'Fecha desconocida'}</p>
-                              <p><strong>Vendedor:</strong> {vendedorInfoTicket?.nombre || 'N/A'}</p>
-                              <p><strong>Forma de Pago:</strong> {selectedSale.forma_pago}</p>
-                          </div>
-                          <hr className="my-6 border-gray-200" />
-                          <h3 className="text-xl font-semibold text-gray-800 mb-4">Productos:</h3>
-                          <div className="overflow-x-auto shadow-sm rounded-md mb-6">
-                              <table className="w-full text-sm border-collapse">
-                                  <thead className="bg-gray-100">
-                                      <tr>
-                                          <th className="p-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Producto</th>
-                                          <th className="p-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Cantidad</th>
-                                          <th className="p-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Precio</th>
-                                          <th className="p-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Subtotal</th>
-                                      </tr>
-                                  </thead>
-                                  <tbody>
-                                      {selectedSaleDetails.map((p, i) => (
-                                          <tr key={i} className="border-b hover:bg-gray-50">
-                                              <td className="p-3">{p.nombreProducto}</td>
-                                              <td className="p-3 text-center">{p.cantidad}</td>
-                                              <td className="p-3 text-right">{formatCurrency(p.precio_unitario ?? 0)}</td>
-                                              <td className="p-3 text-right">{formatCurrency(p.total_parcial ?? 0)}</td>
-                                          </tr>
-                                      ))}
-                                  </tbody>
-                              </table>
-                          </div>
-                          <div className="text-right text-gray-800 space-y-1 mb-6">
-                               {selectedSale.forma_pago === 'Crédito cliente' && (selectedSale.enganche ?? 0) > 0 && (
-                                   <p className="font-semibold">Enganche: {formatCurrency(selectedSale.enganche ?? 0)}</p>
-                               )}
-                               {(selectedSale.gastos_envio ?? 0) > 0 && (
-                                   <p className="font-semibold">Gastos de Envío: {formatCurrency(selectedSale.gastos_envio ?? 0)}</p>
-                               )}
-                               <p className="font-semibold">Subtotal Original: {selectedSale.subtotal ?? 0}</p> {/* Corregido: usar selectedSale.subtotal que es el original */}
-                               {((selectedSale.tipo_descuento === 'porcentaje' && (selectedSale.valor_descuento ?? 0) > 0) || (selectedSale.tipo_descuento === 'fijo' && (selectedSale.valor_descuento ?? 0) > 0)) && (
-                                   <p className="font-semibold text-red-600">
-                                       Descuento:{' '}
-                                       {selectedSale.tipo_descuento === 'porcentaje'
-                                           ? `-${selectedSale.valor_descuento}%` // Esto asume valor_descuento es el porcentaje, si es monto, ajustar
-                                           : `- ${formatCurrency(selectedSale.valor_descuento ?? 0)}`}
-                                   </p>
-                               )}
-                               {(selectedSale.monto_credito_aplicado ?? 0) > 0 && (
-                                  <p className="font-semibold text-blue-600">Saldo a Favor Aplicado: -{formatCurrency(selectedSale.monto_credito_aplicado ?? 0)}</p>
-                               )}
-                              <p className="font-bold text-xl text-green-700 mt-2 pt-2 border-t border-gray-300">Total Venta: {formatCurrency(selectedSale.total ?? 0)}</p>
-                          </div>
-                           {selectedSale.forma_pago === 'Crédito cliente' && (
-                                <div className="text-center text-gray-800 mb-6">
-                                   <p className="font-semibold mb-1">Balance de Cuenta:</p>
-                                   <p className={`text-xl font-bold ${clienteBalanceTicket > 0 ? 'text-red-600' : 'text-green-700'}`}>
-                                       {formatCurrency(Math.abs(clienteBalanceTicket ?? 0))}
-                                   </p>
-                                   <p className="text-xs text-gray-500 mt-1">
-                                       {(clienteBalanceTicket ?? 0) > 0
-                                           ? '(Saldo positivo indica deuda del cliente)'
-                                           : '(Saldo negativo indica crédito a favor del cliente)'}
-                                   </p>
-                               </div>
-                           )}
-                          <div className="flex flex-wrap justify-end gap-3">
-                              <button
-                                  onClick={handleShowHtmlTicket}
-                                  className="px-6 py-2 bg-blue-600 text-white rounded-lg shadow-md hover:bg-blue-700 transition duration-200"
-                              >
-                                  Ver ticket
-                              </button>
-                              <button onClick={generarPDF} className="px-6 py-2 bg-green-600 text-white rounded-lg shadow-md hover:bg-green-700 transition duration-200">
-                                  Ver PDF
-                              </button>
-                              <button
-                                  onClick={handleCancelSale}
-                                  disabled={cancelLoading}
-                                  className={`px-6 py-2 rounded-lg shadow-md transition duration-200 ${cancelLoading ? 'bg-gray-400 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700 text-white'}`}
-                              >
-                                  {cancelLoading ? 'Cancelando...' : 'Eliminar venta'}
-                              </button>
-                          </div>
-                      </>
-                  )}
-              </div>
-          </div>
+      {showSaleDetailModal && selectedSaleForDetail && (
+        <ClienteVentaDetalleModal
+            isOpen={showSaleDetailModal}
+            onClose={() => { setShowSaleDetailModal(false); setSelectedSaleForDetail(null); setSelectedSaleDetailsItems([]); }}
+            selectedSale={selectedSaleForDetail}
+            selectedSaleDetails={selectedSaleDetailsItems}
+            detailLoading={detailLoading}
+            clienteInfoTicket={clienteInfoForTicket}
+            vendedorInfoTicket={vendedorInfoForTicket}
+            clienteBalanceTicket={clienteBalanceForTicket}
+            onShowHtmlTicket={handleShowHtmlTicketFromDetail}
+            onGeneratePDF={() => generarPDF()} // Pasamos la función directamente
+            onCancelSale={handleCancelSale}
+            cancelLoading={cancelSaleLoading}
+            logoBase64={logoBase64} // Pasar el logo
+        />
       )}
 
       {showHtmlTicket && htmlTicketData && (
