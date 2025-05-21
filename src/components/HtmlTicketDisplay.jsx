@@ -1,12 +1,8 @@
 // src/components/HtmlTicketDisplay.jsx
-import React, { useRef } from 'react'; // Importar useRef para referenciar el elemento del ticket
-// Importar html2canvas desde CDN
-// <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
-// Se añadirá la etiqueta script en el return del componente para que esté disponible
+import React, { useRef } from 'react';
+// html2canvas se cargará dinámicamente si es necesario
 
-
-// Helper simple para formatear moneda (si no está global)
-// Asegúrate de que esta función esté disponible o la copies aquí si no está en un archivo compartido
+// Helper simple para formatear moneda
 const formatCurrency = (amount) => {
      const numericAmount = parseFloat(amount);
      if (isNaN(numericAmount)) {
@@ -20,19 +16,13 @@ const formatCurrency = (amount) => {
     });
 };
 
-// Componente que renderiza el diseño HTML del ticket
-// Recibe los datos de la venta como props (saleData) y una función para cerrar (onClose)
 export default function HtmlTicketDisplay({ saleData, onClose }) {
-    // Si no hay datos de venta, no renderizar nada o mostrar un mensaje
     if (!saleData) {
-        return null; // O un mensaje como <p>Cargando ticket...</p>
+        return null;
     }
 
-    // Referencia al elemento HTML del ticket que queremos convertir a imagen
     const ticketRef = useRef(null);
 
-
-    // Desestructurar los datos de venta para facilitar el acceso
     const {
         codigo_venta,
         cliente,
@@ -41,268 +31,214 @@ export default function HtmlTicketDisplay({ saleData, onClose }) {
         productosVenta,
         originalSubtotal,
         discountAmount,
+        monto_credito_aplicado, // <<< Dato que usaremos para el ticket
         forma_pago,
         enganche,
-        total, // Este 'total' ahora es el subtotal con descuento (antes de gastos de envío)
-        gastos_envio, // >>> Obtener gastos_envio <<<
-        total_final, // >>> Obtener total_final <<<
-        balance_cuenta // Balance de cuenta del cliente después de la venta
+        gastos_envio,
+        total_final, // Este es el total que el cliente pagó por otros medios
+        balance_cuenta
     } = saleData;
 
-    // Determinar la clase para el color del balance (positivo = deuda, negativo/cero = crédito/saldo a favor)
     const balanceClass = balance_cuenta > 0 ? 'negative' : 'positive';
-    // Determinar el texto de la nota aclaratoria del balance
     const balanceNote = balance_cuenta > 0
         ? '(Saldo positivo indica deuda del cliente)'
         : '(Saldo negativo indica crédito a favor del cliente)';
 
-
-    // >>> Función para descargar el ticket como imagen JPG <<<
     const handleDownloadTicket = async () => {
         if (!ticketRef.current) {
             console.error("Elemento del ticket no encontrado.");
             return;
         }
 
-        // Añadir temporalmente la librería html2canvas si no está cargada
-        if (typeof html2canvas === 'undefined') {
-             const script = document.createElement('script');
-             script.src = 'https://html2canvas.hertzen.com/dist/html2canvas.min.js';
-             script.onload = () => captureAndDownload(); // Ejecutar después de cargar
-             script.onerror = () => console.error('Error loading html2canvas script.');
-             document.body.appendChild(script);
-        } else {
-             captureAndDownload(); // Si ya está cargada, ejecutar directamente
-        }
-
-        async function captureAndDownload() {
+        const captureAndDownload = async () => {
              try {
-                 // Capturar el contenido del ticket como un canvas
-                 // >>> Capturar solo el elemento referenciado por ticketRef <<<
                  const canvas = await html2canvas(ticketRef.current, {
-                     scale: 2, // Aumentar la escala para mejor resolución
-                     logging: true, // Habilitar logs para depuración
-                     useCORS: true // Intentar usar CORS para imágenes (como el logo)
+                     scale: 2,
+                     logging: true,
+                     useCORS: true
                  });
-
-                 // Convertir el canvas a una URL de datos (JPG)
-                 const image = canvas.toDataURL('image/jpeg', 0.9); // Formato JPG con calidad 90%
-
-                 // Crear un enlace temporal para la descarga
+                 const image = canvas.toDataURL('image/jpeg', 0.9);
                  const link = document.createElement('a');
                  link.href = image;
-                 // Nombre del archivo: ticket_venta_VTXXXXX.jpg
                  link.download = `ticket_venta_${codigo_venta || 'sin_codigo'}.jpg`;
-
-                 // Simular un clic en el enlace para iniciar la descarga
                  document.body.appendChild(link);
                  link.click();
-
-                 // Limpiar el enlace temporal
                  document.body.removeChild(link);
-
              } catch (error) {
                  console.error("Error al generar o descargar la imagen del ticket:", error);
                  alert("No se pudo descargar el ticket como imagen. Intenta de nuevo.");
              }
+        };
+
+        if (typeof html2canvas === 'undefined') {
+             const script = document.createElement('script');
+             script.src = 'https://html2canvas.hertzen.com/dist/html2canvas.min.js';
+             script.onload = () => captureAndDownload();
+             script.onerror = () => console.error('Error loading html2canvas script.');
+             document.body.appendChild(script);
+        } else {
+             captureAndDownload();
         }
     };
-    // --------------------------------------------------------
-
 
     return (
-        // Overlay del modal - Cubre toda la pantalla con un fondo semi-transparente
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2" onClick={onClose}>
-            {/* Contenedor principal del modal - Tiene el fondo blanco y sombra */}
-            {/* Este div ahora NO tiene la referencia ticketRef */}
             <div
                 className="bg-white rounded-lg shadow-xl overflow-y-auto max-h-[95vh] w-full"
                 style={{ maxWidth: '400px', borderRadius: '8px', boxShadow: '0 2px 6px rgba(0, 0, 0, 0.08)' }}
-                onClick={(e) => e.stopPropagation()} // Evita que el clic en el ticket cierre el modal
+                onClick={(e) => e.stopPropagation()}
             >
-                 {/* Los estilos CSS se colocan dentro de una etiqueta <style> */}
-                 {/* En una aplicación real, estos estilos irían en un archivo CSS importado */}
                     <style>
                         {`
-                        /* Estilos para ajustar el ticket a la pantalla del móvil */
-                        .ticket-content-printable { /* Nuevo nombre para el contenedor que se imprimirá */
+                        .ticket-content-printable {
                             font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
-                            color: #4a4a4a; /* Color de texto general */
-                            padding: 15px; /* Padding interno movido aquí */
+                            color: #4a4a4a;
+                            padding: 15px;
                         }
                         .divider {
-                            border-top: 1px solid #e0e0e0; /* Línea divisoria sutil */
-                            margin: 10px 0; /* Margen vertical reducido */
+                            border-top: 1px solid #e0e0e0;
+                            margin: 10px 0;
                         }
                         .ticket-header {
                              display: flex;
-                             flex-direction: column; /* Apila los elementos verticalmente */
-                             align-items: center; /* Centra horizontalmente los elementos hijos */
-                             margin-bottom: 12px; /* Espacio debajo del encabezado reducido */
-                             text-align: center; /* Centra el texto dentro del header */
+                             flex-direction: column;
+                             align-items: center;
+                             margin-bottom: 12px;
+                             text-align: center;
                          }
                          .ticket-header .header-top {
-                             display: flex; /* Permite que logo y título estén en línea */
-                             align-items: center; /* Centra verticalmente logo y título */
-                             justify-content: center; /* Centra el bloque de logo+título */
-                             margin-bottom: 5px; /* Espacio entre la línea superior y la info de contacto */
+                             display: flex;
+                             align-items: center;
+                             justify-content: center;
+                             margin-bottom: 5px;
                          }
                          .ticket-header img {
-                             margin-right: 10px; /* Espacio a la derecha del logo reducido */
-                             height: auto; /* Altura automática */
-                             width: 45px; /* Ancho del logo ajustado */
+                             margin-right: 10px;
+                             height: auto;
+                             width: 45px;
                          }
                          .ticket-title-block {
-                             text-align: left; /* Alinea el texto del título a la izquierda */
-                             /* flex-grow: 1; Eliminamos flex-grow aquí ya que el header es column */
+                             text-align: left;
                          }
                          .ticket-title-block h2 {
-                             font-size: 1rem; /* Tamaño del título reducido */
-                             font-weight: 600; /* Semibold */
+                             font-size: 1rem;
+                             font-weight: 600;
                              margin-bottom: 0;
-                             line-height: 1.2; /* Espaciado entre líneas */
-                         }
-                         .ticket-title-block p {
-                             font-size: 0.7rem; /* Tamaño del código muy reducido */
-                             color: #6b7280; /* Gris más oscuro */
-                             margin-top: 1px; /* Margen superior muy reducido */
                              line-height: 1.2;
                          }
-
-                         /* Estilo para el texto del teléfono y ciudad - Ajustado para estar centrado bajo el header-top */
+                         .ticket-title-block p {
+                             font-size: 0.7rem;
+                             color: #6b7280;
+                             margin-top: 1px;
+                             line-height: 1.2;
+                         }
                         .contact-info {
-                            font-size: 0.75rem; /* Tamaño de fuente pequeño */
-                            color: #6b7280; /* Color gris sutil */
-                            margin-top: 0; /* Eliminar margen superior ya que el padre controla el espacio */
-                            text-align: center; /* Centrado bajo el logo/título */
+                            font-size: 0.75rem;
+                            color: #6b7280;
+                            margin-top: 0;
+                            text-align: center;
                         }
-
-
-                         /* Estilos para la información del cliente/vendedor en 2 columnas */
                          .info-columns {
                              display: grid;
-                             grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); /* Columnas flexibles, mínimo 120px */
-                             gap: 6px 8px; /* Espacio entre filas y columnas reducido */
-                             font-size: 0.75rem; /* Tamaño de fuente reducido para esta sección */
-                             color: #374151; /* Gris oscuro */
+                             grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+                             gap: 6px 8px;
+                             font-size: 0.75rem;
+                             color: #374151;
                          }
                          .info-columns p {
-                             word-break: break-word; /* Rompe palabras largas si es necesario */
-                             line-height: 1.3; /* Espaciado entre líneas */
+                             word-break: break-word;
+                             line-height: 1.3;
                          }
                          .info-columns p strong {
-                             display: block; /* Etiqueta en bloque */
-                             font-size: 0.7rem; /* Tamaño de fuente aún más pequeño para las etiquetas */
-                             color: #5a5a5a; /* Gris más claro para las etiquetas */
-                             margin-bottom: 1px; /* Margen inferior reducido */
-                             font-weight: normal; /* Peso de fuente normal */
+                             display: block;
+                             font-size: 0.7rem;
+                             color: #5a5a5a;
+                             margin-bottom: 1px;
+                             font-weight: normal;
                          }
-
                         .product-item {
                             display: flex;
                             justify-content: space-between;
-                            font-size: 0.75rem; /* Tamaño de fuente reducido */
+                            font-size: 0.75rem;
                             color: #4a4a4a;
-                            margin-bottom: 6px; /* Espacio entre items reducido */
+                            margin-bottom: 6px;
                         }
                         .product-item span:first-child {
                              flex-grow: 1;
-                             margin-right: 6px; /* Espacio reducido */
-                             word-break: break-word; /* Asegurar que el nombre largo se rompa */
+                             margin-right: 6px;
+                             word-break: break-word;
                         }
                          .totals-row {
                             display: flex;
                             justify-content: space-between;
-                            font-size: 0.8rem; /* Tamaño de fuente reducido */
+                            font-size: 0.8rem;
                             color: #4a4a4a;
-                            margin-bottom: 4px; /* Espacio entre totales muy reducido */
+                            margin-bottom: 4px;
                          }
-                         .totals-row.total {
-                            font-size: 1rem; /* Tamaño de fuente del total reducido */
+                         .totals-row.total-final-amount { /* Renombrado para claridad */
+                            font-size: 1rem;
                             font-weight: bold;
-                            color: #28a745; /* Verde */
-                            margin-top: 8px; /* Margen superior reducido */
-                            border-top: 1px solid #e0e0e0; /* Separador */
-                            padding-top: 8px; /* Padding superior reducido */
+                            color: #28a745;
+                            margin-top: 8px;
+                            border-top: 1px solid #e0e0e0;
+                            padding-top: 8px;
                          }
                          .balance-section {
-                             margin-top: 12px; /* Margen superior reducido */
-                             padding-top: 10px; /* Padding superior reducido */
-                             border-top: 1px solid #e0e0e0; /* Separador */
+                             margin-top: 12px;
+                             padding-top: 10px;
+                             border-top: 1px solid #e0e0e0;
                              text-align: center;
-                             font-size: 0.8rem; /* Tamaño de fuente reducido */
+                             font-size: 0.8rem;
                              color: #4a4a4a;
                          }
                          .balance-section strong {
-                             font-size: 0.9rem; /* Tamaño de fuente reducido */
-                             color: #1f2937; /* Gris oscuro */
+                             font-size: 0.9rem;
+                             color: #1f2937;
                          }
                          .balance-value {
-                             font-size: 1rem; /* Tamaño de fuente del monto reducido */
+                             font-size: 1rem;
                              font-weight: bold;
-                             margin-top: 4px; /* Espacio muy reducido */
+                             margin-top: 4px;
                          }
-                         .balance-value.positive {
-                             color: #28a745; /* Verde para saldo a favor */
-                         }
-                          .balance-value.negative {
-                             color: #dc3545; /* Rojo para deuda */
-                         }
-
+                         .balance-value.positive { color: #28a745; }
+                         .balance-value.negative { color: #dc3545; }
                         .thank-you {
                             text-align: center;
-                            font-size: 0.7rem; /* Tamaño de fuente muy reducido */
-                            color: #6b7280; /* Gris más oscuro */
-                            margin-top: 12px; /* Margen superior reducido */
-                            padding-top: 10px; /* Padding superior reducido */
-                            border-top: 1px solid #e0e0e0; /* Separador */
+                            font-size: 0.7rem;
+                            color: #6b7280;
+                            margin-top: 12px;
+                            padding-top: 10px;
+                            border-top: 1px solid #e0e0e0;
                         }
-                        .thank-you p {
-                            margin: 1px 0; /* Espacio muy reducido entre líneas */
-                        }
-
+                        .thank-you p { margin: 1px 0; }
                         `}
                     </style>
 
-                {/* >>> Nuevo contenedor para el contenido del ticket que SÍ se descargará <<< */}
-                {/* Este div ahora tiene la referencia ticketRef y el padding interno */}
                 <div className="ticket-content-printable" ref={ticketRef}>
-                    {/* Encabezado con Logo a la Izquierda y Contacto Abajo */}
                     <div className="ticket-header">
-                        {/* Contenedor para Logo y Título/Código */}
                         <div className="header-top">
-                            {/* Asegúrate de que la ruta del logo sea accesible desde el frontend */}
-                            <img src="/images/PERFUMESELISAwhite.jpg" alt="Logo Perfumes Elisa" className="h-auto w-14" />
+                            <img src="/images/PERFUMESELISAwhite.jpg" alt="Logo Perfumes Elisa" />
                             <div className="ticket-title-block">
                                 <h2>Ticket</h2>
-                                <p>#{saleData?.codigo_venta || 'N/A'}</p> {/* Usar código de venta dinámico */}
+                                <p>#{saleData?.codigo_venta || 'N/A'}</p>
                             </div>
                         </div>
-                        {/* Texto del teléfono y ciudad (fuera del ticket-title-block) */}
                         <p className="contact-info">81 3080 4010 - Ciudad Apodaca</p>
                     </div>
-                    {/* Fin Encabezado */}
-
-
                     <div className="divider"></div>
-
-                    {/* Información de la Venta (Cliente, Teléfono, Vendedor, Fecha) en 2 columnas */}
                     <div className="info-columns">
-                        <p><strong>Cliente:</strong> {saleData?.cliente?.nombre || 'N/A'}</p> {/* Usar nombre cliente dinámico */}
-                        <p><strong>Teléfono:</strong> {saleData?.cliente?.telefono || 'N/A'}</p> {/* Usar teléfono cliente dinámico */}
-                        <p><strong>Vendedor:</strong> {saleData?.vendedor?.nombre || saleData?.vendedor?.email || 'N/A'}</p> {/* Usar nombre/email vendedor dinámico */}
-                        <p><strong>Fecha:</strong> {saleData?.fecha || 'N/A'}</p> {/* Usar fecha formateada dinámico */}
+                        <p><strong>Cliente:</strong> {saleData?.cliente?.nombre || 'N/A'}</p>
+                        <p><strong>Teléfono:</strong> {saleData?.cliente?.telefono || 'N/A'}</p>
+                        <p><strong>Vendedor:</strong> {saleData?.vendedor?.nombre || saleData?.vendedor?.email || 'N/A'}</p>
+                        <p><strong>Fecha:</strong> {saleData?.fecha || 'N/A'}</p>
                     </div>
-
                     <div className="divider"></div>
-
-                    {/* Lista de Productos */}
                     <div className="mb-4">
                         <h3 className="text-sm font-semibold text-gray-800 mb-2">Detalle de Venta:</h3>
                         {saleData?.productosVenta && saleData.productosVenta.length > 0 ? (
                             saleData.productosVenta.map(p => (
-                                <div className="product-item" key={p.id}> {/* Usar ID del producto como key */}
-                                    <span>{p.nombre}</span> {/* Usar nombre producto dinámico */}
+                                <div className="product-item" key={p.id}>
+                                    <span>{p.nombre}</span>
                                     <span>{p.cantidad} x {formatCurrency(p.precio_unitario)} = {formatCurrency(p.total_parcial)}</span>
                                 </div>
                             ))
@@ -310,83 +246,65 @@ export default function HtmlTicketDisplay({ saleData, onClose }) {
                             <p className="text-gray-600 text-center">No hay productos en la venta.</p>
                         )}
                     </div>
-
                     <div className="divider"></div>
-
-                    {/* Totales */}
                     <div className="text-right">
                         <div className="totals-row">
-                            <span>Subtotal:</span>
-                            <span>{formatCurrency(saleData?.originalSubtotal || 0)}</span> {/* Usar subtotal original dinámico */}
+                            <span>Subtotal (Productos):</span>
+                            <span>{formatCurrency(saleData?.originalSubtotal || 0)}</span>
                         </div>
-                        <div className="totals-row text-red-600">
-                             <span>Descuento:</span>
-                             <span>- {formatCurrency(saleData?.discountAmount || 0)}</span> {/* Usar descuento dinámico */}
-                        </div>
-                         {/* Mostrar subtotal con descuento si aplica */}
-                         {(saleData?.discountAmount || 0) > 0 && (
-                             <div className="totals-row">
-                                 <span>Subtotal (con descuento):</span>
-                                 <span>{formatCurrency(saleData?.total || 0)}</span> {/* 'total' es subtotal - descuento */}
-                             </div>
-                         )}
-                         {/* >>> Mostrar Gastos de Envío si son > 0 <<< */}
+                        {(saleData?.discountAmount || 0) > 0 && (
+                            <div className="totals-row text-red-600">
+                                 <span>Descuento:</span>
+                                 <span>- {formatCurrency(saleData?.discountAmount || 0)}</span>
+                            </div>
+                        )}
                          {(saleData?.gastos_envio || 0) > 0 && (
                              <div className="totals-row">
                                  <span>Gastos de Envío:</span>
-                                 <span>{formatCurrency(saleData?.gastos_envio || 0)}</span> {/* Usar gastos_envio dinámico */}
+                                 <span>{formatCurrency(saleData?.gastos_envio || 0)}</span>
                              </div>
                          )}
-                         {/* Solo mostrar Enganche si la forma de pago es Crédito cliente Y hubo enganche > 0 */}
+                        {/* --- NUEVO/MODIFICADO: Mostrar Saldo a Favor Aplicado --- */}
+                        {(saleData?.monto_credito_aplicado || 0) > 0 && (
+                            <div className="totals-row" style={{ color: '#007bff' }}> {/* Azul para el crédito aplicado */}
+                                <span>Saldo a Favor Aplicado:</span>
+                                <span>- {formatCurrency(saleData.monto_credito_aplicado)}</span>
+                            </div>
+                        )}
+                        {/* --- FIN NUEVO/MODIFICADO --- */}
                          {saleData?.forma_pago === 'Crédito cliente' && (saleData?.enganche || 0) > 0 && (
                              <div className="totals-row">
-                                 <span>Enganche:</span>
-                                 <span>{formatCurrency(saleData?.enganche || 0)}</span> {/* Usar enganche dinámico */}
+                                 <span>Enganche Pagado:</span>
+                                 <span>{formatCurrency(saleData?.enganche || 0)}</span>
                              </div>
                          )}
-                        <div className="totals-row total">
-                             <span>Total Venta:</span> {/* Etiquetar como Total Venta */}
-                             <span>{formatCurrency(saleData?.total_final || 0)}</span> {/* >>> Usar total_final <<< */}
+                        <div className="totals-row total-final-amount"> {/* Clase renombrada */}
+                             <span>Total Pagado:</span> {/* Etiqueta más clara */}
+                             <span>{formatCurrency(saleData?.total_final || 0)}</span>
                         </div>
                     </div>
 
-                    <div className="divider"></div>
-
-                    {/* Balance de Cuenta del Cliente */}
-                     {/* Solo mostrar si la forma de pago es Crédito cliente */}
                     {saleData?.forma_pago === 'Crédito cliente' && (
                          <div className="balance-section">
-                            <p className="font-semibold text-gray-800 mb-1">Balance de Cuenta:</p>
-                            {/* Aplicar clase condicional para el color */}
+                            <p className="font-semibold text-gray-800 mb-1">Balance de Cuenta Actual:</p>
                             <p className={`balance-value ${balanceClass}`}>
-                                {/* Mostrar valor absoluto y el signo en la nota */}
                                 {formatCurrency(Math.abs(saleData.balance_cuenta))}
                             </p>
-                            <p className="text-xs text-gray-500 mt-1">{balanceNote}</p> {/* Nota aclaratoria dinámica */}
+                            <p className="text-xs text-gray-500 mt-1">{balanceNote}</p>
                         </div>
                     )}
-                     {/* Si no es crédito cliente, no mostrar la sección de balance */}
-
-
-                    {/* Mensaje de agradecimiento / Pie de página */}
                     <div className="thank-you text-center text-xs text-gray-500 mt-4 pt-3 border-t border-gray-300">
                         <p>¡Gracias por tu compra!</p>
                         <p>Visítanos de nuevo pronto.</p>
                     </div>
                 </div>
-                 {/* --- Fin del contenedor que se descargará --- */}
-
-
-                 {/* Contenedor de botones al pie del modal - FUERA del div referenciado */}
-                <div className="p-4 text-center flex justify-center space-x-4"> {/* Usar flex y space-x para los botones */}
-                    {/* Botón para descargar como JPG */}
+                <div className="p-4 text-center flex justify-center space-x-4">
                     <button
                         onClick={handleDownloadTicket}
                         className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition duration-200"
                     >
                         Descargar Ticket (JPG)
                     </button>
-                    {/* Botón para cerrar el modal */}
                     <button
                         onClick={onClose}
                         className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition duration-200"
