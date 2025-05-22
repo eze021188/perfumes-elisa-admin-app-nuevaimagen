@@ -3,6 +3,7 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { supabase } from '../supabase';
 import toast from 'react-hot-toast';
 import { useAuth } from '../contexts/AuthContext';
+import { motion } from 'framer-motion';
 
 export default function DashboardLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -18,100 +19,100 @@ export default function DashboardLayout() {
     }
   };
 
-  const links = [
-    { to: '/', label: 'Inicio', icon: '📊' },
-    { to: '/checkout', label: 'Checkout', icon: '🛒' },
-    { to: '/presupuestos/crear', label: 'Presupuestos', icon: '📝' },
-    { to: '/productos', label: 'Productos', icon: '🏷️' },
-    { to: '/clientes', label: 'Clientes', icon: '👥' },
-    { to: '/compras', label: 'Compras', icon: '📦' },
-    { to: '/ventas', label: 'Ventas', icon: '💰' },
-    { to: '/reportes', label: 'Reportes', icon: '📈' },
-    { to: '/usuarios', label: 'Usuarios', icon: '👤' },
-    { to: '/saldos-clientes', label: 'Saldos', icon: '💳' },
+  const navItems = [
+    { icon: '📊', label: 'Dashboard', to: '/' },
+    { icon: '🛒', label: 'Checkout', to: '/checkout' },
+    { icon: '📝', label: 'Presupuestos', to: '/presupuestos/crear' },
+    { icon: '📦', label: 'Productos', to: '/productos' },
+    { icon: '👥', label: 'Clientes', to: '/clientes' },
+    { icon: '💰', label: 'Compras', to: '/compras' },
+    { icon: '📈', label: 'Ventas', to: '/ventas' },
+    { icon: '📊', label: 'Reportes', to: '/reportes' },
+    { icon: '👤', label: 'Usuarios', to: '/usuarios' },
+    { icon: '💳', label: 'Saldos', to: '/saldos-clientes' },
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
+    <div className="min-h-screen bg-surface-50">
       {/* Sidebar */}
-      <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-soft transform transition-transform duration-200 ease-in-out
-          ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 md:static`}
+      <motion.aside
+        initial={false}
+        animate={{ x: sidebarOpen ? 0 : '-100%' }}
+        transition={{ type: 'spring', damping: 20 }}
+        className="fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-surface-200 md:translate-x-0"
       >
-        <div className="h-full flex flex-col">
-          <div className="p-6">
+        <div className="flex flex-col h-full">
+          {/* Logo */}
+          <div className="flex items-center justify-center h-16 px-6 border-b border-surface-200">
             <img
               src="/images/PERFUMESELISA.png"
               alt="Perfumes Elisa"
-              className="h-12 w-auto mx-auto"
+              className="h-8 w-auto"
             />
           </div>
 
-          <nav className="flex-1 px-4 space-y-1 overflow-y-auto">
-            {links.map(({ to, label, icon }) => (
+          {/* Navigation */}
+          <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+            {navItems.map((item) => (
               <NavLink
-                key={to}
-                to={to}
-                end={to === '/'}
+                key={item.to}
+                to={item.to}
+                end={item.to === '/'}
                 className={({ isActive }) =>
                   `nav-link ${isActive ? 'active' : ''}`
                 }
               >
-                <span className="text-xl">{icon}</span>
-                <span>{label}</span>
+                <span className="text-xl">{item.icon}</span>
+                <span className="text-sm font-medium">{item.label}</span>
               </NavLink>
             ))}
           </nav>
 
-          <div className="p-4 border-t border-gray-100">
-            <div className="flex items-center space-x-3 px-4 py-3 mb-4">
+          {/* User Profile */}
+          <div className="p-4 border-t border-surface-200">
+            <div className="flex items-center space-x-3 mb-4">
               <div className="flex-shrink-0">
-                <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
-                  <span className="text-blue-600 text-sm font-medium">
+                <div className="w-10 h-10 rounded-full bg-primary-100 flex items-center justify-center">
+                  <span className="text-primary-700 text-sm font-medium">
                     {user?.email?.[0].toUpperCase()}
                   </span>
                 </div>
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-900 truncate">
+                <p className="text-sm font-medium text-surface-900 truncate">
                   {user?.email}
                 </p>
-                <p className="text-xs text-gray-500 truncate">
+                <p className="text-xs text-surface-500 truncate">
                   Administrador
                 </p>
               </div>
             </div>
             <button
               onClick={handleLogout}
-              className="w-full btn-secondary flex items-center justify-center space-x-2"
+              className="w-full btn-secondary"
             >
-              <span>🚪</span>
-              <span>Cerrar Sesión</span>
+              Cerrar Sesión
             </button>
           </div>
         </div>
-      </aside>
+      </motion.aside>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col min-h-screen overflow-x-hidden">
+      <div className="md:pl-64 flex flex-col min-h-screen">
         {/* Header */}
-        <header className="bg-white shadow-sm border-b border-gray-100 h-16 flex items-center px-6">
-          <button
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="md:hidden text-gray-600 hover:text-gray-900 w-10 h-10 flex items-center justify-center rounded-lg hover:bg-gray-100"
-          >
-            {sidebarOpen ? '✕' : '☰'}
-          </button>
-          
-          <div className="flex-1 flex items-center justify-between">
-            <h1 className="text-xl font-semibold text-gray-800">
-              Perfumes Elisa
-            </h1>
-            
+        <header className="sticky top-0 z-40 bg-white border-b border-surface-200">
+          <div className="flex h-16 items-center justify-between px-4 md:px-6">
+            <button
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="md:hidden p-2 rounded-lg text-surface-500 hover:bg-surface-100"
+            >
+              {sidebarOpen ? '✕' : '☰'}
+            </button>
+
             <div className="flex items-center space-x-4">
               <div className="relative">
-                <button className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100">
-                  <span className="text-gray-600">🔔</span>
+                <button className="p-2 rounded-lg text-surface-500 hover:bg-surface-100">
+                  <span className="text-xl">🔔</span>
                 </button>
               </div>
             </div>
@@ -119,7 +120,7 @@ export default function DashboardLayout() {
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 p-6">
+        <main className="flex-1 p-4 md:p-6 lg:p-8">
           <Outlet />
         </main>
       </div>
@@ -127,7 +128,7 @@ export default function DashboardLayout() {
       {/* Mobile Overlay */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-50 z-40 md:hidden"
+          className="fixed inset-0 bg-black/50 z-40 md:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
