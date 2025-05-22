@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "@headlessui/react": "^1.7.18",
-    "@react-pdf/renderer": "^4.3.0",
+    "@react-pdf/renderer": "^4.3.0", 
     "@supabase/supabase-js": "^2.49.4",
     "chart.js": "^4.4.9",
     "date-fns": "^4.1.0",
