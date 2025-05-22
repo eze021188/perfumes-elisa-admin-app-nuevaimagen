@@ -1,37 +1,30 @@
 // src/pages/Ventas.jsx
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { supabase } from '../supabase';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-// >>> Importar el componente HtmlTicketDisplay (necesario para el estado htmlTicketData) <<<
-import HtmlTicketDisplay from '../components/HtmlTicketDisplay';
-// >>> Importar useAuth para obtener info del vendedor (necesario para el PDF/Ticket) <<<
+import html2canvas from 'html2canvas';
+
+// Componentes divididos
+import VentasFiltroBusqueda from '../components/ventas/VentasFiltroBusqueda';
+import VentasTabla from '../components/ventas/VentasTabla';
+import VentaDetalleModal from '../components/ventas/VentaDetalleModal';
+
 import { useAuth } from '../contexts/AuthContext';
 
-
-// >>> Helper simple para formatear moneda (necesario para el PDF/Ticket) <<<
+// Helpers
 const formatCurrency = (amount) => {
-     const numericAmount = parseFloat(amount);
-     if (isNaN(numericAmount)) {
-         return '$0.00';
-     }
-     return numericAmount.toLocaleString('en-US', {
-        style: 'currency',
-        currency: 'USD', // Ajusta según tu moneda
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-    });
+    const numericAmount = parseFloat(amount);
+    if (isNaN(numericAmount)) return '$0.00';
+    return numericAmount.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 });
 };
 
-// >>> Función para cargar una imagen local y convertirla a Base64 para jsPDF (necesario para el logo en PDF) <<<
 const getBase64Image = async (url) => {
     try {
         const response = await fetch(url);
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         const blob = await response.blob();
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
@@ -45,546 +38,723 @@ const getBase64Image = async (url) => {
     }
 };
 
+const formatTicketDateTime = (dateString) => {
+    if (!dateString) return 'Fecha desconocida';
+    try {
+        const date = new Date(dateString);
+        // Formato dd/mm/aa HH:MM como en la imagen
+        const day = String(date.getDate()).padStart(2, '0');
+        const month = String(date.getMonth() + 1).padStart(2, '0'); // Meses son 0-indexados
+        const year = String(date.getFullYear()).slice(-2);
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        return `${day}/${month}/${year} ${hours}:${minutes}`;
+    } catch (e) {
+        console.error("Error formateando fecha para ticket:", e, dateString);
+        return new Date(dateString).toLocaleString();
+    }
+};
+
+const TicketParaImagen = React.forwardRef(({ venta, cliente, vendedor, logoSrc, dateTimeFormatter, currencyFormatter }, ref) => {
+    if (!venta || !cliente || !vendedor) {
+        console.log("TicketParaImagen: Faltan datos para renderizar (venta, cliente o vendedor).");
+        return null;
+    }
+    // Estilos generales del ticket - Diseño Minimalista
+    const ticketStyles = {
+        width: '300px', // Ancho base, html2canvas capturará esto.
+        padding: '15px', // Espacio interno
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif',
+        fontSize: '12px', // Tamaño de fuente base más pequeño
+        backgroundColor: '#fff',
+        color: '#212529', // Un negro no tan intenso
+        boxSizing: 'border-box',
+    };
+
+    // Estilos para el encabezado
+    const headerSectionStyles = {
+        display: 'flex',
+        alignItems: 'center',
+        marginBottom: '12px',
+    };
+    const logoContainerStyles = {
+        marginRight: '10px',
+    };
+    const logoStyles = {
+        maxWidth: '40px', // Logo más pequeño
+        maxHeight: '40px',
+        display: 'block',
+    };
+    const titleAndCodeStyles = {
+        flexGrow: 1,
+    };
+    const ticketTitleStyles = {
+        fontSize: '16px',
+        fontWeight: '600', // Un poco menos bold
+        margin: '0',
+        color: '#000',
+    };
+    const ticketCodeStyles = {
+        fontSize: '10px',
+        color: '#6c757d', // Gris más suave
+        margin: '0',
+    };
+    const companyContactStyles = {
+        textAlign: 'center', // Centrado debajo del logo y título
+        fontSize: '10px',
+        color: '#6c757d',
+        margin: '5px 0 12px 0', // Espacio después del contacto
+    };
+
+
+    // Estilos para la sección de información
+    const infoSectionStyles = {
+        display: 'grid', // Usar grid para dos columnas
+        gridTemplateColumns: '1fr 1fr',
+        gap: '10px', // Espacio entre columnas
+        marginBottom: '12px',
+        fontSize: '11px',
+    };
+
+    const infoBlockStyles = { // Para cada bloque (Cliente/Vendedor, Teléfono/Fecha)
+        // No se necesita width aquí con grid
+    };
+    const infoLabelStyles = {
+        fontWeight: '600',
+        color: '#495057',
+        display: 'block',
+        marginBottom: '2px',
+    };
+    const infoValueStyles = {
+        display: 'block',
+        color: '#212529',
+        marginBottom: '5px',
+    };
+
+    // Estilos para la sección de detalles de productos
+    const productDetailsSectionStyles = {
+        marginBottom: '12px',
+    };
+    const productDetailsTitleStyles = {
+        fontSize: '13px',
+        fontWeight: '600',
+        marginBottom: '6px',
+        color: '#000',
+    };
+    const productItemStyles = {
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+        padding: '4px 0',
+        fontSize: '11px',
+        borderTop: '1px solid #f0f0f0', // Línea divisoria muy sutil
+    };
+    const firstProductItemStyles = { // Para evitar la línea superior en el primer item
+        ...productItemStyles,
+        borderTop: 'none',
+        paddingTop: '0',
+    };
+    const productNameStyles = {
+        flex: '1',
+        marginRight: '8px',
+        wordBreak: 'break-word',
+    };
+    const productQuantityPriceStyles = {
+        textAlign: 'right',
+        minWidth: '80px', 
+        whiteSpace: 'nowrap',
+        color: '#495057',
+    };
+
+    // Estilos para la sección de totales
+    const totalsSectionStyles = {
+        marginTop: '12px',
+        fontSize: '12px',
+    };
+    const totalRowStyles = {
+        display: 'flex',
+        justifyContent: 'space-between',
+        padding: '3px 0',
+    };
+    const totalLabelStyles = {
+        color: '#495057',
+    };
+    const totalValueStyles = {
+        fontWeight: '500', // Un poco menos bold
+        color: '#212529',
+    };
+    const grandTotalLabelStyles = {
+        fontSize: '14px',
+        fontWeight: '600',
+        color: '#000',
+    };
+    const grandTotalValueStyles = {
+        fontSize: '14px',
+        fontWeight: '600',
+        color: '#28a745', // Verde para total pagado
+    };
+    const saldoAplicadoStyles = {
+        color: '#007bff', // Azul para saldo aplicado
+        fontWeight: '500',
+    };
+    
+    const hrMinimalistStyle = {
+        border: 'none',
+        borderTop: '1px solid #dee2e6', // Línea más sutil
+        margin: '12px 0',
+    };
+
+    // Estilos para el pie de página
+    const footerStyles = {
+        textAlign: 'center',
+        marginTop: '15px',
+        fontSize: '10px',
+        color: '#6c757d',
+    };
+
+    return (
+        <div ref={ref} style={ticketStyles}>
+            <div style={headerSectionStyles}>
+                {logoSrc && <div style={logoContainerStyles}><img src={logoSrc} alt="Logo" style={logoStyles} /></div>}
+                <div style={titleAndCodeStyles}>
+                    <h2 style={ticketTitleStyles}>Ticket</h2>
+                    <p style={ticketCodeStyles}>#{venta.codigo_venta}</p>
+                </div>
+            </div>
+            <p style={companyContactStyles}>PERFUMES ELISA<br/>81 3080 4010 - Ciudad Apodaca</p>
+
+            <hr style={hrMinimalistStyle} />
+
+            <div style={infoSectionStyles}>
+                <div style={infoBlockStyles}>
+                    <span style={infoLabelStyles}>Cliente:</span>
+                    <span style={infoValueStyles}>{cliente?.nombre || venta.display_cliente_nombre || 'Público General'}</span>
+                    <span style={infoLabelStyles}>Vendedor:</span>
+                    <span style={infoValueStyles}>{vendedor?.nombre || 'N/A'}</span>
+                </div>
+                <div style={infoBlockStyles}>
+                    <span style={infoLabelStyles}>Teléfono:</span>
+                    <span style={infoValueStyles}>{cliente?.telefono || 'N/A'}</span>
+                    <span style={infoLabelStyles}>Fecha:</span>
+                    <span style={infoValueStyles}>{dateTimeFormatter(venta.fecha || venta.created_at)}</span>
+                </div>
+            </div>
+
+            <hr style={hrMinimalistStyle} />
+
+            <div style={productDetailsSectionStyles}>
+                <h3 style={productDetailsTitleStyles}>Detalle de Venta:</h3>
+                {(venta.productos || []).map((p, i) => (
+                    <div key={i} style={i === 0 ? firstProductItemStyles : productItemStyles}>
+                        <span style={productNameStyles}>{p.nombre || 'Producto Desconocido'}</span>
+                        <span style={productQuantityPriceStyles}>
+                            {p.cantidad} x {currencyFormatter(p.precio_unitario ?? 0)} = {currencyFormatter(p.total_parcial ?? 0)}
+                        </span>
+                    </div>
+                ))}
+            </div>
+
+            <hr style={hrMinimalistStyle} />
+
+            <div style={totalsSectionStyles}>
+                <div style={totalRowStyles}>
+                    <span style={totalLabelStyles}>Subtotal (Productos):</span>
+                    <span style={totalValueStyles}>{currencyFormatter(venta.subtotal ?? 0)}</span>
+                </div>
+                {(venta.valor_descuento ?? 0) > 0 && (
+                    <div style={totalRowStyles}>
+                        <span style={totalLabelStyles}>Descuento:</span>
+                        <span style={{...totalValueStyles, color: '#dc3545'}}>- {currencyFormatter(venta.valor_descuento ?? 0)}</span>
+                    </div>
+                )}
+                {(venta.gastos_envio ?? 0) > 0 && (
+                     <div style={totalRowStyles}>
+                        <span style={totalLabelStyles}>Envío:</span>
+                        <span style={totalValueStyles}>{currencyFormatter(venta.gastos_envio ?? 0)}</span>
+                    </div>
+                )}
+                {(venta.monto_credito_aplicado ?? 0) > 0 && (
+                    <div style={totalRowStyles}>
+                        <span style={{...totalLabelStyles, ...saldoAplicadoStyles}}>Saldo a Favor Aplicado:</span>
+                        <span style={{...totalValueStyles, ...saldoAplicadoStyles}}>- {currencyFormatter(venta.monto_credito_aplicado ?? 0)}</span>
+                    </div>
+                )}
+                 <div style={{...totalRowStyles, marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #dee2e6'}}>
+                    <span style={grandTotalLabelStyles}>Total Pagado:</span>
+                    <span style={grandTotalValueStyles}>{currencyFormatter(venta.total ?? 0)}</span>
+                </div>
+            </div>
+
+            <div style={footerStyles}>
+                <p style={{margin: '2px 0'}}>¡Gracias por tu compra!</p>
+                <p style={{margin: '2px 0'}}>Visítanos de nuevo pronto.</p>
+            </div>
+        </div>
+    );
+});
+
+// Modal para visualizar la imagen del ticket y ofrecer acciones
+const ImageActionModal = ({ isOpen, onClose, imageDataUrl, imageFile, ventaCodigo, currencyFormatter, clienteNombre, ventaTotal }) => {
+    if (!isOpen || !imageDataUrl) return null;
+
+    const handleShare = async () => {
+        console.log("ImageActionModal: handleShare triggered");
+        if (!imageFile) {
+            toast.error("Archivo de imagen no disponible para compartir.");
+            console.log("ImageActionModal: imageFile no disponible para compartir.");
+            return;
+        }
+        if (navigator.share && navigator.canShare && navigator.canShare({ files: [imageFile] })) {
+            try {
+                console.log("ImageActionModal: Intentando navigator.share con archivo:", imageFile);
+                await navigator.share({
+                    title: `Ticket de Venta ${ventaCodigo || ''}`,
+                    text: `Imagen del Ticket de Venta ${ventaCodigo || ''}. Cliente: ${clienteNombre || 'Público General'}. Total: ${currencyFormatter(ventaTotal ?? 0)}.`,
+                    files: [imageFile],
+                });
+                toast.success('Ticket como imagen compartido exitosamente.');
+                onClose(); 
+            } catch (error) {
+                if (error.name !== 'AbortError') {
+                    toast.error(`Error al compartir: ${error.message}`);
+                    console.error("ImageActionModal: Error en navigator.share:", error);
+                } else {
+                    toast('Compartir cancelado.');
+                    console.log("ImageActionModal: Compartir cancelado por el usuario.");
+                }
+            }
+        } else {
+            toast.info('La función de compartir archivos no está disponible en este navegador. Intenta descargar la imagen.');
+            console.log("ImageActionModal: navigator.share no disponible o no puede compartir archivos.");
+        }
+    };
+
+    const handleDownload = () => {
+        console.log("ImageActionModal: handleDownload triggered");
+        const link = document.createElement('a');
+        link.href = imageDataUrl;
+        link.download = `Ticket_${ventaCodigo || 'venta'}.png`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        toast.success('Imagen descargada.');
+    };
+
+    console.log("ImageActionModal: Renderizando. isOpen:", isOpen, "imageDataUrl:", !!imageDataUrl);
+    return (
+        <div 
+            className="fixed inset-0 bg-gray-800 bg-opacity-75 overflow-y-auto h-full w-full z-[100] flex items-center justify-center p-2 sm:p-4" 
+            onClick={onClose}
+        >
+            <div 
+                className="bg-white rounded-lg shadow-xl w-auto max-w-xs sm:max-w-sm md:max-w-md relative flex flex-col items-center p-3 sm:p-4" // Ajustado max-w para que no sea demasiado ancho
+                onClick={e => e.stopPropagation()}
+            >
+                <div className="w-full mb-4 flex justify-center">
+                    <img 
+                        src={imageDataUrl} 
+                        alt="Ticket de Venta" 
+                        className="max-w-full h-auto max-h-[70vh] object-contain shadow-md" // Agregada sombra a la imagen
+                    />
+                </div>
+                <div className="flex flex-wrap justify-center gap-2 sm:gap-3 w-full">
+                    <button
+                        onClick={handleShare}
+                        className="px-3 py-2 sm:px-4 bg-blue-600 text-white rounded-md shadow-sm hover:bg-blue-700 transition duration-200 text-xs sm:text-sm"
+                    >
+                        Compartir Imagen
+                    </button>
+                    <button
+                        onClick={handleDownload}
+                        className="px-3 py-2 sm:px-4 bg-green-600 text-white rounded-md shadow-sm hover:bg-green-700 transition duration-200 text-xs sm:text-sm"
+                    >
+                        Descargar Imagen
+                    </button>
+                    <button
+                        onClick={onClose}
+                        className="px-3 py-2 sm:px-4 bg-gray-500 text-white rounded-md shadow-sm hover:bg-gray-600 transition duration-200 text-xs sm:text-sm"
+                    >
+                        Cerrar
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 
 export default function Ventas() {
   const [ventas, setVentas] = useState([]);
-  const [ventaSeleccionada, setVentaSeleccionada] = useState(null); // Usado para el modal de detalle y datos
+  const [ventaSeleccionada, setVentaSeleccionada] = useState(null);
   const [busqueda, setBusqueda] = useState('');
   const [loading, setLoading] = useState(true);
   const [cancelLoading, setCancelLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
+  
+  const [isImageActionModalOpen, setIsImageActionModalOpen] = useState(false);
+  const [generatedImageDataUrl, setGeneratedImageDataUrl] = useState(null);
+  const [generatedImageFile, setGeneratedImageFile] = useState(null); 
+  const [isProcessingImage, setIsProcessingImage] = useState(false); 
+
+
   const navigate = useNavigate();
+  const [logoBase64, setLogoBase64] = useState(null);
+  const [clienteInfoTicket, setClienteInfoTicket] = useState(null);
+  const [vendedorInfoTicket, setVendedorInfoTicket] = useState(null);
+  const [clienteBalanceTicket, setClienteBalanceTicket] = useState(0);
 
-  // >>> Estados para mostrar el ticket HTML (necesario para el botón "Ver ticket") <<<
-   const [showHtmlTicket, setShowHtmlTicket] = useState(false);
-   const [htmlTicketData, setHtmlTicketData] = useState(null);
-
-   // >>> Estado para almacenar la imagen del logo en Base64 para el PDF (necesario para el logo en PDF) <<<
-   const [logoBase64, setLogoBase64] = useState(null);
-
-    // >>> Estados para almacenar información adicional para el PDF/Ticket (necesario para el PDF/Ticket) <<<
-    const [clienteInfoTicket, setClienteInfoTicket] = useState(null); // Información del cliente seleccionado
-    const [vendedorInfoTicket, setVendedorInfoTicket] = useState(null); // Información del vendedor de la venta
-    const [clienteBalanceTicket, setClienteBalanceTicket] = useState(0); // Balance del cliente seleccionado
-
-     // >>> Obtener usuario logueado (vendedor) del contexto (necesario para el PDF/Ticket) <<<
-    const { user: currentUser } = useAuth(); // Usuario actualmente logueado
-
+  const { user: currentUser } = useAuth();
+  const ticketImageRef = useRef(null);
 
   const cargarVentas = async () => {
     setLoading(true);
     const { data, error } = await supabase
       .from('ventas')
-      .select('*, enganche, gastos_envio, monto_credito_aplicado') // Asegúrate que monto_credito_aplicado exista
+      .select(`
+        id, codigo_venta, cliente_id, fecha, forma_pago, tipo_descuento, valor_descuento, 
+        subtotal, total, created_at, vendedor_id, enganche, gastos_envio, presupuesto_id, 
+        monto_credito_aplicado, cliente_nombre, clientes ( nombre, telefono, correo, direccion ) 
+      `)
       .order('fecha', { ascending: false });
     if (error) {
       console.error('❌ Error al cargar ventas:', error.message);
       toast.error('Error al cargar ventas.');
       setVentas([]);
     } else {
-      setVentas(data || []);
+      const ventasConNombreClienteCorrecto = data.map(venta => ({
+        ...venta,
+        display_cliente_nombre: venta.clientes?.nombre || venta.cliente_nombre || 'Público General'
+      }));
+      setVentas(ventasConNombreClienteCorrecto || []);
     }
     setLoading(false);
   };
 
-    useEffect(() => {
-        async function loadLogo() {
-            const logoUrl = '/images/PERFUMESELISAwhite.jpg'; 
-            const base64 = await getBase64Image(logoUrl);
-            setLogoBase64(base64);
-        }
-        loadLogo();
-    }, []);
-
-
   useEffect(() => {
+    async function loadLogoImg() {
+        const base64 = await getBase64Image('/images/PERFUMESELISAwhite.jpg'); // Asegúrate que esta ruta sea correcta
+        setLogoBase64(base64);
+    }
+    loadLogoImg();
     cargarVentas();
   }, []);
 
-  const cancelarVenta = async (venta) => {
-    if (cancelLoading) return;
-    if (!window.confirm(`¿Seguro que quieres cancelar la venta ${venta.codigo_venta}? Se restaurará el stock.`)) {
-      return;
-    }
-    setCancelLoading(true);
+  const handleSelectSale = async (venta) => {
+    console.log("handleSelectSale: Iniciando para venta ID", venta.id);
+    setVentaSeleccionada(null);
+    setDetailLoading(true);
+    setClienteInfoTicket(null);
+    setVendedorInfoTicket(null);
+    setClienteBalanceTicket(0);
+    let ventaConDetallesYInfoCompleta = { ...venta, productos: [] };
     try {
-      const { data: detalles = [], error: errDet } = await supabase
-        .from('detalle_venta')
-        .select('producto_id, cantidad')
-        .eq('venta_id', venta.id);
-      if (errDet) throw new Error('No se pudieron obtener los detalles de la venta.');
+        const { data: detalleItems, error: errDetalle } = await supabase
+            .from('detalle_venta').select('*, productos(id, nombre)').eq('venta_id', venta.id);
+        if (errDetalle) throw errDetalle;
+        ventaConDetallesYInfoCompleta.productos = (detalleItems || []).map(item => ({ ...item, nombre: item.productos?.nombre || 'Producto Desconocido' }));
+        
+        console.log("handleSelectSale: Productos mapeados", ventaConDetallesYInfoCompleta.productos);
 
-      for (const item of detalles) {
-        const { data: prodActual, error: errProd } = await supabase
-          .from('productos')
-          .select('stock')
-          .eq('id', item.producto_id)
-          .single();
-        if (errProd) {
-          console.error(`Error al obtener stock del producto ${item.producto_id}:`, errProd.message);
-          toast.error(`Error al obtener stock del producto ${item.producto_id}.`);
-          continue;
+        if (venta.cliente_id) {
+            const clienteData = venta.clientes || (await supabase.from('clientes').select('id, nombre, telefono, correo, direccion').eq('id', venta.cliente_id).single())?.data;
+            setClienteInfoTicket(clienteData || { id: venta.cliente_id, nombre: venta.display_cliente_nombre });
+            console.log("handleSelectSale: clienteInfoTicket seteado", clienteData || { id: venta.cliente_id, nombre: venta.display_cliente_nombre });
+        } else { 
+            setClienteInfoTicket({ id: null, nombre: venta.display_cliente_nombre }); 
+            console.log("handleSelectSale: clienteInfoTicket seteado (Público General)", { id: null, nombre: venta.display_cliente_nombre });
         }
-        const nuevoStock = (prodActual?.stock || 0) + (item.cantidad ?? 0);
-        const { error: errUpd } = await supabase
-          .from('productos')
-          .update({ stock: nuevoStock })
-          .eq('id', item.producto_id);
-        if (errUpd) {
-          console.error(`Error actualizando stock del producto ${item.producto_id}:`, errUpd.message);
-          toast.error(`Error actualizando stock del producto ${item.producto_id}.`);
+        if (venta.vendedor_id) {
+            const { data: vendData, error: vendError } = await supabase.from('usuarios').select('id, nombre').eq('id', venta.vendedor_id).single();
+            if (vendError) console.error("Error cargando vendedor:", vendError);
+            setVendedorInfoTicket(vendData || { nombre: currentUser?.email || 'N/A' });
+            console.log("handleSelectSale: vendedorInfoTicket seteado", vendData || { nombre: currentUser?.email || 'N/A' });
+        } else { 
+            setVendedorInfoTicket({ nombre: currentUser?.email || 'N/A' }); 
+            console.log("handleSelectSale: vendedorInfoTicket seteado (N/A)", { nombre: currentUser?.email || 'N/A' });
         }
-      }
-
-      const { error: errDelMovs } = await supabase
-        .from('movimientos_cuenta_clientes')
-        .delete()
-        .eq('referencia_venta_id', venta.id);
-       if (errDelMovs) {
-           console.error('Error eliminando movimientos de cuenta:', errDelMovs.message);
-            toast.error('Error al eliminar movimientos de cuenta relacionados.');
-       }
-
-
-      const { error: errDel } = await supabase
-        .from('detalle_venta')
-        .delete()
-        .eq('venta_id', venta.id);
-      if (errDel) throw new Error('Error al eliminar los detalles de la venta.');
-
-      const { error: errVenta } = await supabase
-        .from('ventas')
-        .delete()
-        .eq('id', venta.id);
-      if (errVenta) throw new Error('No se pudo eliminar la venta principal.');
-
-      toast.success(` Venta ${venta.codigo_venta} cancelada correctamente.`);
-      setVentaSeleccionada(null);
-      cargarVentas();
-    } catch (err) {
-      console.error('❌ Error general al cancelar la venta:', err.message);
-      toast.error(`Ocurrió un error: ${err.message}`);
-    } finally {
-      setCancelLoading(false);
+        if (venta.cliente_id) {
+            const { data: balanceRpcData, error: balanceError } = await supabase.rpc('get_cliente_con_saldo', { p_cliente_id: venta.cliente_id });
+            if (balanceError) console.error("Error cargando balance:", balanceError);
+            setClienteBalanceTicket(balanceRpcData && balanceRpcData.length > 0 ? balanceRpcData[0].balance : 0);
+        }
+        setVentaSeleccionada(ventaConDetallesYInfoCompleta);
+        console.log("handleSelectSale: ventaSeleccionada seteada", ventaConDetallesYInfoCompleta);
+    } catch (error) {
+        toast.error(`Error al cargar detalles: ${error.message}`);
+        console.error("handleSelectSale: Error cargando detalles", error);
+        setVentaSeleccionada(null);
+    } finally { 
+        setDetailLoading(false); 
+        console.log("handleSelectSale: Finalizado. detailLoading: false");
     }
   };
+  
+  const cancelarVentaSeleccionada = async () => {
+    if (!ventaSeleccionada || cancelLoading) return;
+    if (!confirm(`¿Seguro que quieres cancelar la venta ${ventaSeleccionada.codigo_venta}? Se restaurará el stock.`)) return;
+    setCancelLoading(true);
+    try {
+      const detallesVenta = ventaSeleccionada.productos || [];
+      for (const item of detallesVenta) {
+        const { data: prodActual } = await supabase.from('productos').select('stock').eq('id', item.producto_id).single();
+        await supabase.from('productos').update({ stock: (parseFloat(prodActual?.stock) || 0) + (parseFloat(item.cantidad) ?? 0) }).eq('id', item.producto_id);
+      }
+      await supabase.from('movimientos_cuenta_clientes').delete().eq('referencia_venta_id', ventaSeleccionada.id);
+      await supabase.from('detalle_venta').delete().eq('venta_id', ventaSeleccionada.id);
+      await supabase.from('ventas').delete().eq('id', ventaSeleccionada.id);
+      toast.success(`Venta ${ventaSeleccionada.codigo_venta} cancelada.`);
+      setVentaSeleccionada(null);
+      cargarVentas();
+    } catch (err) { toast.error(`Error al cancelar: ${err.message}`); } 
+    finally { setCancelLoading(false); }
+  };
 
-  const generarPDF = async () => {
-      if (!ventaSeleccionada || !ventaSeleccionada.productos || ventaSeleccionada.productos.length === 0 || !clienteInfoTicket || !vendedorInfoTicket || ventaSeleccionada.enganche === undefined || ventaSeleccionada.gastos_envio === undefined) {
-          toast.error("Datos incompletos para generar el PDF.");
+  const handleShareTicketAsPDF = async () => {
+      console.log("handleShareTicketAsPDF: Iniciando");
+      if (!ventaSeleccionada || !ventaSeleccionada.productos || !clienteInfoTicket || !vendedorInfoTicket) {
+          toast.error("Datos incompletos para PDF."); 
+          console.log("handleShareTicketAsPDF: Datos incompletos", {ventaSeleccionada, clienteInfoTicket, vendedorInfoTicket});
           return;
       }
-
       const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'letter' });
-      const margin = 15;
-      let yOffset = margin;
-      const logoWidth = 30;
-      const logoHeight = 30;
-      const companyInfoX = margin + logoWidth + 10;
-
-      if (logoBase64) {
-          doc.addImage(logoBase64, 'JPEG', margin, yOffset, logoWidth, logoHeight);
-      } else {
-           doc.setFontSize(10);
-           doc.text("Logo Aquí", margin + logoWidth / 2, yOffset + logoHeight / 2, { align: 'center' });
-      }
-
+      const margin = 15; let yOffset = margin;
+      const logoWidth = 30; const logoHeight = 30; const companyInfoX = margin + logoWidth + 10;
+      if (logoBase64) doc.addImage(logoBase64, 'JPEG', margin, yOffset, logoWidth, logoHeight);
+      else { doc.setFontSize(10); doc.text("Logo Aquí", margin + logoWidth / 2, yOffset + logoHeight / 2, { align: 'center' });}
       doc.setFontSize(14); doc.setFont(undefined, 'bold'); doc.text('PERFUMES ELISA', companyInfoX, yOffset + 5);
       doc.setFontSize(10); doc.setFont(undefined, 'normal');
-      doc.text('Ciudad Apodaca, N.L., C.P. 66640', companyInfoX, yOffset + 17);
+      doc.text('Ciudad Apodaca, N.L., C.P. 66640', companyInfoX, yOffset + 17); // Ajusta tu ciudad
       doc.text('Teléfono: 81 3080 4010', companyInfoX, yOffset + 22);
-      
       doc.setFontSize(20); doc.setFont(undefined, 'bold'); doc.text('TICKET DE VENTA', doc.internal.pageSize.getWidth() - margin, yOffset + 10, { align: 'right' });
       doc.setFontSize(12); doc.setFont(undefined, 'normal'); doc.text(`Código: ${ventaSeleccionada.codigo_venta || 'N/A'}`, doc.internal.pageSize.getWidth() - margin, yOffset + 17, { align: 'right' });
       yOffset += Math.max(logoHeight, 30) + 15;
-      doc.line(margin, yOffset, doc.internal.pageSize.getWidth() - margin, yOffset);
-      yOffset += 10;
-
+      doc.line(margin, yOffset, doc.internal.pageSize.getWidth() - margin, yOffset); yOffset += 10;
       const infoLabelFontSize = 9; const infoValueFontSize = 10; const infoLineHeight = 6;
       doc.setFontSize(infoLabelFontSize); doc.setFont(undefined, 'bold'); doc.text('CLIENTE:', margin, yOffset);
-      doc.setFontSize(infoValueFontSize); doc.setFont(undefined, 'normal'); doc.text(clienteInfoTicket?.nombre || 'Público General', margin + doc.getTextWidth('CLIENTE:') + 5, yOffset);
-      yOffset += infoLineHeight;
+      doc.setFontSize(infoValueFontSize); doc.setFont(undefined, 'normal'); doc.text(clienteInfoTicket?.nombre || ventaSeleccionada.display_cliente_nombre || 'Público General', margin + doc.getTextWidth('CLIENTE:') + 5, yOffset); yOffset += infoLineHeight;
       doc.setFontSize(infoLabelFontSize); doc.setFont(undefined, 'bold'); doc.text('TELÉFONO:', margin, yOffset);
-      doc.setFontSize(infoValueFontSize); doc.setFont(undefined, 'normal'); doc.text(clienteInfoTicket?.telefono || 'N/A', margin + doc.getTextWidth('TELÉFONO:') + 5, yOffset);
-      yOffset += infoLineHeight;
-      doc.setFontSize(infoLabelFontSize); doc.setFont(undefined, 'bold'); doc.text('CORREO:', margin, yOffset);
-      doc.setFontSize(infoValueFontSize); doc.setFont(undefined, 'normal'); doc.text(clienteInfoTicket?.correo || 'N/A', margin + doc.getTextWidth('CORREO:') + 5, yOffset);
-      yOffset += infoLineHeight;
-      doc.setFontSize(infoLabelFontSize); doc.setFont(undefined, 'bold'); doc.text('DIRECCIÓN:', margin, yOffset);
-      const direccionCliente = clienteInfoTicket?.direccion || 'N/A';
-      const splitDir = doc.splitTextToSize(direccionCliente, doc.internal.pageSize.getWidth() - margin - (margin + doc.getTextWidth('DIRECCIÓN:') + 5));
-      doc.setFontSize(infoValueFontSize); doc.setFont(undefined, 'normal'); doc.text(splitDir, margin + doc.getTextWidth('DIRECCIÓN:') + 5, yOffset);
-      yOffset += (splitDir.length * infoLineHeight) + infoLineHeight;
-      yOffset += infoLineHeight;
+      doc.setFontSize(infoValueFontSize); doc.setFont(undefined, 'normal'); doc.text(clienteInfoTicket?.telefono || 'N/A', margin + doc.getTextWidth('TELÉFONO:') + 5, yOffset); yOffset += infoLineHeight;
       doc.setFontSize(infoLabelFontSize); doc.setFont(undefined, 'bold'); doc.text('FECHA:', margin, yOffset);
-      doc.setFontSize(infoValueFontSize); doc.setFont(undefined, 'normal'); doc.text(((ventaSeleccionada.fecha || ventaSeleccionada.created_at) ? new Date(ventaSeleccionada.fecha || ventaSeleccionada.created_at).toLocaleString() : 'Fecha desconocida'), margin + doc.getTextWidth('FECHA:') + 5, yOffset);
+      doc.setFontSize(infoValueFontSize); doc.setFont(undefined, 'normal'); doc.text(formatTicketDateTime(ventaSeleccionada.fecha || ventaSeleccionada.created_at), margin + doc.getTextWidth('FECHA:') + 5, yOffset);
       yOffset += infoLineHeight;
       doc.setFontSize(infoLabelFontSize); doc.setFont(undefined, 'bold'); doc.text('VENDEDOR:', margin, yOffset);
-      doc.setFontSize(infoValueFontSize); doc.setFont(undefined, 'normal'); doc.text(vendedorInfoTicket?.nombre || 'N/A', margin + doc.getTextWidth('VENDEDOR:') + 5, yOffset);
-      yOffset += infoLineHeight * 2;
-
+      doc.setFontSize(infoValueFontSize); doc.setFont(undefined, 'normal'); doc.text(vendedorInfoTicket?.nombre || 'N/A', margin + doc.getTextWidth('VENDEDOR:') + 5, yOffset); yOffset += infoLineHeight * 2;
       const productsHead = [['Producto', 'Cant.', 'P. Unitario', 'Total Item']];
-      const productsRows = ventaSeleccionada.productos.map(p => [
-          p.nombre || '–',
-          (parseFloat(p.cantidad ?? 0)).toString(),
-          formatCurrency(p.precio_unitario ?? 0),
-          formatCurrency(p.total_parcial ?? 0)
-      ]);
-      doc.autoTable({
-          head: productsHead, body: productsRows, startY: yOffset, theme: 'striped',
-          styles: { fontSize: 9, cellPadding: 3, overflow: 'linebreak' },
-          headStyles: { fillColor: [220, 220, 220], textColor: [0, 0, 0], fontStyle: 'bold' },
-          columnStyles: { 0: { cellWidth: 80 }, 1: { cellWidth: 15, halign: 'center' }, 2: { cellWidth: 25, halign: 'right' }, 3: { cellWidth: 30, halign: 'right' }},
-          margin: { left: margin, right: margin },
-          didDrawPage: (data) => { doc.setFontSize(8); doc.text('Página ' + data.pageNumber, doc.internal.pageSize.getWidth() - margin, doc.internal.pageSize.getHeight() - margin, { align: 'right' }); }
-      });
+      const productsRows = (ventaSeleccionada.productos || []).map(p => [ p.nombre || '–', (parseFloat(p.cantidad ?? 0)).toString(), formatCurrency(p.precio_unitario ?? 0), formatCurrency(p.total_parcial ?? 0) ]);
+      doc.autoTable({ head: productsHead, body: productsRows, startY: yOffset, theme: 'striped', styles: { fontSize: 9, cellPadding: 3 }, headStyles: { fillColor: [220,220,220], textColor: 0, fontStyle: 'bold'}, columnStyles: {0:{cellWidth:80},1:{cellWidth:15,halign:'center'},2:{cellWidth:25,halign:'right'},3:{cellWidth:30,halign:'right'}}, margin:{left:margin,right:margin}, didDrawPage:(data)=>{doc.setFontSize(8);doc.text('Página '+data.pageNumber,doc.internal.pageSize.getWidth()-margin,doc.internal.pageSize.getHeight()-margin,{align:'right'});}});
       yOffset = doc.lastAutoTable?.finalY ? doc.lastAutoTable.finalY + 10 : yOffset + 10;
-
-      const totalsLabelWidth = 45;
-      const totalsValueStartX = doc.internal.pageSize.getWidth() - margin;
+      const totalsLabelWidth = 45; const totalsValueStartX = doc.internal.pageSize.getWidth() - margin;
       const totalsLineHeight = 6; const totalsFontSize = 10; const finalTotalFontSize = 14;
       doc.setFontSize(totalsFontSize); doc.setFont(undefined, 'normal');
-
-      doc.text('Subtotal (Productos):', totalsValueStartX - totalsLabelWidth, yOffset, { align: 'right' });
-      doc.text(formatCurrency(ventaSeleccionada.subtotal ?? 0), totalsValueStartX, yOffset, { align: 'right' });
-      yOffset += totalsLineHeight;
-
-      if ((ventaSeleccionada.valor_descuento ?? 0) > 0) {
-          let discountLabel = 'Descuento:';
-          doc.text(discountLabel, totalsValueStartX - totalsLabelWidth, yOffset, { align: 'right' });
-          doc.setTextColor(220, 53, 69);
-          doc.text(`- ${formatCurrency(ventaSeleccionada.valor_descuento ?? 0)}`, totalsValueStartX, yOffset, { align: 'right' });
-          doc.setTextColor(0, 0, 0);
-          yOffset += totalsLineHeight;
-      }
-      
-      if ((ventaSeleccionada.gastos_envio ?? 0) > 0) {
-           doc.text('Gastos de Envío:', totalsValueStartX - totalsLabelWidth, yOffset, { align: 'right' });
-           doc.text(formatCurrency(ventaSeleccionada.gastos_envio ?? 0), totalsValueStartX, yOffset, { align: 'right' });
-           yOffset += totalsLineHeight;
-       }
-
-      // --- NUEVO/MODIFICADO: Mostrar Saldo a Favor Aplicado en PDF ---
-      if ((ventaSeleccionada.monto_credito_aplicado ?? 0) > 0) {
-          doc.text('Saldo a Favor Aplicado:', totalsValueStartX - totalsLabelWidth, yOffset, { align: 'right' });
-          doc.setTextColor(40, 167, 69); // Verde para crédito aplicado
-          doc.text(`- ${formatCurrency(ventaSeleccionada.monto_credito_aplicado ?? 0)}`, totalsValueStartX, yOffset, { align: 'right' });
-          doc.setTextColor(0, 0, 0);
-          yOffset += totalsLineHeight;
-      }
-      // --- FIN NUEVO/MODIFICADO ---
-
-      if (ventaSeleccionada.forma_pago === 'Crédito cliente' && (ventaSeleccionada.enganche ?? 0) > 0) {
-           doc.text('Enganche Pagado:', totalsValueStartX - totalsLabelWidth, yOffset, { align: 'right' });
-           doc.text(formatCurrency(ventaSeleccionada.enganche ?? 0), totalsValueStartX, yOffset, { align: 'right' });
-           yOffset += totalsLineHeight;
-       }
-      
-      doc.text('Forma de Pago:', totalsValueStartX - totalsLabelWidth, yOffset, { align: 'right' });
-      doc.text(ventaSeleccionada.forma_pago || 'Desconocida', totalsValueStartX, yOffset, { align: 'right' });
-      yOffset += totalsLineHeight * 1.5;
-
-      doc.setFontSize(finalTotalFontSize); doc.setFont(undefined, 'bold');
-      doc.text('TOTAL PAGADO:', totalsValueStartX - totalsLabelWidth, yOffset, { align: 'right' });
-      doc.setTextColor(40, 167, 69);
-      doc.text(formatCurrency(ventaSeleccionada.total ?? 0), totalsValueStartX, yOffset, { align: 'right' });
-      doc.setTextColor(0, 0, 0);
-      yOffset += finalTotalFontSize + 15;
-
+      doc.text('Subtotal (Productos):', totalsValueStartX - totalsLabelWidth, yOffset, { align: 'right' }); doc.text(formatCurrency(ventaSeleccionada.subtotal ?? 0), totalsValueStartX, yOffset, { align: 'right' }); yOffset += totalsLineHeight;
+      if ((ventaSeleccionada.valor_descuento ?? 0) > 0) { doc.text('Descuento:', totalsValueStartX - totalsLabelWidth, yOffset, { align: 'right' }); doc.setTextColor(220,53,69); doc.text(`- ${formatCurrency(ventaSeleccionada.valor_descuento ?? 0)}`, totalsValueStartX, yOffset, { align: 'right' }); doc.setTextColor(0,0,0); yOffset += totalsLineHeight; }
+      if ((ventaSeleccionada.gastos_envio ?? 0) > 0) { doc.text('Gastos de Envío:', totalsValueStartX - totalsLabelWidth, yOffset, { align: 'right' }); doc.text(formatCurrency(ventaSeleccionada.gastos_envio ?? 0), totalsValueStartX, yOffset, { align: 'right' }); yOffset += totalsLineHeight; }
+      if ((ventaSeleccionada.monto_credito_aplicado ?? 0) > 0) { doc.text('Saldo a Favor Aplicado:', totalsValueStartX - totalsLabelWidth, yOffset, { align: 'right' }); doc.setTextColor(40,167,69); doc.text(`- ${formatCurrency(ventaSeleccionada.monto_credito_aplicado ?? 0)}`, totalsValueStartX, yOffset, { align: 'right' }); doc.setTextColor(0,0,0); yOffset += totalsLineHeight; }
+      if (ventaSeleccionada.forma_pago === 'Crédito cliente' && (ventaSeleccionada.enganche ?? 0) > 0) { doc.text('Enganche Pagado:', totalsValueStartX - totalsLabelWidth, yOffset, { align: 'right' }); doc.text(formatCurrency(ventaSeleccionada.enganche ?? 0), totalsValueStartX, yOffset, { align: 'right' }); yOffset += totalsLineHeight; }
+      doc.text('Forma de Pago:', totalsValueStartX - totalsLabelWidth, yOffset, { align: 'right' }); doc.text(ventaSeleccionada.forma_pago || 'Desconocida', totalsValueStartX, yOffset, { align: 'right' }); yOffset += totalsLineHeight * 1.5;
+      doc.setFontSize(finalTotalFontSize); doc.setFont(undefined, 'bold'); doc.text('TOTAL PAGADO:', totalsValueStartX - totalsLabelWidth, yOffset, { align: 'right' }); doc.setTextColor(40,167,69); doc.text(formatCurrency(ventaSeleccionada.total ?? 0), totalsValueStartX, yOffset, { align: 'right' }); doc.setTextColor(0,0,0); yOffset += finalTotalFontSize + 5;
        if (ventaSeleccionada.forma_pago === 'Crédito cliente') {
-           const balanceLabelFontSize = 10; const balanceValueFontSize = 12; const balanceNoteFontSize = 8; const balanceLineHeight = 5;
-           const currentBalance = (clienteBalanceTicket ?? 0);
-           
-           doc.setFontSize(balanceLabelFontSize); doc.setFont(undefined, 'bold');
-           doc.text('BALANCE DE CUENTA ACTUAL', margin, yOffset);
-           yOffset += balanceLineHeight * 2;
-
-           doc.setFontSize(balanceValueFontSize + 2); doc.setFont(undefined, 'bold');
-           doc.text('Saldo Actual Cliente:', margin + 10, yOffset);
-           if (currentBalance > 0) doc.setTextColor(220, 53, 69); else doc.setTextColor(40, 167, 69);
-           doc.text(formatCurrency(currentBalance), doc.internal.pageSize.getWidth() - margin, yOffset, { align: 'right' });
-           doc.setTextColor(0, 0, 0);
-           yOffset += balanceLineHeight * 2;
-           doc.setFontSize(balanceNoteFontSize); doc.setFont(undefined, 'normal');
-           const balanceNoteText = currentBalance > 0 ? '(Saldo positivo indica deuda del cliente)' : '(Saldo negativo indica crédito a favor del cliente)';
-           doc.text(balanceNoteText, margin, yOffset);
-           yOffset += balanceLineHeight * 2;
+           const balFontSize=10, balValFontSize=12, balNoteSize=8, balLineHeight=5; const curBal=(clienteBalanceTicket??0);
+           doc.setFontSize(balFontSize); doc.setFont(undefined,'bold'); doc.text('BALANCE DE CUENTA ACTUAL',margin,yOffset); yOffset+=balLineHeight*2;
+           doc.setFontSize(balValFontSize+2); doc.setFont(undefined,'bold'); doc.text('Saldo Actual Cliente:',margin+10,yOffset);
+           if(curBal > 0) doc.setTextColor(220,53,69); else doc.setTextColor(40,167,69);
+           doc.text(formatCurrency(curBal),doc.internal.pageSize.getWidth()-margin,yOffset,{align:'right'}); doc.setTextColor(0,0,0); yOffset+=balLineHeight*2;
+           doc.setFontSize(balNoteSize); doc.setFont(undefined,'normal'); doc.text(curBal>0?'(Saldo positivo indica deuda del cliente)':'(Saldo negativo indica crédito a favor del cliente)',margin,yOffset); yOffset+=balLineHeight*2;
        }
-
-      const footerFontSize = 8; const footerLineHeight = 4;
-      doc.setFontSize(footerFontSize); doc.setFont(undefined, 'normal');
-      doc.text('¡Gracias por tu compra!', margin, yOffset);
-      yOffset += footerLineHeight;
-      doc.text('Visítanos de nuevo pronto.', margin, yOffset);
-      doc.output('dataurlnewwindow');
+      const footFontSize=8, footLineHeight=4; doc.setFontSize(footFontSize); doc.setFont(undefined,'normal');
+      doc.text('¡Gracias por tu compra!',margin,yOffset); yOffset+=footLineHeight; doc.text('Visítanos de nuevo pronto.',margin,yOffset);
+      try {
+          const pdfBlob = doc.output('blob');
+          const pdfFile = new File([pdfBlob], `Ticket_${ventaSeleccionada.codigo_venta || 'venta'}.pdf`, { type: 'application/pdf' });
+          if (navigator.share && navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
+              await navigator.share({
+                  title: `Ticket de Venta ${ventaSeleccionada.codigo_venta || ''}`,
+                  text: `Adjunto: Ticket de Venta ${ventaSeleccionada.codigo_venta || ''}.`,
+                  files: [pdfFile],
+              });
+              toast.success('Ticket PDF compartido.');
+          } else {
+              toast.info('Compartir no disponible. Abriendo PDF.');
+              doc.output('dataurlnewwindow'); 
+          }
+      } catch (error) {
+          if (error.name === 'AbortError') { toast('Compartir PDF cancelado.'); } 
+          else { toast.error(`Error al compartir PDF: ${error.message}`); console.error("Error PDF:", error); }
+      }
   };
 
-    const handleShowHtmlTicket = async () => {
-        if (!ventaSeleccionada || !ventaSeleccionada.productos || ventaSeleccionada.productos.length === 0 || !clienteInfoTicket || !vendedorInfoTicket) {
-            toast.error("Datos incompletos para mostrar el ticket HTML.");
-            return;
-        }
-         const now = ventaSeleccionada.fecha || ventaSeleccionada.created_at ? new Date(ventaSeleccionada.fecha || ventaSeleccionada.created_at) : new Date();
-         const formattedDate = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getFullYear()).slice(-2)} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-         const enganchePagado = ventaSeleccionada.enganche ?? 0;
-         const gastosEnvioVenta = ventaSeleccionada.gastos_envio ?? 0;
-         const montoCreditoAplicadoVenta = ventaSeleccionada.monto_credito_aplicado ?? 0;
+  const handleViewTicketImageAndShowModal = async () => {
+    console.log("handleViewTicketImageAndShowModal: Iniciando...");
+    if (!ventaSeleccionada || !clienteInfoTicket || !vendedorInfoTicket || !ticketImageRef.current) {
+        toast.error("Datos o referencia del ticket no disponibles para generar imagen.");
+        console.error("handleViewTicketImageAndShowModal: Faltan datos o ref:", {
+            ventaSeleccionada: !!ventaSeleccionada,
+            clienteInfoTicket: !!clienteInfoTicket,
+            vendedorInfoTicket: !!vendedorInfoTicket,
+            ticketImageRefCurrent: ticketImageRef.current
+        });
+        return;
+    }
+    if (isProcessingImage) {
+        console.log("handleViewTicketImageAndShowModal: Ya se está procesando una imagen.");
+        return;
+    }
 
-        const ticketData = {
-             codigo_venta: ventaSeleccionada.codigo_venta,
-             cliente: { id: clienteInfoTicket.id, nombre: clienteInfoTicket.nombre, telefono: clienteInfoTicket.telefono || 'N/A' },
-             vendedor: { nombre: vendedorInfoTicket?.nombre || 'N/A' },
-             fecha: formattedDate,
-             productosVenta: ventaSeleccionada.productos.map(item => ({
-                 id: item.producto_id, nombre: item.nombre || '–', cantidad: item.cantidad,
-                 precio_unitario: item.precio_unitario, total_parcial: item.total_parcial,
-             })),
-             originalSubtotal: ventaSeleccionada.subtotal,
-             discountAmount: ventaSeleccionada.valor_descuento,
-             monto_credito_aplicado: montoCreditoAplicadoVenta, // Ya se estaba pasando
-             forma_pago: ventaSeleccionada.forma_pago,
-             enganche: enganchePagado,
-             gastos_envio: gastosEnvioVenta,
-             total_final: ventaSeleccionada.total,
-             balance_cuenta: clienteBalanceTicket,
-         };
-         setHtmlTicketData(ticketData);
-         setShowHtmlTicket(true);
-    };
+    setIsProcessingImage(true);
+    toast.loading('Generando imagen del ticket...', { id: 'processingImageToast' });
+    console.log("handleViewTicketImageAndShowModal: Estado isProcessingImage = true.");
 
-    const closeHtmlTicket = () => {
-        setShowHtmlTicket(false);
-        setHtmlTicketData(null);
-    };
+    try {
+        console.log("handleViewTicketImageAndShowModal: Intentando html2canvas sobre:", ticketImageRef.current);
+        const canvas = await html2canvas(ticketImageRef.current, { 
+            useCORS: true, scale: 2, backgroundColor: '#ffffff', 
+        });
+        console.log("handleViewTicketImageAndShowModal: html2canvas completado.");
+        const dataUrl = canvas.toDataURL('image/png');
+        const blob = await (await fetch(dataUrl)).blob();
+        const imageFile = new File([blob], `Ticket_${ventaSeleccionada.codigo_venta || 'venta'}.png`, { type: 'image/png' });
+        console.log("handleViewTicketImageAndShowModal: Blob y File generados.");
+        
+        setGeneratedImageDataUrl(dataUrl);
+        setGeneratedImageFile(imageFile);
+        setIsImageActionModalOpen(true); 
+        console.log("handleViewTicketImageAndShowModal: ImageActionModal debería abrirse.");
+        toast.dismiss('processingImageToast');
 
-    const handleSelectSale = async (venta) => {
-        setVentaSeleccionada(venta);
-        setDetailLoading(true);
-        setClienteInfoTicket(null);
-        setVendedorInfoTicket(null);
-        setClienteBalanceTicket(0);
+    } catch (error) {
+        toast.error(`Error al generar imagen: ${error.message}`, { id: 'processingImageToast' });
+        console.error("handleViewTicketImageAndShowModal: Error en html2canvas:", error);
+    } finally {
+        setIsProcessingImage(false);
+        console.log("handleViewTicketImageAndShowModal: Finalizado.");
+    }
+  };
 
-        const { data: dets = [], error: errDet } = await supabase
-            .from('detalle_venta')
-            .select(`producto_id, cantidad, precio_unitario, total_parcial, producto:productos(nombre)`)
-            .eq('venta_id', venta.id);
+  const handleShareTicketAsImageDirectly = async () => {
+    console.log("handleShareTicketAsImageDirectly: Iniciando...");
+    if (!ventaSeleccionada || !clienteInfoTicket || !vendedorInfoTicket || !ticketImageRef.current) {
+        toast.error("Datos o referencia del ticket no disponibles para compartir imagen directamente.");
+        console.error("handleShareTicketAsImageDirectly: Faltan datos o ref.");
+        return;
+    }
+    if (isProcessingImage) {
+        console.log("handleShareTicketAsImageDirectly: Ya se está procesando una imagen.");
+        return;
+    }
 
-        if (errDet) {
-            toast.error('Error al cargar los detalles de la venta.');
-            setDetailLoading(false); setVentaSeleccionada(null); return;
-        }
-        const productosMapeados = dets.map(d => ({
-            producto_id: d.producto_id, nombre: d.producto?.nombre || '–', cantidad: d.cantidad ?? 0,
-            precio_unitario: d.precio_unitario ?? 0, total_parcial: d.total_parcial ?? 0
-        }));
+    setIsProcessingImage(true);
+    toast.loading('Preparando imagen para compartir...', { id: 'sharingDirectlyToast' });
+    console.log("handleShareTicketAsImageDirectly: Estado isProcessingImage = true.");
 
-        let clienteData = null;
-        if (venta.cliente_id) {
-             const { data: cliData, error: cliError } = await supabase.from('clientes').select('id, nombre, telefono, correo, direccion').eq('id', venta.cliente_id).single();
-             if (cliError) clienteData = { id: venta.cliente_id, nombre: venta.cliente_nombre || 'Público General', telefono: 'N/A' };
-             else clienteData = cliData;
+    try {
+        const canvas = await html2canvas(ticketImageRef.current, { 
+            useCORS: true, scale: 2, backgroundColor: '#ffffff',
+        });
+        const dataUrl = canvas.toDataURL('image/png');
+        const blob = await (await fetch(dataUrl)).blob();
+        const imageFileToShare = new File([blob], `Ticket_${ventaSeleccionada.codigo_venta || 'venta'}.png`, { type: 'image/png' });
+        console.log("handleShareTicketAsImageDirectly: Imagen generada, intentando compartir.");
+
+        if (navigator.share && navigator.canShare && navigator.canShare({ files: [imageFileToShare] })) {
+            await navigator.share({
+                title: `Ticket de Venta ${ventaSeleccionada.codigo_venta || ''}`,
+                text: `Imagen del Ticket de Venta ${ventaSeleccionada.codigo_venta || ''}. Cliente: ${clienteInfoTicket?.nombre || ventaSeleccionada.display_cliente_nombre || 'Público General'}. Total: ${formatCurrency(ventaSeleccionada.total ?? 0)}.`,
+                files: [imageFileToShare],
+            });
+            toast.success('Ticket como imagen compartido exitosamente.', { id: 'sharingDirectlyToast' });
         } else {
-             clienteData = { id: null, nombre: venta.cliente_nombre || 'Público General', telefono: 'N/A' };
+            toast.info('No se pudo compartir directamente. Mostrando opciones...', { id: 'sharingDirectlyToast' });
+            setGeneratedImageDataUrl(dataUrl);
+            setGeneratedImageFile(imageFileToShare);
+            setIsImageActionModalOpen(true); 
         }
-         setClienteInfoTicket(clienteData);
+    } catch (error) {
+        if (error.name === 'AbortError') {
+            toast('Compartir imagen cancelado.', { id: 'sharingDirectlyToast' });
+        } else {
+            toast.error(`Error al compartir imagen: ${error.message}`, { id: 'sharingDirectlyToast' });
+            console.error("handleShareTicketAsImageDirectly: Error:", error);
+        }
+    } finally {
+        setIsProcessingImage(false);
+        console.log("handleShareTicketAsImageDirectly: Finalizado.");
+    }
+  };
 
-         let vendedorData = null;
-         if (venta.vendedor_id) {
-             const { data: vendData, error: vendError } = await supabase.from('usuarios').select('id, nombre').eq('id', venta.vendedor_id).single();
-             if (vendError) vendedorData = { id: venta.vendedor_id, nombre: currentUser?.email || 'N/A' };
-             else vendedorData = vendData;
-         } else {
-             vendedorData = { id: currentUser?.id || null, nombre: currentUser?.email || 'N/A' };
-         }
-         setVendedorInfoTicket(vendedorData);
 
-        let currentClientBalance = 0;
-         if (clienteData?.id) {
-            const { data: balanceData, error: balanceError } = await supabase.from('movimientos_cuenta_clientes').select('monto').eq('cliente_id', clienteData.id);
-            if (!balanceError) currentClientBalance = (balanceData || []).reduce((sum, mov) => sum + (parseFloat(mov.monto) || 0), 0);
-         }
-         setClienteBalanceTicket(currentClientBalance);
+  const ventasFiltradasMemo = useMemo(() => {
+    return ventas.filter(v =>
+        (v.display_cliente_nombre || '').toLowerCase().includes(busqueda.toLowerCase()) ||
+        (v.codigo_venta || '').toLowerCase().includes(busqueda.toLowerCase()) ||
+        (v.forma_pago || '').toLowerCase().includes(busqueda.toLowerCase())
+      );
+  }, [ventas, busqueda]);
 
-        setVentaSeleccionada(prev => ({
-            ...prev,
-            productos: productosMapeados,
-            subtotal: venta.subtotal ?? 0,
-            total: venta.total ?? 0,
-            valor_descuento: venta.valor_descuento ?? 0,
-            tipo_descuento: venta.tipo_descuento || 'fijo',
-            enganche: venta.enganche ?? 0,
-            gastos_envio: venta.gastos_envio ?? 0,
-            monto_credito_aplicado: venta.monto_credito_aplicado ?? 0
-        }));
-        setDetailLoading(false);
-    };
-
-  const ventasFiltradas = ventas.filter(v =>
-    (v.cliente_nombre || '').toLowerCase().includes(busqueda.toLowerCase()) ||
-    (v.codigo_venta || '').toLowerCase().includes(busqueda.toLowerCase()) ||
-    (v.forma_pago || '').toLowerCase().includes(busqueda.toLowerCase())
-  );
+  const handleNewSaleCreatedAndShowModal = async (newSaleId) => { /* ... */ };
 
   return (
-    <div className="min-h-screen bg-gray-100 p-4 md:p-8 lg:p-12">
-      <div className="flex flex-col md:flex-row items-center justify-between gap-6 mb-8">
-        <button
-          onClick={() => navigate('/')}
-          className="px-6 py-2 bg-gray-700 text-white font-semibold rounded-lg shadow-md hover:bg-gray-800 transition duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-opacity-50"
-        >
-          Volver al inicio
-        </button>
-        <h1 className="text-3xl font-bold text-gray-800 text-center w-full md:w-auto">
-          Historial de Ventas
-        </h1>
-        <div className="w-full md:w-[150px]" />
-      </div>
-      <div className="mb-6 flex justify-center">
-        <input
-          type="text"
-          placeholder="Buscar por cliente, código o pago..."
-          value={busqueda}
-          onChange={e => setBusqueda(e.target.value)}
-          className="p-3 border rounded-md shadow-sm w-full md:w-1/2 focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-700"
-        />
-      </div>
-
-      {loading ? (
-        <p className="text-center text-lg font-semibold text-gray-700">Cargando ventas...</p>
-      ) : ventasFiltradas.length === 0 ? (
-        <p className="text-center text-gray-500 italic">No hay ventas encontradas.</p>
-      ) : (
-        <div className="bg-white shadow-lg rounded-lg overflow-hidden mb-6">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-200"><tr>
-              <th className="p-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Código</th>
-              <th className="p-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Cliente</th>
-              <th className="p-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider hidden md:table-cell">Fecha</th>
-              <th className="p-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider hidden sm:table-cell">Pago</th>
-              <th className="p-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Total</th>
-              <th className="p-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Acciones</th>
-            </tr></thead>
-            <tbody>{ventasFiltradas.map(venta => (
-              <tr key={venta.id} className="border-b hover:bg-gray-50 transition duration-150 ease-in-out cursor-pointer">
-                <td className="p-4 whitespace-nowrap text-sm font-medium text-gray-900">{venta.codigo_venta}</td>
-                <td className="p-4 whitespace-nowrap text-sm text-gray-700">{venta.cliente_nombre}</td>
-                <td className="p-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">{venta.fecha ? new Date(venta.fecha).toLocaleString() : 'Fecha desconocida'}</td>
-                <td className="p-4 whitespace-nowrap text-sm text-gray-500 hidden sm:table-cell">{venta.forma_pago}</td>
-                <td className="p-4 whitespace-nowrap text-sm font-semibold text-gray-900 text-right">{formatCurrency(venta.total ?? 0)}</td>
-                 <td className="p-4 whitespace-nowrap text-center text-sm font-medium">
-                      <button
-                          onClick={(e) => { e.stopPropagation(); handleSelectSale(venta); }}
-                          className="px-3 py-1 bg-blue-600 text-white rounded-md shadow-sm hover:bg-blue-700 transition duration-200 ease-in-out text-xs"
-                      >
-                          Ver Detalle
-                      </button>
-                 </td>
-              </tr>
-            ))}</tbody>
-          </table>
-        </div>
-      )}
-
-      {ventaSeleccionada && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50 flex items-center justify-center p-4" onClick={() => setVentaSeleccionada(null)}>
-          <div className="bg-white p-8 rounded-lg shadow-xl w-full max-w-lg relative max-h-[95vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-            <button onClick={() => setVentaSeleccionada(null)} className="absolute top-4 right-4 text-gray-600 hover:text-gray-800 text-3xl font-bold leading-none">&times;</button>
-            <h2 className="text-2xl font-bold text-gray-800 mb-6">Detalle de Venta - {ventaSeleccionada.codigo_venta}</h2>
-            {detailLoading ? (
-              <p className="text-center text-blue-600 font-semibold">Cargando detalles...</p>
-            ) : (
-              <>
-                <div className="mb-6 text-gray-700 space-y-2">
-                  <p><strong>Cliente:</strong> {clienteInfoTicket?.nombre || 'Público General'}</p>
-                   {clienteInfoTicket?.telefono && <p><strong>Teléfono:</strong> {clienteInfoTicket.telefono}</p>}
-                   {clienteInfoTicket?.correo && <p><strong>Correo:</strong> {clienteInfoTicket.correo}</p>}
-                   {clienteInfoTicket?.direccion && <p><strong>Dirección:</strong> {clienteInfoTicket.direccion}</p>}
-                  <p><strong>Fecha:</strong> {ventaSeleccionada.fecha ? new Date(ventaSeleccionada.fecha).toLocaleString() : 'Fecha desconocida'}</p>
-                   <p><strong>Vendedor:</strong> {vendedorInfoTicket?.nombre || 'N/A'}</p>
-                  <p><strong>Forma de Pago:</strong> {ventaSeleccionada.forma_pago}</p>
-                </div>
-                <hr className="my-6 border-gray-200" />
-                <h3 className="text-xl font-semibold text-gray-800 mb-4">Productos:</h3>
-                <div className="overflow-x-auto shadow-sm rounded-md mb-6">
-                  <table className="w-full text-sm border-collapse">
-                    <thead className="bg-gray-100"><tr>
-                      <th className="p-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Producto</th>
-                      <th className="p-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Cantidad</th>
-                      <th className="p-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Precio</th>
-                      <th className="p-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Subtotal</th>
-                    </tr></thead>
-                    <tbody>{ventaSeleccionada.productos.map((p, i) => (
-                      <tr key={i} className="border-b hover:bg-gray-50">
-                        <td className="p-3">{p.nombre}</td>
-                        <td className="p-3 text-center">{p.cantidad}</td>
-                        <td className="p-3 text-right">{formatCurrency(p.precio_unitario ?? 0)}</td>
-                        <td className="p-3 text-right">{formatCurrency(p.total_parcial ?? 0)}</td>
-                      </tr>
-                    ))}</tbody>
-                  </table>
-                </div>
-                 <div className="text-right text-gray-800 space-y-1 mb-6">
-                     {ventaSeleccionada.forma_pago === 'Crédito cliente' && (ventaSeleccionada.enganche ?? 0) > 0 && (
-                         <p className="font-semibold">Enganche: {formatCurrency(ventaSeleccionada.enganche ?? 0)}</p>
-                     )}
-                     {(ventaSeleccionada.gastos_envio ?? 0) > 0 && (
-                         <p className="font-semibold">Gastos de Envío: {formatCurrency(ventaSeleccionada.gastos_envio ?? 0)}</p>
-                     )}
-                     <p className="font-semibold">Subtotal: {formatCurrency(ventaSeleccionada.subtotal ?? 0)}</p>
-                     {((ventaSeleccionada.tipo_descuento === 'porcentaje' && (ventaSeleccionada.valor_descuento ?? 0) > 0) || (ventaSeleccionada.tipo_descuento === 'fijo' && (ventaSeleccionada.valor_descuento ?? 0) > 0)) && (
-                         <p className="font-semibold text-red-600">
-                             Descuento:{' '}
-                             {ventaSeleccionada.tipo_descuento === 'porcentaje'
-                                 ? `-${ventaSeleccionada.valor_descuento}%` // Esto podría estar mal si valor_descuento es el monto
-                                 : `- ${formatCurrency(ventaSeleccionada.valor_descuento ?? 0)}`}
-                         </p>
-                     )}
-                     {(ventaSeleccionada.monto_credito_aplicado ?? 0) > 0 && (
-                        <p className="font-semibold text-blue-600">Saldo a Favor Aplicado: -{formatCurrency(ventaSeleccionada.monto_credito_aplicado ?? 0)}</p>
-                     )}
-                     <p className="font-bold text-xl text-green-700 mt-2 pt-2 border-t border-gray-300">Total Venta: {formatCurrency(ventaSeleccionada.total ?? 0)}</p>
-                 </div>
-                           {ventaSeleccionada.forma_pago === 'Crédito cliente' && (
-                                <div className="text-center text-gray-800 mb-6">
-                                   <p className="font-semibold mb-1">Balance de Cuenta:</p>
-                                   <p className={`text-xl font-bold ${clienteBalanceTicket > 0 ? 'text-red-600' : 'text-green-700'}`}>
-                                       {formatCurrency(Math.abs(clienteBalanceTicket ?? 0))}
-                                   </p>
-                                   <p className="text-xs text-gray-500 mt-1">
-                                       {(clienteBalanceTicket ?? 0) > 0
-                                           ? '(Saldo positivo indica deuda del cliente)'
-                                           : '(Saldo negativo indica crédito a favor del cliente)'}
-                                   </p>
-                               </div>
-                           )}
-                <div className="flex flex-wrap justify-end gap-3">
-                    <button
-                        onClick={handleShowHtmlTicket}
-                        className="px-6 py-2 bg-blue-600 text-white rounded-lg shadow-md hover:bg-blue-700 transition duration-200"
-                    >
-                        Ver ticket
-                    </button>
-                  <button onClick={generarPDF} className="px-6 py-2 bg-green-600 text-white rounded-lg shadow-md hover:bg-green-700 transition duration-200">
-                    Ver PDF
-                  </button>
-                  <button
-                    onClick={() => cancelarVenta(ventaSeleccionada)}
-                    disabled={cancelLoading}
-                    className={`px-6 py-2 rounded-lg shadow-md transition duration-200 ${cancelLoading ? 'bg-gray-400 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700 text-white'}`}
-                  >
-                    {cancelLoading ? 'Cancelando...' : 'Eliminar venta'}
-                  </button>
-                </div>
-              </>
-            )}
+    <>
+      {ventaSeleccionada && clienteInfoTicket && vendedorInfoTicket && (
+          <div style={{ position: 'absolute', left: '-9999px', top: '-9999px', zIndex: -1 }}>
+              <TicketParaImagen 
+                  ref={ticketImageRef}
+                  venta={ventaSeleccionada}
+                  cliente={clienteInfoTicket}
+                  vendedor={vendedorInfoTicket}
+                  logoSrc={logoBase64}
+                  dateTimeFormatter={formatTicketDateTime}
+                  currencyFormatter={formatCurrency}
+              />
           </div>
+      )}
+
+      <ImageActionModal
+          isOpen={isImageActionModalOpen}
+          onClose={() => setIsImageActionModalOpen(false)}
+          imageDataUrl={generatedImageDataUrl}
+          imageFile={generatedImageFile} 
+          ventaCodigo={ventaSeleccionada?.codigo_venta}
+          currencyFormatter={formatCurrency}
+          clienteNombre={clienteInfoTicket?.nombre || ventaSeleccionada?.display_cliente_nombre}
+          ventaTotal={ventaSeleccionada?.total}
+      />
+
+      <div className="min-h-screen bg-gray-100 p-4 md:p-8 lg:p-12">
+        <div className="flex flex-col md:flex-row items-center justify-between gap-6 mb-8">
+          <button onClick={() => navigate('/')} className="px-6 py-2 bg-gray-700 text-white font-semibold rounded-lg shadow-md hover:bg-gray-800">
+            Volver al inicio
+          </button>
+          <h1 className="text-3xl font-bold text-gray-800 text-center">Historial de Ventas</h1>
+          <div className="w-full md:w-[150px]" />
         </div>
-      )}
+        
+        <VentasFiltroBusqueda busqueda={busqueda} onBusquedaChange={setBusqueda} />
+        <VentasTabla
+          ventasFiltradas={ventasFiltradasMemo}
+          onSelectSale={handleSelectSale}
+          loading={loading}
+          busqueda={busqueda}
+          formatDateFunction={formatTicketDateTime} 
+        />
 
-      {showHtmlTicket && htmlTicketData && (
-          <HtmlTicketDisplay saleData={htmlTicketData} onClose={closeHtmlTicket} />
-      )}
-
-    </div>
+        {ventaSeleccionada && (
+          <VentaDetalleModal
+              isOpen={!!ventaSeleccionada}
+              onClose={() => { setVentaSeleccionada(null); setIsImageActionModalOpen(false);  }}
+              ventaSeleccionada={ventaSeleccionada}
+              detailLoading={detailLoading}
+              clienteInfoTicket={clienteInfoTicket}
+              vendedorInfoTicket={vendedorInfoTicket}
+              clienteBalanceTicket={clienteBalanceTicket}
+              onShareTicket={handleShareTicketAsPDF} 
+              onShareTicketAsImage={handleShareTicketAsImageDirectly} 
+              onViewTicketImage={handleViewTicketImageAndShowModal} 
+              onCancelSale={cancelarVentaSeleccionada}
+              cancelLoading={cancelLoading}
+              formatDateFunction={formatTicketDateTime}
+          />
+        )}
+      </div>
+    </>
   );
 }

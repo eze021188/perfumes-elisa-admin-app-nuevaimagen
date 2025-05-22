@@ -1,92 +1,54 @@
 // src/components/ModalEstadoCuenta.jsx
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../supabase';
 import toast from 'react-hot-toast';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
 
 // Define helpers de formato localmente para asegurar disponibilidad
-const formatNumberWithCommas = (amount) => {
+const formatNumberWithCommas = (amount, includeDecimals = true) => {
     return Math.abs(amount).toLocaleString('en-US', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
+        minimumFractionDigits: includeDecimals ? 2 : 0,
+        maximumFractionDigits: includeDecimals ? 2 : 0,
     });
 };
-const formatSaldoDisplay = (saldo) => {
-    const formattedAmount = formatNumberWithCommas(saldo);
-    if (saldo > 0) return `-${formattedAmount}`;
-    if (saldo < 0) return `$${formattedAmount}`;
+const formatSaldoDisplay = (saldo, includeDecimals = true) => {
+    const formattedAmount = formatNumberWithCommas(Math.abs(saldo), includeDecimals);
+    if (saldo > 0) return `-${formattedAmount}`; // Deuda del cliente
+    if (saldo < 0) return `$${formattedAmount}`;  // Saldo a favor del cliente
     return '$0.00';
 };
 
 
-export default function ModalEstadoCuenta({ isOpen, onClose, cliente, onGeneratePDF }) {
-  const [movimientos, setMovimientos] = useState([]);
-  const [loadingMovimientos, setLoadingMovimientos] = useState(true);
-  const [errorMovimientos, setErrorMovimientos] = useState(null);
+export default function ModalEstadoCuenta({ 
+    isOpen, 
+    onClose, 
+    cliente, 
+    movimientos, 
+    onGeneratePDF,
+    onViewAsImage 
+}) {
 
-  // Efecto para cargar los movimientos detallados cuando el modal se abre
-  useEffect(() => {
-    // Verifica que el modal esté abierto Y que cliente.client_id exista (no sea undefined)
-    if (isOpen && cliente && cliente.client_id) {
-      const fetchMovimientos = async () => {
-        setLoadingMovimientos(true);
-        setErrorMovimientos(null);
-        try {
-          // >>> Consulta los movimientos para este cliente usando cliente.client_id <<<
-          const { data, error } = await supabase
-            .from('movimientos_cuenta_clientes')
-            .select('*')
-            .eq('cliente_id', cliente.client_id) // <<< Usar cliente.client_id
-            .order('created_at', { ascending: true });
-
-          if (error) throw error;
-
-          // >>> Calcular el saldo acumulado <<<
-          let saldoAcumulado = 0;
-          const movimientosConSaldo = data.map(mov => {
-              saldoAcumulado += mov.monto;
-              return {
-                  ...mov,
-                  saldo_acumulado: saldoAcumulado
-              };
-          });
-
-          setMovimientos(movimientosConSaldo);
-
-        } catch (err) {
-          console.error('Error cargando movimientos:', err.message);
-          setErrorMovimientos('Error al cargar los movimientos del cliente.');
-          toast.error('Error al cargar movimientos.');
-        } finally {
-          setLoadingMovimientos(false);
-        }
-      };
-
-      fetchMovimientos();
-    } else {
-        // Limpiar al cerrar el modal
-        setMovimientos([]);
-        setLoadingMovimientos(false);
-        setErrorMovimientos(null);
-    }
-  }, [isOpen, cliente]); // Depende de isOpen y cliente (para acceder a cliente.client_id)
-
-  // No renderizar si no está abierto o no hay cliente O el cliente no tiene client_id (evita la consulta inicial con undefined)
   if (!isOpen || !cliente || !cliente.client_id) return null;
 
-   // Calcular el saldo actual sumando todos los montos
-  const saldoActual = movimientos.reduce((sum, mov) => sum + mov.monto, 0);
+  const saldoActual = movimientos && movimientos.length > 0 
+    ? movimientos[movimientos.length - 1].saldo_acumulado 
+    : (cliente.balance || 0);
 
 
-  // Manejador para descargar el PDF
   const handleDownloadPDF = () => {
-      if (movimientos.length === 0) {
+      if (!movimientos || movimientos.length === 0) {
           toast('No hay datos para generar el PDF.', { icon: 'ℹ️' });
           return;
       }
-      // onGeneratePDF recibe el cliente (con client_name) y los movimientos detallados (con saldo_acumulado)
-      onGeneratePDF(cliente, movimientos);
+      onGeneratePDF(cliente, movimientos); 
+  };
+
+  const handleViewImage = () => {
+    if (!movimientos || movimientos.length === 0) {
+        toast('No hay datos para generar la imagen del ticket.', { icon: 'ℹ️' });
+        return;
+    }
+    if (onViewAsImage) {
+        onViewAsImage(); 
+    }
   };
 
 
@@ -99,44 +61,44 @@ export default function ModalEstadoCuenta({ isOpen, onClose, cliente, onGenerate
         </div>
 
         <div className="mb-6">
-          <p className="text-lg font-medium">{cliente.client_name}</p> {/* Usar client_name */}
+          <p className="text-lg font-medium">{cliente.client_name}</p>
           <p className={`text-xl font-bold ${saldoActual > 0 ? 'text-red-600' : saldoActual < 0 ? 'text-green-600' : 'text-gray-700'}`}>
-             Saldo Actual: {formatSaldoDisplay(saldoActual)} {/* Usar helper de formato */}
+             Saldo Actual: {formatSaldoDisplay(saldoActual)}
           </p>
         </div>
 
         <h3 className="text-lg font-semibold mb-3">Movimientos:</h3>
 
-        {loadingMovimientos ? (
-          <p className="text-center">Cargando movimientos...</p>
-        ) : errorMovimientos ? (
-          <p className="text-center text-red-500">{errorMovimientos}</p>
-        ) : movimientos.length === 0 ? (
+        {!movimientos || movimientos.length === 0 ? (
           <p className="text-center text-gray-500">No hay movimientos registrados para este cliente.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
+            <table className="min-w-full divide-y divide-gray-200 table-fixed">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Referencia / Descripción</th>
-                  <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Monto</th>
-                  <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Saldo Acumulado</th>
+                  {/* MODIFICADO: Ajuste de padding y ancho si es necesario */}
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-[20%]">Fecha</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-[25%]">Tipo</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-[30%]">Referencia / Descripción</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider w-[12.5%]">Monto</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider w-[12.5%]">Saldo</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200 text-sm">
                 {movimientos.map((mov) => (
                   <tr key={mov.id}>
-                    <td className="px-4 py-2 whitespace-nowrap">{new Date(mov.created_at).toLocaleDateString()}</td>
-                    <td className="px-4 py-2 whitespace-nowrap">{mov.tipo_movimiento}</td>
-                    <td className="px-4 py-2 truncate max-w-[200px]">{mov.referencia_venta_id ? `Venta ID: ${mov.referencia_venta_id.substring(0, 8)}...` : (mov.descripcion || '-')}</td>
-                     <td className={`px-4 py-2 whitespace-nowrap text-right ${mov.monto > 0 ? 'text-red-700' : 'text-green-700'}`}>
-                       {/* Usar helper para formato de monto */}
-                       {`${mov.monto < 0 ? '-' : '+'}${formatNumberWithCommas(mov.monto)}`}
+                    {/* MODIFICADO: Ajuste de padding */}
+                    <td className="px-4 py-3 whitespace-nowrap">{new Date(mov.created_at).toLocaleDateString('es-MX', {day:'2-digit', month:'2-digit', year:'numeric'})}</td>
+                    {/* MODIFICADO: break-words y padding */}
+                    <td className="px-4 py-3 break-words">{mov.tipo_movimiento.replace(/_/g, ' ')}</td>
+                    {/* MODIFICADO: De truncate a break-words y padding */}
+                    <td className="px-4 py-3 break-words"> 
+                      {mov.referencia_venta_id ? `Venta: ${mov.referencia_venta_id}` : (mov.descripcion || '-')}
                     </td>
-                    <td className="px-4 py-2 whitespace-nowrap text-right font-medium">
-                         {/* Usar helper para formato de saldo acumulado */}
+                     <td className={`px-4 py-3 whitespace-nowrap text-right ${mov.monto >= 0 ? 'text-green-700' : 'text-red-700'}`}> {/* Cambiado color de monto positivo a verde */}
+                       {`${mov.monto >= 0 ? '+' : ''}${formatNumberWithCommas(mov.monto)}`}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-right font-medium">
                          {formatSaldoDisplay(mov.saldo_acumulado)}
                     </td>
                   </tr>
@@ -146,18 +108,24 @@ export default function ModalEstadoCuenta({ isOpen, onClose, cliente, onGenerate
           </div>
         )}
 
-        <div className="flex justify-end mt-6 space-x-3">
+        <div className="flex flex-wrap justify-end mt-6 space-x-3">
+          <button
+            onClick={handleViewImage} 
+            className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={!movimientos || movimientos.length === 0} 
+          >
+            Ver Ticket (Imagen)
+          </button>
           <button
             onClick={handleDownloadPDF}
             className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={movimientos.length === 0 || loadingMovimientos}
+            disabled={!movimientos || movimientos.length === 0}
           >
             Descargar Estado PDF
           </button>
            <button
             onClick={onClose}
             className="px-4 py-2 bg-gray-300 text-gray-800 rounded-md hover:bg-gray-400 transition duration-200"
-            disabled={loadingMovimientos}
           >
             Cerrar
           </button>

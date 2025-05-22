@@ -1,27 +1,30 @@
 // src/components/clientes/ClienteVentasModal.jsx
 import React from 'react';
 
-// Helper para formatear moneda (debe ser consistente con el resto de tu app)
+// Helper para formatear moneda (debe ser consistente)
 const formatCurrency = (amount) => {
     const numericAmount = parseFloat(amount);
     if (isNaN(numericAmount)) {
         return '$0.00';
     }
-    return numericAmount.toLocaleString('en-US', { // O 'es-MX' o la configuración que uses
+    return numericAmount.toLocaleString('en-US', { 
        style: 'currency',
-       currency: 'USD', // Ajusta según tu moneda
+       currency: 'USD', 
        minimumFractionDigits: 2,
        maximumFractionDigits: 2,
    });
 };
 
+// No necesitamos formatTicketDateTime aquí si se pasa como prop formatDateFunction
+
 export default function ClienteVentasModal({
   isOpen,
   onClose,
-  clienteActual, // El objeto del cliente cuyas ventas se muestran
-  ventasCliente, // Array de las ventas de este cliente
-  onSelectSale, // Función para manejar la selección de una venta para ver su detalle
-  loading // Booleano para indicar si las ventas del cliente se están cargando
+  clienteActual, 
+  ventasCliente, 
+  onSelectSale, 
+  loading,
+  formatDateFunction // --- NUEVO: Recibir la función de formateo de fecha ---
 }) {
   if (!isOpen || !clienteActual) {
     return null;
@@ -30,11 +33,11 @@ export default function ClienteVentasModal({
   return (
     <div 
       className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-40 flex items-center justify-center p-4" 
-      onClick={onClose} // Cerrar al hacer clic en el overlay
+      onClick={onClose}
     >
       <div 
         className="bg-white p-6 md:p-8 rounded-lg shadow-xl w-full max-w-2xl relative max-h-[90vh] overflow-y-auto" 
-        onClick={e => e.stopPropagation()} // Evitar que el clic dentro del modal lo cierre
+        onClick={e => e.stopPropagation()}
       >
         <button 
           onClick={onClose} 
@@ -68,7 +71,8 @@ export default function ClienteVentasModal({
                   <tr key={venta.id} className="hover:bg-gray-50 transition-colors duration-150">
                     <td className="p-3 whitespace-nowrap text-sm font-medium text-gray-900">{venta.codigo_venta}</td>
                     <td className="p-3 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">
-                      {venta.fecha ? new Date(venta.fecha).toLocaleString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Fecha desconocida'}
+                      {/* --- MODIFICADO: Usar la función de formateo pasada como prop --- */}
+                      {formatDateFunction ? formatDateFunction(venta.fecha || venta.created_at) : new Date(venta.fecha || venta.created_at).toLocaleString()}
                     </td>
                     <td className="p-3 whitespace-nowrap text-sm text-gray-500 hidden sm:table-cell">{venta.forma_pago}</td>
                     <td className="p-3 whitespace-nowrap text-sm font-semibold text-gray-900 text-right">
@@ -76,7 +80,7 @@ export default function ClienteVentasModal({
                     </td>
                     <td className="p-3 whitespace-nowrap text-center text-sm font-medium">
                       <button
-                        onClick={() => onSelectSale(venta)} // Llama a la función para abrir el modal de detalle
+                        onClick={() => onSelectSale(venta)}
                         className="px-3 py-1 bg-blue-600 text-white rounded-md shadow-sm hover:bg-blue-700 transition duration-200 ease-in-out text-xs"
                         title="Ver Detalle de la Venta"
                       >
