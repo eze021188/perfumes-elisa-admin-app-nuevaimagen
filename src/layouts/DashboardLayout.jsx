@@ -3,6 +3,19 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { supabase } from '../supabase';
 import toast from 'react-hot-toast';
 import { useAuth } from '../contexts/AuthContext';
+import { 
+  Home, 
+  ShoppingCart, 
+  FileText, 
+  Tag, 
+  Users, 
+  Package, 
+  DollarSign, 
+  BarChart2, 
+  UserCog, 
+  CreditCard,
+  LogOut
+} from 'lucide-react';
 
 export default function DashboardLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -19,16 +32,16 @@ export default function DashboardLayout() {
   };
 
   const links = [
-    { to: '/', label: 'Inicio', icon: '📊' },
-    { to: '/checkout', label: 'Checkout', icon: '🛒' },
-    { to: '/presupuestos/crear', label: 'Presupuestos', icon: '📝' },
-    { to: '/productos', label: 'Productos', icon: '🏷️' },
-    { to: '/clientes', label: 'Clientes', icon: '👥' },
-    { to: '/compras', label: 'Compras', icon: '📦' },
-    { to: '/ventas', label: 'Ventas', icon: '💰' },
-    { to: '/reportes', label: 'Reportes', icon: '📈' },
-    { to: '/usuarios', label: 'Usuarios', icon: '👤' },
-    { to: '/saldos-clientes', label: 'Saldos', icon: '💳' },
+    { to: '/', label: 'Inicio', icon: <Home size={18} /> },
+    { to: '/checkout', label: 'Checkout', icon: <ShoppingCart size={18} /> },
+    { to: '/presupuestos/crear', label: 'Presupuestos', icon: <FileText size={18} /> },
+    { to: '/productos', label: 'Productos', icon: <Tag size={18} /> },
+    { to: '/clientes', label: 'Clientes', icon: <Users size={18} /> },
+    { to: '/compras', label: 'Compras', icon: <Package size={18} /> },
+    { to: '/ventas', label: 'Ventas', icon: <DollarSign size={18} /> },
+    { to: '/reportes', label: 'Reportes', icon: <BarChart2 size={18} /> },
+    { to: '/usuarios', label: 'Usuarios', icon: <UserCog size={18} /> },
+    { to: '/saldos-clientes', label: 'Saldos', icon: <CreditCard size={18} /> },
   ];
 
   return (
@@ -57,7 +70,7 @@ export default function DashboardLayout() {
                   `nav-link ${isActive ? 'active' : ''}`
                 }
               >
-                <span className="text-xl">{icon}</span>
+                <span className="text-current">{icon}</span>
                 <span>{label}</span>
               </NavLink>
             ))}
@@ -85,7 +98,7 @@ export default function DashboardLayout() {
               onClick={handleLogout}
               className="w-full btn-secondary flex items-center justify-center space-x-2"
             >
-              <span>🚪</span>
+              <LogOut size={16} />
               <span>Cerrar Sesión</span>
             </button>
           </div>
