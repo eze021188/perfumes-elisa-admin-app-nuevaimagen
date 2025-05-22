@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Bar, Doughnut } from 'react-chartjs-2';
 import { 
   BarChart3, ShoppingCart, Users, DollarSign, Calendar, 
-  TrendingUp, Clock, AlertTriangle, Package 
+  TrendingUp, Clock, AlertTriangle, Package, ArrowRight
 } from 'lucide-react';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
@@ -33,9 +33,11 @@ const mockSalesTrendData = {
     {
       label: 'Ventas',
       data: [65000, 59000, 80000, 81000, 56000, 125850],
-      backgroundColor: 'rgba(59, 130, 246, 0.5)',
+      backgroundColor: 'rgba(59, 130, 246, 0.7)',
       borderColor: 'rgba(59, 130, 246, 1)',
       borderWidth: 1,
+      borderRadius: 6,
+      hoverBackgroundColor: 'rgba(59, 130, 246, 0.9)',
     }
   ]
 };
@@ -46,11 +48,11 @@ const mockPaymentMethodsData = {
     {
       data: [45, 25, 20, 8, 2],
       backgroundColor: [
-        'rgba(59, 130, 246, 0.7)', // Azul
-        'rgba(16, 185, 129, 0.7)', // Verde
-        'rgba(245, 158, 11, 0.7)', // Ámbar
-        'rgba(99, 102, 241, 0.7)', // Índigo
-        'rgba(156, 163, 175, 0.7)', // Gris
+        'rgba(59, 130, 246, 0.8)', // Azul
+        'rgba(16, 185, 129, 0.8)', // Verde
+        'rgba(245, 158, 11, 0.8)', // Ámbar
+        'rgba(99, 102, 241, 0.8)', // Índigo
+        'rgba(156, 163, 175, 0.8)', // Gris
       ],
       borderColor: [
         'rgba(59, 130, 246, 1)',
@@ -60,6 +62,7 @@ const mockPaymentMethodsData = {
         'rgba(156, 163, 175, 1)',
       ],
       borderWidth: 1,
+      hoverOffset: 10,
     }
   ]
 };
@@ -101,11 +104,14 @@ const Dashboard = () => {
   const [endDate, setEndDate] = useState(new Date());
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+    <div className="space-y-8">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between bg-white p-6 rounded-xl shadow-soft border border-gray-100 mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 mb-1">Dashboard</h1>
+          <p className="text-gray-500">Bienvenido al panel de control de Perfumes Elisa</p>
+        </div>
         
-        <div className="mt-4 md:mt-0 flex flex-col sm:flex-row items-center space-y-2 sm:space-y-0 sm:space-x-2">
+        <div className="mt-4 md:mt-0 flex flex-col sm:flex-row items-center space-y-2 sm:space-y-0 sm:space-x-3">
           <div className="flex items-center space-x-2">
             <span className="text-sm text-gray-500">Desde:</span>
             <DatePicker
@@ -114,7 +120,7 @@ const Dashboard = () => {
               selectsStart
               startDate={startDate}
               endDate={endDate}
-              className="border border-gray-300 rounded-md p-2 text-sm"
+              className="border border-gray-300 rounded-md p-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
           <div className="flex items-center space-x-2">
@@ -126,13 +132,14 @@ const Dashboard = () => {
               startDate={startDate}
               endDate={endDate}
               minDate={startDate}
-              className="border border-gray-300 rounded-md p-2 text-sm"
+              className="border border-gray-300 rounded-md p-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
           <Button 
             variant="primary" 
             size="sm"
             icon={<Calendar size={16} />}
+            className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
           >
             Aplicar
           </Button>
@@ -140,67 +147,72 @@ const Dashboard = () => {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <KpiCard
           title="Ventas Totales"
           value={mockDashboardMetrics.totalSales}
           prefix="$"
-          icon={<DollarSign size={24} />}
+          icon={<DollarSign size={20} />}
           change={{ value: 12.5, isPositive: true }}
         />
         <KpiCard
           title="Pedidos Totales"
           value={mockDashboardMetrics.totalOrders}
-          icon={<ShoppingCart size={24} />}
+          icon={<ShoppingCart size={20} />}
           change={{ value: 8.2, isPositive: true }}
         />
         <KpiCard
           title="Clientes Nuevos"
           value={mockDashboardMetrics.newCustomers}
-          icon={<Users size={24} />}
+          icon={<Users size={20} />}
           change={{ value: 5.1, isPositive: true }}
         />
         <KpiCard
           title="Venta Promedio"
           value={mockDashboardMetrics.averageSale}
           prefix="$"
-          icon={<TrendingUp size={24} />}
+          icon={<TrendingUp size={20} />}
           change={{ value: 3.4, isPositive: false }}
         />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <KpiCard
           title="Ventas del Día"
           value={mockDashboardMetrics.dailySales}
           prefix="$"
-          icon={<Calendar size={24} />}
+          icon={<Calendar size={20} />}
         />
         <KpiCard
           title="Ventas a Clientes Nuevos"
           value={mockDashboardMetrics.newCustomerSales}
           prefix="$"
-          icon={<Users size={24} />}
+          icon={<Users size={20} />}
           change={{ value: 15.3, isPositive: true }}
         />
         <KpiCard
           title="Cuentas por Cobrar"
           value={mockDashboardMetrics.accountsReceivable}
           prefix="$"
-          icon={<Clock size={24} />}
+          icon={<Clock size={20} />}
         />
         <KpiCard
           title="Saldos Vencidos"
           value={mockDashboardMetrics.overdueBalance}
           prefix="$"
-          icon={<AlertTriangle size={24} />}
+          icon={<AlertTriangle size={20} />}
           change={{ value: 8.7, isPositive: false }}
         />
       </div>
 
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card className="lg:col-span-2" title="Tendencia de Ventas por Período">
+        <Card 
+          className="lg:col-span-2" 
+          title="Tendencia de Ventas por Período"
+          subtitle="Últimos 6 meses"
+          icon={<BarChart3 size={20} className="text-blue-600" />}
+        >
           <div className="h-80">
             <Bar 
               data={mockSalesTrendData}
@@ -210,19 +222,61 @@ const Dashboard = () => {
                 plugins: {
                   legend: {
                     position: 'top',
+                    labels: {
+                      font: {
+                        family: "'Inter', sans-serif",
+                        size: 12
+                      },
+                      boxWidth: 15,
+                      padding: 15
+                    }
                   },
                   tooltip: {
                     mode: 'index',
                     intersect: false,
+                    backgroundColor: 'rgba(17, 24, 39, 0.9)',
+                    titleFont: {
+                      family: "'Inter', sans-serif",
+                      size: 13
+                    },
+                    bodyFont: {
+                      family: "'Inter', sans-serif",
+                      size: 12
+                    },
+                    padding: 12,
+                    cornerRadius: 8,
+                    caretSize: 6,
+                    boxPadding: 4
                   },
                 },
                 scales: {
                   y: {
                     beginAtZero: true,
+                    grid: {
+                      color: 'rgba(226, 232, 240, 0.6)',
+                      drawBorder: false
+                    },
                     ticks: {
+                      font: {
+                        family: "'Inter', sans-serif",
+                        size: 11
+                      },
+                      padding: 8,
                       callback: function(value) {
                         return '$' + value.toLocaleString();
                       }
+                    }
+                  },
+                  x: {
+                    grid: {
+                      display: false
+                    },
+                    ticks: {
+                      font: {
+                        family: "'Inter', sans-serif",
+                        size: 11
+                      },
+                      padding: 8
                     }
                   }
                 }
@@ -231,7 +285,11 @@ const Dashboard = () => {
           </div>
         </Card>
 
-        <Card title="Ventas por Forma de Pago">
+        <Card 
+          title="Ventas por Forma de Pago"
+          subtitle="Distribución actual"
+          icon={<DollarSign size={20} className="text-green-600" />}
+        >
           <div className="h-80 flex items-center justify-center">
             <Doughnut 
               data={mockPaymentMethodsData}
@@ -241,9 +299,44 @@ const Dashboard = () => {
                 plugins: {
                   legend: {
                     position: 'bottom',
+                    labels: {
+                      font: {
+                        family: "'Inter', sans-serif",
+                        size: 12
+                      },
+                      boxWidth: 15,
+                      padding: 15,
+                      usePointStyle: true
+                    }
                   },
+                  tooltip: {
+                    backgroundColor: 'rgba(17, 24, 39, 0.9)',
+                    titleFont: {
+                      family: "'Inter', sans-serif",
+                      size: 13
+                    },
+                    bodyFont: {
+                      family: "'Inter', sans-serif",
+                      size: 12
+                    },
+                    padding: 12,
+                    cornerRadius: 8,
+                    callbacks: {
+                      label: function(context) {
+                        const label = context.label || '';
+                        const value = context.raw || 0;
+                        const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                        const percentage = Math.round((value / total) * 100);
+                        return `${label}: ${percentage}% (${value})`;
+                      }
+                    }
+                  }
                 },
-                cutout: '65%',
+                cutout: '70%',
+                animation: {
+                  animateScale: true,
+                  animateRotate: true
+                }
               }}
             />
           </div>
@@ -252,11 +345,28 @@ const Dashboard = () => {
 
       {/* Top Lists and Alerts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card title="Productos Más Vendidos">
+        <Card 
+          title="Productos Más Vendidos"
+          icon={<Package size={20} className="text-blue-600" />}
+          actions={
+            <Button 
+              variant="outline" 
+              size="sm"
+              icon={<ArrowRight size={16} />}
+              iconPosition="right"
+            >
+              Ver todos
+            </Button>
+          }
+        >
           <Table
             data={mockTopProducts}
             columns={[
-              { header: 'Producto', accessor: 'name' },
+              { 
+                header: 'Producto', 
+                accessor: 'name',
+                className: 'font-medium text-gray-900'
+              },
               { 
                 header: 'Unidades', 
                 accessor: 'sales',
@@ -264,19 +374,41 @@ const Dashboard = () => {
               },
               { 
                 header: 'Monto', 
-                accessor: (row) => `$${row.amount.toLocaleString()}`,
+                accessor: (row) => (
+                  <span className="font-medium text-gray-900">
+                    ${row.amount.toLocaleString()}
+                  </span>
+                ),
                 className: 'text-right' 
               },
             ]}
             keyExtractor={(item) => item.id}
+            hoverEffect={true}
           />
         </Card>
 
-        <Card title="Clientes con Más Compras">
+        <Card 
+          title="Clientes con Más Compras"
+          icon={<Users size={20} className="text-indigo-600" />}
+          actions={
+            <Button 
+              variant="outline" 
+              size="sm"
+              icon={<ArrowRight size={16} />}
+              iconPosition="right"
+            >
+              Ver todos
+            </Button>
+          }
+        >
           <Table
             data={mockTopCustomers}
             columns={[
-              { header: 'Cliente', accessor: 'name' },
+              { 
+                header: 'Cliente', 
+                accessor: 'name',
+                className: 'font-medium text-gray-900'
+              },
               { 
                 header: 'Compras', 
                 accessor: 'purchases',
@@ -284,21 +416,43 @@ const Dashboard = () => {
               },
               { 
                 header: 'Monto', 
-                accessor: (row) => `$${row.amount.toLocaleString()}`,
+                accessor: (row) => (
+                  <span className="font-medium text-gray-900">
+                    ${row.amount.toLocaleString()}
+                  </span>
+                ),
                 className: 'text-right' 
               },
             ]}
             keyExtractor={(item) => item.id}
+            hoverEffect={true}
           />
         </Card>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card title="Mejores Vendedores">
+        <Card 
+          title="Mejores Vendedores"
+          icon={<Users size={20} className="text-purple-600" />}
+          actions={
+            <Button 
+              variant="outline" 
+              size="sm"
+              icon={<ArrowRight size={16} />}
+              iconPosition="right"
+            >
+              Ver todos
+            </Button>
+          }
+        >
           <Table
             data={mockTopSellers}
             columns={[
-              { header: 'Vendedor', accessor: 'name' },
+              { 
+                header: 'Vendedor', 
+                accessor: 'name',
+                className: 'font-medium text-gray-900'
+              },
               { 
                 header: 'Ventas', 
                 accessor: 'sales',
@@ -306,24 +460,31 @@ const Dashboard = () => {
               },
               { 
                 header: 'Monto', 
-                accessor: (row) => `$${row.amount.toLocaleString()}`,
+                accessor: (row) => (
+                  <span className="font-medium text-gray-900">
+                    ${row.amount.toLocaleString()}
+                  </span>
+                ),
                 className: 'text-right' 
               },
             ]}
             keyExtractor={(item) => item.id}
+            hoverEffect={true}
           />
         </Card>
 
         <Card 
           title="Productos con Bajo Stock" 
-          icon={<AlertTriangle className="text-warning-500" size={20} />}
+          icon={<AlertTriangle size={20} className="text-warning-500" />}
+          className="border-warning-100"
         >
           <Table
             data={mockLowStockProducts}
             columns={[
               { 
                 header: 'Producto', 
-                accessor: 'name' 
+                accessor: 'name',
+                className: 'font-medium text-gray-900'
               },
               { 
                 header: 'Stock Actual', 
@@ -354,12 +515,14 @@ const Dashboard = () => {
               },
             ]}
             keyExtractor={(item) => item.id}
+            hoverEffect={true}
           />
           <div className="mt-4 flex justify-end">
             <Button 
               variant="outline" 
               size="sm"
               icon={<Package size={16} />}
+              className="border-warning-300 text-warning-700 hover:bg-warning-50"
             >
               Gestionar Inventario
             </Button>

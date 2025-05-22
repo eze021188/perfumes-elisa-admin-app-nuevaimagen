@@ -16,7 +16,9 @@ import {
   CreditCard,
   LogOut,
   Menu,
-  X
+  X,
+  Bell,
+  Settings
 } from 'lucide-react';
 
 export default function DashboardLayout() {
@@ -34,28 +36,28 @@ export default function DashboardLayout() {
   };
 
   const links = [
-    { to: '/', label: 'Inicio', icon: <Home size={18} className="text-current" /> },
-    { to: '/checkout', label: 'Checkout', icon: <ShoppingCart size={18} className="text-current" /> },
-    { to: '/presupuestos/crear', label: 'Presupuestos', icon: <FileText size={18} className="text-current" /> },
-    { to: '/productos', label: 'Productos', icon: <Tag size={18} className="text-current" /> },
-    { to: '/clientes', label: 'Clientes', icon: <Users size={18} className="text-current" /> },
-    { to: '/compras', label: 'Compras', icon: <Package size={18} className="text-current" /> },
-    { to: '/ventas', label: 'Ventas', icon: <DollarSign size={18} className="text-current" /> },
-    { to: '/reportes', label: 'Reportes', icon: <BarChart2 size={18} className="text-current" /> },
-    { to: '/usuarios', label: 'Usuarios', icon: <UserCog size={18} className="text-current" /> },
-    { to: '/saldos-clientes', label: 'Saldos', icon: <CreditCard size={18} className="text-current" /> },
+    { to: '/', label: 'Inicio', icon: <Home size={18} className="text-blue-600" /> },
+    { to: '/checkout', label: 'Checkout', icon: <ShoppingCart size={18} className="text-indigo-600" /> },
+    { to: '/presupuestos/crear', label: 'Presupuestos', icon: <FileText size={18} className="text-purple-600" /> },
+    { to: '/productos', label: 'Productos', icon: <Tag size={18} className="text-pink-600" /> },
+    { to: '/clientes', label: 'Clientes', icon: <Users size={18} className="text-orange-600" /> },
+    { to: '/compras', label: 'Compras', icon: <Package size={18} className="text-yellow-600" /> },
+    { to: '/ventas', label: 'Ventas', icon: <DollarSign size={18} className="text-green-600" /> },
+    { to: '/reportes', label: 'Reportes', icon: <BarChart2 size={18} className="text-teal-600" /> },
+    { to: '/usuarios', label: 'Usuarios', icon: <UserCog size={18} className="text-cyan-600" /> },
+    { to: '/saldos-clientes', label: 'Saldos', icon: <CreditCard size={18} className="text-blue-600" /> },
   ];
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
       {/* Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-soft transform transition-transform duration-200 ease-in-out
+        className={`fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-elegant transform transition-transform duration-300 ease-in-out
           ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 md:static`}
       >
         <div className="h-full flex flex-col">
           {/* Logo - Ahora 100% más grande */}
-          <div className="p-6 flex justify-center items-center">
+          <div className="p-6 flex justify-center items-center border-b border-gray-100">
             <img
               src="/images/PERFUMESELISA.png"
               alt="Perfumes Elisa"
@@ -63,29 +65,30 @@ export default function DashboardLayout() {
             />
           </div>
 
-          {/* Navegación - Ahora con mejor espaciado */}
-          <nav className="flex-1 px-4 py-2 space-y-1 overflow-y-auto">
+          {/* Navegación - Ahora con mejor espaciado y colores por sección */}
+          <nav className="flex-1 px-4 py-4 space-y-1.5 overflow-y-auto">
             {links.map(({ to, label, icon }) => (
               <NavLink
                 key={to}
                 to={to}
                 end={to === '/'}
                 className={({ isActive }) =>
-                  `nav-link ${isActive ? 'active' : ''}`
+                  `flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-700 hover:bg-gray-50 
+                   transition-all duration-200 ease-in-out ${isActive ? 'bg-blue-50 text-blue-700 font-medium shadow-sm' : ''}`
                 }
               >
-                <span className="text-current">{icon}</span>
-                <span>{label}</span>
+                <span className="flex-shrink-0">{icon}</span>
+                <span className="font-medium">{label}</span>
               </NavLink>
             ))}
           </nav>
 
           {/* Perfil de usuario y botón de cierre de sesión */}
           <div className="p-4 border-t border-gray-100">
-            <div className="flex items-center space-x-3 px-4 py-3 mb-4 bg-gray-50 rounded-lg">
+            <div className="flex items-center space-x-3 px-4 py-3 mb-4 bg-gray-50 rounded-lg border border-gray-100">
               <div className="flex-shrink-0">
-                <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
-                  <span className="text-blue-600 text-sm font-medium">
+                <div className="w-10 h-10 rounded-full bg-gradient-to-r from-blue-500 to-indigo-600 flex items-center justify-center">
+                  <span className="text-white text-sm font-medium">
                     {user?.email?.[0].toUpperCase()}
                   </span>
                 </div>
@@ -101,10 +104,10 @@ export default function DashboardLayout() {
             </div>
             <button
               onClick={handleLogout}
-              className="w-full btn-secondary flex items-center justify-center space-x-2"
+              className="w-full flex items-center justify-center space-x-2 px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-gray-700 hover:bg-gray-50 hover:text-red-600 transition-colors duration-200"
             >
               <LogOut size={16} />
-              <span>Cerrar Sesión</span>
+              <span className="font-medium">Cerrar Sesión</span>
             </button>
           </div>
         </div>
@@ -123,30 +126,46 @@ export default function DashboardLayout() {
           </button>
           
           <div className="flex-1 flex items-center justify-between">
-            <h1 className="text-xl font-semibold text-gray-800">
+            <h1 className="text-xl font-semibold text-gray-800 hidden md:block">
               Perfumes Elisa
             </h1>
             
             <div className="flex items-center space-x-4">
-              <div className="relative">
-                <button className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100">
-                  <span className="text-gray-600">🔔</span>
-                </button>
+              <button className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-600 hover:text-gray-900 transition-colors">
+                <Bell size={18} />
+              </button>
+              <button className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-600 hover:text-gray-900 transition-colors">
+                <Settings size={18} />
+              </button>
+              <div className="hidden md:flex items-center space-x-3">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-r from-blue-500 to-indigo-600 flex items-center justify-center">
+                  <span className="text-white text-xs font-medium">
+                    {user?.email?.[0].toUpperCase()}
+                  </span>
+                </div>
+                <span className="text-sm font-medium text-gray-700">
+                  {user?.email?.split('@')[0]}
+                </span>
               </div>
             </div>
           </div>
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 p-6">
+        <main className="flex-1 p-6 bg-gray-50">
           <Outlet />
         </main>
+        
+        {/* Footer */}
+        <footer className="bg-white border-t border-gray-100 py-4 px-6 text-center text-sm text-gray-500">
+          <p>© {new Date().getFullYear()} Perfumes Elisa. Todos los derechos reservados.</p>
+        </footer>
       </div>
 
       {/* Mobile Overlay */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-50 z-40 md:hidden"
+          className="fixed inset-0 bg-black bg-opacity-50 z-40 md:hidden transition-opacity duration-300"
           onClick={() => setSidebarOpen(false)}
         />
       )}
