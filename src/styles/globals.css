@@ -12,8 +12,8 @@
 
 @layer components {
   .btn-primary {
-    @apply px-6 py-2.5 bg-brand-600 text-white font-medium rounded-lg shadow-sm
-           hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2
+    @apply px-6 py-2.5 bg-blue-600 text-white font-medium rounded-lg shadow-sm
+           hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
            disabled:opacity-50 disabled:cursor-not-allowed
            transition-all duration-200 ease-in-out;
   }
@@ -21,14 +21,14 @@
   .btn-secondary {
     @apply px-6 py-2.5 bg-white text-gray-700 font-medium rounded-lg shadow-sm
            border border-gray-200 hover:bg-gray-50 hover:border-gray-300
-           focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2
+           focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
            disabled:opacity-50 disabled:cursor-not-allowed
            transition-all duration-200 ease-in-out;
   }
 
   .input-primary {
     @apply w-full px-4 py-2.5 bg-white border border-gray-300 rounded-lg shadow-sm
-           focus:ring-2 focus:ring-brand-500 focus:border-brand-500
+           focus:ring-2 focus:ring-blue-500 focus:border-blue-500
            placeholder-gray-400 
            transition-all duration-200 ease-in-out;
   }
@@ -41,12 +41,12 @@
 
   .nav-link {
     @apply flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600
-           hover:bg-brand-50 hover:text-brand-700
+           hover:bg-blue-50 hover:text-blue-700
            transition-all duration-200 ease-in-out;
   }
 
   .nav-link.active {
-    @apply bg-brand-50 text-brand-700 font-medium;
+    @apply bg-blue-50 text-blue-700 font-medium;
   }
 
   .table-header {
@@ -83,8 +83,24 @@
   }
 
   .dropdown-item {
-    @apply block px-4 py-2 text-sm text-gray-700 hover:bg-brand-50 hover:text-brand-700
+    @apply block px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700
            transition-colors duration-150 ease-in-out;
+  }
+
+  .stat-card {
+    @apply bg-white rounded-xl shadow-soft p-6 border border-gray-100;
+  }
+
+  .stat-title {
+    @apply text-sm font-medium text-gray-500;
+  }
+
+  .stat-value {
+    @apply text-2xl font-semibold text-gray-900 mt-1;
+  }
+
+  .stat-desc {
+    @apply text-sm text-gray-600 mt-1;
   }
 }
 

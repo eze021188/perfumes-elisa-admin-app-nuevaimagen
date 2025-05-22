@@ -41,7 +41,7 @@ export default function DashboardLayout() {
         <div className="h-full flex flex-col">
           <div className="p-6">
             <img
-              src="/images/PERFUMESELISAblack.jpg"
+              src="/images/PERFUMESELISA.png"
               alt="Perfumes Elisa"
               className="h-12 w-auto mx-auto"
             />
@@ -63,7 +63,24 @@ export default function DashboardLayout() {
             ))}
           </nav>
 
-          <div className="p-4 border-t">
+          <div className="p-4 border-t border-gray-100">
+            <div className="flex items-center space-x-3 px-4 py-3 mb-4">
+              <div className="flex-shrink-0">
+                <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
+                  <span className="text-blue-600 text-sm font-medium">
+                    {user?.email?.[0].toUpperCase()}
+                  </span>
+                </div>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-gray-900 truncate">
+                  {user?.email}
+                </p>
+                <p className="text-xs text-gray-500 truncate">
+                  Administrador
+                </p>
+              </div>
+            </div>
             <button
               onClick={handleLogout}
               className="w-full btn-secondary flex items-center justify-center space-x-2"
@@ -81,15 +98,23 @@ export default function DashboardLayout() {
         <header className="bg-white shadow-sm border-b border-gray-100 h-16 flex items-center px-6">
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="md:hidden text-gray-600 hover:text-gray-900"
+            className="md:hidden text-gray-600 hover:text-gray-900 w-10 h-10 flex items-center justify-center rounded-lg hover:bg-gray-100"
           >
             {sidebarOpen ? '✕' : '☰'}
           </button>
-          <div className="flex-1" />
-          <div className="flex items-center space-x-4">
-            <span className="text-sm text-gray-600">
-              {user?.email}
-            </span>
+          
+          <div className="flex-1 flex items-center justify-between">
+            <h1 className="text-xl font-semibold text-gray-800">
+              Perfumes Elisa
+            </h1>
+            
+            <div className="flex items-center space-x-4">
+              <div className="relative">
+                <button className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100">
+                  <span className="text-gray-600">🔔</span>
+                </button>
+              </div>
+            </div>
           </div>
         </header>
 

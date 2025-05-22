@@ -31,9 +31,9 @@ export default function Login() {
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <img
-            src="/images/PERFUMESELISAblack.jpg"
+            src="/images/PERFUMESELISA.png"
             alt="Perfumes Elisa"
-            className="h-16 mx-auto mb-4"
+            className="h-20 mx-auto mb-6"
           />
           <h2 className="text-3xl font-bold text-gray-900">
             Bienvenido
@@ -43,52 +43,58 @@ export default function Login() {
           </p>
         </div>
 
-        <form onSubmit={handleLogin} className="card space-y-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Correo electrónico
-            </label>
-            <input
-              type="email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              required
-              className="input-primary"
-              placeholder="tu@email.com"
-            />
-          </div>
+        <form onSubmit={handleLogin} className="bg-white rounded-xl shadow-elegant border border-gray-100 p-8">
+          <div className="space-y-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Correo electrónico
+              </label>
+              <input
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                required
+                className="input-primary"
+                placeholder="tu@email.com"
+              />
+            </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Contraseña
-            </label>
-            <input
-              type="password"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              required
-              className="input-primary"
-              placeholder="••••••••"
-            />
-          </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Contraseña
+              </label>
+              <input
+                type="password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                required
+                className="input-primary"
+                placeholder="••••••••"
+              />
+            </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="btn-primary w-full"
-          >
-            {loading ? 'Iniciando sesión...' : 'Iniciar sesión'}
-          </button>
-
-          <div className="text-center space-y-2">
-            <Link
-              to="/reset-password"
-              className="text-sm text-brand-600 hover:text-brand-500"
+            <button
+              type="submit"
+              disabled={loading}
+              className="btn-primary w-full"
             >
-              ¿Olvidaste tu contraseña?
-            </Link>
+              {loading ? 'Iniciando sesión...' : 'Iniciar sesión'}
+            </button>
+
+            <div className="text-center">
+              <Link
+                to="/reset-password"
+                className="text-sm text-blue-600 hover:text-blue-500"
+              >
+                ¿Olvidaste tu contraseña?
+              </Link>
+            </div>
           </div>
         </form>
+
+        <p className="mt-4 text-center text-sm text-gray-600">
+          Sistema de Gestión Perfumes Elisa
+        </p>
       </div>
     </div>
   );
