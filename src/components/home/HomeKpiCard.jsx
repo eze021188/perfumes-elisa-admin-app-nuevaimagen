@@ -1,13 +1,13 @@
 // src/components/home/HomeKpiCard.jsx
 import React from 'react';
 
-// Helper para formatear moneda (puedes moverlo a un archivo utils si lo usas en varios sitios)
+// Helper para formatear moneda
 const formatCurrency = (amount) => {
     const numericAmount = parseFloat(amount);
     if (isNaN(numericAmount)) {
-        return '$0.00'; // O un string vacío, o lo que prefieras para valores no numéricos
+        return '$0.00';
     }
-    return numericAmount.toLocaleString('en-US', { // Ajusta 'en-US' y 'USD' según tu configuración regional
+    return numericAmount.toLocaleString('en-US', {
        style: 'currency',
        currency: 'USD',
        minimumFractionDigits: 2,
@@ -20,33 +20,37 @@ export default function HomeKpiCard({
   value,
   icon, // Emoji o componente de icono
   isLoading,
-  isCurrency = false, // Nueva prop para indicar si el valor es monetario
-  valueColorClass = 'text-blue-600', // Color por defecto para el valor
-  iconColorClass = 'text-blue-500', // Color por defecto para el icono
-  iconBgClass = 'bg-blue-100' // Color de fondo por defecto para el icono (si se usa un div para el icono)
+  isCurrency = false,
+  // Las props valueColorClass, iconColorClass, iconBgClass se ignorarán
+  // para un diseño más unificado y minimalista.
 }) {
   if (isLoading) {
     return (
-      <div className="bg-white rounded-lg shadow-md p-5 animate-pulse border border-gray-200">
-        <div className="h-4 bg-gray-300 rounded w-3/4 mb-3"></div>
-        <div className="h-6 bg-gray-300 rounded w-1/2"></div>
+      <div className="bg-white border border-slate-200 rounded-xl p-5 animate-pulse">
+        <div className="h-3 bg-slate-200 rounded w-3/5 mb-3"></div> {/* Ajustado para el título */}
+        <div className="h-7 bg-slate-300 rounded w-1/2"></div> {/* Ajustado para el valor */}
       </div>
     );
   }
 
-  const displayValue = isCurrency ? formatCurrency(value) : value;
+  const displayValue = isCurrency ? formatCurrency(value) : (typeof value === 'number' ? value.toLocaleString('en-US') : value);
 
   return (
-    <div className="bg-white rounded-lg shadow-md p-5 flex items-center justify-between border border-gray-200 hover:shadow-lg transition-shadow duration-200">
-      <div>
-        <p className="text-sm font-medium text-gray-500">{title}</p>
-        <p className={`text-2xl font-bold ${valueColorClass}`}>{displayValue}</p>
+    <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm hover:shadow-lg transition-shadow duration-300 ease-in-out flex flex-col justify-between h-full">
+      {/* Contenedor para título e icono (opcional, si se quiere el icono arriba) */}
+      <div className="flex justify-between items-start mb-2">
+        <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">{title}</p>
+        {icon && (
+          <div className="ml-2 flex-shrink-0">
+            <span className="text-2xl text-slate-400">{icon}</span> {/* Icono más sutil */}
+          </div>
+        )}
       </div>
-      {icon && (
-        <div className={`p-3 rounded-full ${iconBgClass}`}> {/* Contenedor opcional para el icono con fondo */}
-          <span className={`text-3xl opacity-80 ${iconColorClass}`}>{icon}</span>
-        </div>
-      )}
+      <div>
+        <p className="text-3xl font-semibold text-slate-800">{displayValue}</p>
+        {/* Aquí se podría añadir un indicador de cambio porcentual si se tuviera ese dato */}
+        {/* Ejemplo: <p className="text-xs text-green-500 mt-1">+5.2% vs mes anterior</p> */}
+      </div>
     </div>
   );
 }

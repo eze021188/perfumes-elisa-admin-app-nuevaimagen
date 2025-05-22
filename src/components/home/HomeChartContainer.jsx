@@ -1,55 +1,52 @@
 // src/components/home/HomeChartContainer.jsx
 import React from 'react';
-import { Line, Pie } from 'react-chartjs-2';
-// ChartJS y sus componentes ya deben estar registrados en tu Home.jsx o un archivo de configuración global de Chart.js
+import { Line, Pie, Bar } from 'react-chartjs-2'; // MODIFICADO: Importar Bar
 
 export default function HomeChartContainer({
   title,
   chartData,
   chartOptions,
   isLoading,
-  chartType = 'line', // 'line' o 'pie'
-  loadingError, // Mensaje de error si la carga falla
-  noDataMessage = "No hay datos disponibles para mostrar." // Mensaje si no hay datos
+  chartType, // 'line', 'pie', 'doughnut', o 'bar'
+  loadingError,
+  noDataMessage = "No hay datos disponibles para este gráfico."
 }) {
-  if (isLoading) {
-    return (
-      <div className="bg-white rounded-lg shadow-md p-4 animate-pulse h-80 flex items-center justify-center border border-gray-200">
-        <div className="w-3/4 h-3/4 bg-gray-300 rounded"></div> {/* Placeholder más grande para gráfico */}
-      </div>
-    );
-  }
-
-  if (loadingError) {
-    return (
-      <div className="bg-white rounded-lg shadow-md p-4 h-80 flex flex-col items-center justify-center border border-red-300">
-        <h3 className="text-lg font-semibold mb-3 text-gray-700">{title}</h3>
-        <p className="text-center text-red-600 font-semibold">{loadingError}</p>
-      </div>
-    );
-  }
   
-  // Verifica si hay datos válidos para renderizar el gráfico
-  // Para gráficos de pastel, necesitamos que datasets[0].data tenga elementos.
-  // Para gráficos de línea, necesitamos que labels y datasets[0].data tengan elementos.
-  const hasData = chartData && chartData.datasets && chartData.datasets.length > 0 && 
-                  chartData.datasets[0].data && chartData.datasets[0].data.length > 0 &&
-                  (chartType === 'pie' || (chartData.labels && chartData.labels.length > 0));
-
+  const renderChart = () => {
+    if (!chartData || !chartData.datasets || chartData.datasets.every(ds => ds.data.length === 0)) {
+      return <p className="text-center text-sm text-slate-500 py-10">{noDataMessage}</p>;
+    }
+    if (chartType === 'line') {
+      return <Line data={chartData} options={chartOptions} />;
+    }
+    if (chartType === 'pie' || chartType === 'doughnut') { 
+      return <Pie data={chartData} options={chartOptions} />;
+    }
+    // MODIFICADO: Añadir caso para 'bar'
+    if (chartType === 'bar') {
+      return <Bar data={chartData} options={chartOptions} />;
+    }
+    return <p className="text-center text-sm text-red-500">Tipo de gráfico '{chartType}' no soportado.</p>;
+  };
 
   return (
-    <div className="bg-white rounded-lg shadow-md p-4 border border-gray-200 hover:shadow-lg transition-shadow duration-200">
-      <h3 className="text-lg font-semibold mb-4 text-gray-700">{title}</h3>
-      {hasData ? (
-        <div className="h-64 w-full"> {/* Contenedor con altura fija para el gráfico */}
-          {chartType === 'line' && <Line data={chartData} options={chartOptions} />}
-          {chartType === 'pie' && <Pie data={chartData} options={chartOptions} />}
-        </div>
-      ) : (
-        <div className="h-64 w-full flex items-center justify-center">
-            <p className="text-center text-gray-500 italic">{noDataMessage}</p>
-        </div>
-      )}
+    <div className="bg-white border border-slate-200 rounded-xl p-5 md:p-6 shadow-sm h-full flex flex-col">
+      <h2 className="text-lg font-semibold text-slate-700 mb-1">{title}</h2>
+      <p className="text-xs text-slate-400 mb-4">Visualización de datos</p> {/* Subtítulo o descripción opcional */}
+      
+      <div className="flex-grow relative min-h-[250px] sm:min-h-[300px]"> {/* Altura mínima para el gráfico */}
+        {isLoading ? (
+          <div className="absolute inset-0 flex justify-center items-center bg-white/50 backdrop-blur-sm rounded-lg">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+          </div>
+        ) : loadingError ? (
+          <div className="flex justify-center items-center h-full">
+            <p className="text-center text-sm text-red-500 font-medium p-4">{loadingError}</p>
+          </div>
+        ) : (
+          renderChart()
+        )}
+      </div>
     </div>
   );
 }

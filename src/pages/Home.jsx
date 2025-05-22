@@ -2,17 +2,19 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { supabase } from '../supabase';
 import toast from 'react-hot-toast';
-import { Line, Pie } from 'react-chartjs-2';
+import { Line, Pie, Bar } from 'react-chartjs-2'; // Importar Bar
 import {
   Chart as ChartJS,
   CategoryScale,
   LinearScale,
   PointElement,
   LineElement,
+  BarElement, // Registrar BarElement
   ArcElement,
   Title,
   Tooltip,
-  Legend
+  Legend,
+  Filler 
 } from 'chart.js';
 
 // Importar componentes divididos
@@ -27,13 +29,15 @@ ChartJS.register(
   LinearScale,
   PointElement,
   LineElement,
+  BarElement, // Añadido BarElement
   ArcElement,
   Title,
   Tooltip,
-  Legend
+  Legend,
+  Filler 
 );
 
-// Helpers (podrían moverse a utils.js)
+// Helpers
 const formatCurrency = (amount) => {
     const numericAmount = parseFloat(amount);
     if (isNaN(numericAmount)) return '$0.00';
@@ -44,10 +48,28 @@ const formatDateLabel = (dateString) => {
     if (!dateString) return 'Fecha desconocida';
     try {
         const date = new Date(dateString);
-        return date.toLocaleDateString('es-ES', { month: 'short', year: 'numeric' });
+        let d = date;
+        if (typeof dateString === 'string' && dateString.indexOf('T') === -1) {
+            d = new Date(dateString + 'T00:00:00');
+        }
+        return d.toLocaleDateString('es-ES', { month: 'short', year: '2-digit' });
     } catch (e) {
+        console.error("Error en formatDateLabel:", e, "con dateString:", dateString);
         return dateString;
     }
+};
+
+// Colores base para el dashboard rediseñado
+const CHART_COLORS = {
+  primary: 'rgb(59, 130, 246)', 
+  primaryLight: 'rgba(59, 130, 246, 0.1)',
+  secondary: 'rgb(16, 185, 129)', 
+  tertiary: 'rgb(245, 158, 11)', 
+  quaternary: 'rgb(99, 102, 241)', 
+  neutralLight: 'rgb(229, 231, 235)', 
+  textPrimary: 'rgb(17, 24, 39)', 
+  textSecondary: 'rgb(75, 85, 99)', 
+  textMuted: 'rgb(156, 163, 175)', 
 };
 
 export default function Home() {
@@ -69,7 +91,7 @@ export default function Home() {
   const [lowStockProducts, setLowStockProducts] = useState([]);
   const [loadingLists, setLoadingLists] = useState(true);
   const [listsError, setListsError] = useState(null);
-  const [inventoryError, setInventoryError] = useState(null); // Específico para bajo stock
+  const [inventoryError, setInventoryError] = useState(null);
 
   const [startDate, setStartDate] = useState(() => {
       const now = new Date();
@@ -79,11 +101,12 @@ export default function Home() {
 
   useEffect(() => {
     const fetchAllDashboardData = async () => {
+        console.log("Dashboard: Iniciando fetchAllDashboardData con rango:", startDate, "a", endDate); 
         setLoadingMetrics(true); setLoadingCharts(true); setLoadingLists(true);
         setMetricsError(null); setChartsError(null); setListsError(null); setInventoryError(null);
+        const toastId = toast.loading('Cargando datos del dashboard...');
 
         try {
-            // KPIs
             const { data: kpiData, error: kpiErr } = await supabase.rpc('get_kpi_metrics', { start_date: startDate, end_date: endDate }).single();
             if (kpiErr) throw kpiErr;
             setKpis({
@@ -99,48 +122,63 @@ export default function Home() {
         } catch (err) {
             console.error('Error fetching KPI metrics:', err.message);
             setMetricsError('Error al cargar métricas.');
+            toast.error('Error al cargar métricas.', { id: toastId });
         } finally {
             setLoadingMetrics(false);
         }
 
         try {
-            // Charts Data
+            console.log("Dashboard: Fetching get_monthly_sales_trend..."); 
             const { data: monthlyData, error: monthlyErr } = await supabase.rpc('get_monthly_sales_trend', { start_date: startDate, end_date: endDate });
             if (monthlyErr) throw monthlyErr;
+            console.log("Dashboard: Datos RECIBIDOS de get_monthly_sales_trend:", JSON.parse(JSON.stringify(monthlyData))); 
             setMonthlySalesData(monthlyData || []);
 
+            console.log("Dashboard: Fetching get_sales_by_payment_method..."); 
             const { data: paymentData, error: paymentErr } = await supabase.rpc('get_sales_by_payment_method', { start_date: startDate, end_date: endDate });
             if (paymentErr) throw paymentErr;
+            console.log("Dashboard: Datos RECIBIDOS de get_sales_by_payment_method:", paymentData); 
             setSalesByPaymentMethodData(paymentData || []);
         } catch (err) {
             console.error('Error fetching sales chart data:', err.message);
             setChartsError('Error al cargar datos de gráficos.');
+            toast.error('Error al cargar datos de gráficos.', { id: toastId });
         } finally {
             setLoadingCharts(false);
         }
 
         try {
-            // Top Lists
-            const { data: topProdData, error: topProdErr } = await supabase.rpc('get_top_products_by_sales', { limit_count: 5, start_date: startDate, end_date: endDate });
-            if (topProdErr) throw topProdErr;
-            setTopProducts((topProdData || []).map(p => ({ id: p.product_id, name: p.product_name, value: p.total_sales })));
-            
-            const { data: topCliData, error: topCliErr } = await supabase.rpc('get_top_clients_by_sales', { limit_count: 5, start_date: startDate, end_date: endDate });
-            if (topCliErr) throw topCliErr;
-            setTopClients((topCliData || []).map(c => ({ id: c.client_id, name: c.client_name, value: c.total_purchases })));
+            const { data: topCliData, error: topCliErr } = await supabase.rpc('get_top_clients_by_sales_subtotal', { limit_count: 5, start_date: startDate, end_date: endDate });
+            if (topCliErr) {
+                console.error('Error fetching top clients (get_top_clients_by_sales_subtotal):', topCliErr.message);
+                setListsError(prev => prev ? `${prev}, Error clientes top.` : 'Error clientes top.');
+            } else {
+                setTopClients((topCliData || []).map(c => ({ id: c.client_id, name: c.client_name, value: c.total_value_of_goods_purchased })));
+            }
 
+            const { data: topProdData, error: topProdErr } = await supabase.rpc('get_top_products_by_sales', { limit_count: 5, start_date: startDate, end_date: endDate });
+            if (topProdErr) {
+                console.error('Error fetching top products:', topProdErr.message);
+                setListsError(prev => prev ? `${prev}, Error productos top.` : 'Error productos top.');
+            } else {
+                setTopProducts((topProdData || []).map(p => ({ id: p.product_id, name: p.product_name, value: p.total_sales })));
+            }
+            
             const { data: topSellData, error: topSellErr } = await supabase.rpc('get_top_sellers_by_sales', { limit_count: 5, start_date: startDate, end_date: endDate });
-            if (topSellErr) console.warn('Error fetching top sellers:', topSellErr.message);
-            setTopVendors((topSellData || []).map(s => ({ id: s.seller_id, name: s.seller_name, value: s.total_sales })));
-        } catch (err) {
-            console.error('Error fetching top lists:', err.message);
-            setListsError('Error al cargar listas top.');
+            if (topSellErr) {
+                console.warn('Error fetching top sellers:', topSellErr.message);
+            } else {
+                setTopVendors((topSellData || []).map(s => ({ id: s.seller_id, name: s.seller_name, value: s.total_sales })));
+            }
+        } catch (err) { 
+            console.error('Error general fetching top lists:', err.message);
+            if (!listsError) setListsError('Error al cargar algunas listas top.'); 
+            toast.error('Error al cargar listas top.', { id: toastId });
         } finally {
             setLoadingLists(false);
         }
         
         try {
-            // Low Stock (no depende de fechas)
             const { data: lowStockData, error: lowStockErr } = await supabase.rpc('get_low_stock_products', { stock_threshold: 10 });
             if (lowStockErr) throw lowStockErr;
             setLowStockProducts((lowStockData || []).map(p => ({ id: p.product_id, name: p.product_name, value: p.current_stock, valueLabel: "en stock" })));
@@ -148,148 +186,215 @@ export default function Home() {
             console.error('Error fetching low stock products:', err.message);
             setInventoryError('Error al cargar productos con bajo stock.');
         }
+        
+        if (!metricsError && !chartsError && !listsError) {
+            toast.success('Datos del dashboard cargados.', { id: toastId });
+        } else {
+            toast.dismiss(toastId); 
+        }
     };
     fetchAllDashboardData();
-  }, [startDate, endDate]);
+  }, [startDate, endDate]); 
 
-  const monthlySalesChartData = useMemo(() => ({
-      labels: monthlySalesData.map(item => formatDateLabel(item.sale_month)),
-      datasets: [{
-          label: 'Ventas Mensuales',
-          data: monthlySalesData.map(item => item.monthly_sales),
-          borderColor: 'rgb(75, 192, 192)', backgroundColor: 'rgba(75, 192, 192, 0.5)',
-          tension: 0.3, fill: true, pointBackgroundColor: 'rgb(75, 192, 192)',
-          pointBorderColor: '#fff', pointHoverBackgroundColor: '#fff', pointHoverBorderColor: 'rgb(75, 192, 192)',
-      }],
-  }), [monthlySalesData]);
+  console.log("Dashboard: Estado monthlySalesData ANTES de useMemo:", JSON.parse(JSON.stringify(monthlySalesData))); 
 
-  const monthlySalesChartOptions = useMemo(() => ({
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { position: 'top', labels: { font: { size: 12 }, color: '#333' }}, title: { display: false },
-          tooltip: { callbacks: { label: ctx => `${ctx.dataset.label || ''}: ${formatCurrency(ctx.raw)}`}, backgroundColor: 'rgba(0,0,0,0.7)', bodyColor: '#fff', padding: 10, cornerRadius: 4 }
+  const commonChartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        position: 'top',
+        labels: {
+          font: { size: 12, family: 'Inter, sans-serif' },
+          color: CHART_COLORS.textSecondary,
+          padding: 20,
+        },
       },
-      scales: { x: { ticks: { color: '#666', font: { size: 10 }}, grid: { display: false }},
-                y: { beginAtZero: true, ticks: { callback: val => formatCurrency(val), color: '#666', font: {size: 10}}, grid: {color: '#eee', borderDash:[2,2]}}}
-  }), []);
+      tooltip: {
+        backgroundColor: 'rgba(17, 24, 39, 0.85)', 
+        titleColor: '#fff',
+        bodyColor: '#fff',
+        titleFont: { family: 'Inter, sans-serif', weight: 'bold' },
+        bodyFont: { family: 'Inter, sans-serif' },
+        padding: 12,
+        cornerRadius: 6,
+        boxPadding: 3,
+      },
+    },
+    scales: {
+      x: {
+        ticks: { color: CHART_COLORS.textMuted, font: { size: 10, family: 'Inter, sans-serif' } },
+        grid: { display: false },
+        border: { color: CHART_COLORS.neutralLight }
+      },
+      y: {
+        beginAtZero: true,
+        ticks: { color: CHART_COLORS.textMuted, font: { size: 10, family: 'Inter, sans-serif' }, callback: val => formatCurrency(val) },
+        grid: { color: CHART_COLORS.neutralLight, borderDash: [3, 3], drawBorder: false },
+      },
+    },
+  };
 
-  const paymentMethodChartData = useMemo(() => {
-      const bgColors = ['rgba(255, 99, 132, 0.7)', 'rgba(54, 162, 235, 0.7)', 'rgba(255, 206, 86, 0.7)', 'rgba(75, 192, 192, 0.7)', 'rgba(153, 102, 255, 0.7)'];
+  // Determinar el tipo de gráfico para la tendencia de ventas
+  const salesTrendChartType = useMemo(() => {
+    return monthlySalesData && monthlySalesData.length === 1 ? 'bar' : 'line';
+  }, [monthlySalesData]);
+
+  const monthlySalesChartData = useMemo(() => {
+      const labels = monthlySalesData.map(item => formatDateLabel(item.sale_month));
+      const data = monthlySalesData.map(item => item.monthly_sales);
+      console.log("Dashboard: Calculando monthlySalesChartData. Labels:", labels, "Data:", data, "ChartType:", salesTrendChartType); 
+      
+      const datasetBase = {
+        label: 'Ventas',
+        data: data,
+        borderColor: CHART_COLORS.primary,
+        pointBorderColor: '#fff',
+        pointHoverBorderColor: CHART_COLORS.primary,
+      };
+
+      if (salesTrendChartType === 'bar') {
+        return {
+          labels: labels,
+          datasets: [{
+            ...datasetBase,
+            backgroundColor: CHART_COLORS.primary,
+            barThickness: 50, // Ajusta el grosor de la barra
+            maxBarThickness: 70,
+          }]
+        };
+      }
+      // Para 'line' chart
+      return {
+          labels: labels,
+          datasets: [{
+              ...datasetBase,
+              backgroundColor: CHART_COLORS.primaryLight,
+              tension: 0.4, 
+              fill: true,
+              pointRadius: monthlySalesData.length === 1 ? 8 : 6, // Punto más grande si es único
+              pointBackgroundColor: CHART_COLORS.primary,
+              pointBorderWidth: 2, 
+              pointHoverRadius: monthlySalesData.length === 1 ? 10 : 8, 
+              pointHoverBackgroundColor: '#fff',
+              pointHoverBorderWidth: 2,
+          }],
+      }
+  }, [monthlySalesData, salesTrendChartType]);
+
+  const monthlySalesChartOptions = useMemo(() => {
+    const options = {
+        ...commonChartOptions,
+        plugins: {
+          ...commonChartOptions.plugins,
+          tooltip: {
+            ...commonChartOptions.plugins.tooltip,
+            callbacks: { label: ctx => `${ctx.dataset.label || ''}: ${formatCurrency(ctx.raw)}` },
+          },
+        },
+        elements: {
+            line: {
+                skipNull: true 
+            }
+        },
+    };
+    if (salesTrendChartType === 'bar') {
+        options.scales.x.grid.display = false; // No grid para x en bar
+        options.plugins.legend.display = false; // No leyenda para bar con un solo dataset
+    }
+    return options;
+  }, [salesTrendChartType]);
+
+
+  const paymentMethodChartData = useMemo(() => { /* ... (sin cambios) ... */ 
+      const PIE_CHART_COLORS = [CHART_COLORS.primary, CHART_COLORS.secondary, CHART_COLORS.tertiary, CHART_COLORS.quaternary, 'rgb(236, 72, 153)' ];
       return {
           labels: salesByPaymentMethodData.map(item => item.payment_method),
           datasets: [{
               data: salesByPaymentMethodData.map(item => item.method_sales),
-              backgroundColor: salesByPaymentMethodData.map((_, i) => bgColors[i % bgColors.length]),
-              borderColor: salesByPaymentMethodData.map((_, i) => bgColors[i % bgColors.length].replace('0.7', '1')), // Darker border
-              borderWidth: 1, hoverOffset: 8,
+              backgroundColor: salesByPaymentMethodData.map((_, i) => PIE_CHART_COLORS[i % PIE_CHART_COLORS.length]),
+              borderColor: '#fff', borderWidth: 2, hoverOffset: 8, hoverBorderColor: '#fff',
           }],
       };
   }, [salesByPaymentMethodData]);
-
-  const paymentMethodChartOptions = useMemo(() => ({
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { position: 'right', labels: { font: { size: 12 }, color: '#333', usePointStyle: true }},
-          tooltip: { callbacks: { label: ctx => {
-              const total = ctx.dataset.data.reduce((s, v) => s + v, 0);
-              const percentage = total > 0 ? ((ctx.raw / total) * 100).toFixed(1) + '%' : '0%';
-              return `${ctx.label || ''}: ${formatCurrency(ctx.raw)} (${percentage})`;
-          }}, backgroundColor: 'rgba(0,0,0,0.7)', bodyColor: '#fff', padding: 10, cornerRadius: 4 }
-      }
+  const paymentMethodChartOptions = useMemo(() => ({ /* ... (sin cambios) ... */ 
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { position: 'bottom', labels: { font: { size: 11, family: 'Inter, sans-serif' }, color: CHART_COLORS.textSecondary, usePointStyle: true, boxWidth: 10, padding: 15,}},
+      tooltip: { ...commonChartOptions.plugins.tooltip, callbacks: { label: ctx => { const total = ctx.dataset.data.reduce((s, v) => s + v, 0); const percentage = total > 0 ? ((ctx.raw / total) * 100).toFixed(1) + '%' : '0%'; return `${ctx.label || ''}: ${formatCurrency(ctx.raw)} (${percentage})`;}}}},
+    cutout: '60%', 
   }), []);
 
-  const kpiCards = [
-    { title: "Pedidos en total", value: kpis.total_orders, icon: "🛒", valueColorClass: "text-blue-600", iconColorClass: "text-blue-500" },
-    { title: "Total ventas", value: kpis.total_sales, icon: "💰", isCurrency: true, valueColorClass: "text-green-600", iconColorClass: "text-green-500" },
-    { title: "Clientes nuevos", value: kpis.new_clients_count, icon: "👤+", valueColorClass: "text-cyan-600", iconColorClass: "text-cyan-500" },
-    { title: "Ventas clientes nuevos", value: kpis.new_clients_sales, icon: "💸", isCurrency: true, valueColorClass: "text-cyan-600", iconColorClass: "text-cyan-500" },
-    { title: "Venta promedio / pedido", value: kpis.average_sale_value, icon: "📈", isCurrency: true, valueColorClass: "text-purple-600", iconColorClass: "text-purple-500" },
-    { title: "Ventas por día (promedio)", value: kpis.sales_per_day, icon: "📅", isCurrency: true, valueColorClass: "text-teal-600", iconColorClass: "text-teal-500" },
-    { title: "Cuentas por cobrar", value: kpis.accounts_receivable, icon: "🏦", isCurrency: true, valueColorClass: "text-red-600", iconColorClass: "text-red-500" },
-    { title: "Saldos vencidos", value: kpis.overdue_balances, icon: "🚨", isCurrency: true, valueColorClass: "text-orange-600", iconColorClass: "text-orange-500" },
+  const kpiCards = [ /* ... (sin cambios) ... */ 
+    { title: "Pedidos en total", value: kpis.total_orders, icon: "🛒" }, { title: "Total ventas", value: kpis.total_sales, icon: "💰", isCurrency: true }, { title: "Clientes nuevos", value: kpis.new_clients_count, icon: "👤+" }, { title: "Ventas clientes nuevos", value: kpis.new_clients_sales, icon: "💸", isCurrency: true }, { title: "Venta promedio / pedido", value: kpis.average_sale_value, icon: "📈", isCurrency: true }, { title: "Ventas por día (promedio)", value: kpis.sales_per_day, icon: "📅", isCurrency: true }, { title: "Cuentas por cobrar", value: kpis.accounts_receivable, icon: "🏦", isCurrency: true }, { title: "Saldos vencidos", value: kpis.overdue_balances, icon: "🚨", isCurrency: true },
   ];
 
+  console.log("Dashboard: Final monthlySalesChartData para gráfica:", JSON.parse(JSON.stringify(monthlySalesChartData)));
+
   return (
-    <div className="min-h-screen bg-gray-100 p-4 md:p-8 lg:p-12">
-      <div className="flex flex-col md:flex-row items-center justify-between gap-4 md:gap-6 mb-8">
-        <h1 className="text-2xl md:text-3xl font-bold text-gray-800">Dashboard</h1>
-        <HomeDateRangePicker
-            startDate={startDate}
-            endDate={endDate}
-            onStartDateChange={setStartDate}
-            onEndDateChange={setEndDate}
-        />
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        {kpiCards.map(kpi => (
-          <HomeKpiCard
-            key={kpi.title}
-            title={kpi.title}
-            value={kpi.value}
-            icon={kpi.icon}
-            isLoading={loadingMetrics}
-            isCurrency={kpi.isCurrency}
-            valueColorClass={kpi.valueColorClass}
-            iconColorClass={kpi.iconColorClass}
+    <div className="min-h-screen bg-slate-50 p-6 md:p-8 font-inter">
+      <div className="max-w-full mx-auto">
+        
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-8">
+          <h1 className="text-3xl font-semibold text-slate-800">Dashboard</h1>
+          <HomeDateRangePicker
+              startDate={startDate}
+              endDate={endDate}
+              onStartDateChange={setStartDate}
+              onEndDateChange={setEndDate}
           />
-        ))}
-        {metricsError && <p className="col-span-full text-center text-red-600 font-semibold">{metricsError}</p>}
-      </div>
+        </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        <HomeChartContainer
-          title="Tendencia de Ventas Mensuales"
-          chartData={monthlySalesChartData}
-          chartOptions={monthlySalesChartOptions}
-          isLoading={loadingCharts}
-          chartType="line"
-          loadingError={chartsError}
-          noDataMessage="No hay datos de ventas mensuales para el período."
-        />
-        <HomeChartContainer
-          title="Ventas por Forma de Pago"
-          chartData={paymentMethodChartData}
-          chartOptions={paymentMethodChartOptions}
-          isLoading={loadingCharts}
-          chartType="pie"
-          loadingError={chartsError}
-          noDataMessage="No hay datos de ventas por forma de pago para el período."
-        />
-      </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5 mb-8">
+          {kpiCards.map(kpi => (
+            <HomeKpiCard
+              key={kpi.title}
+              title={kpi.title}
+              value={kpi.value}
+              icon={kpi.icon}
+              isLoading={loadingMetrics}
+              isCurrency={kpi.isCurrency}
+            />
+          ))}
+          {metricsError && <p className="col-span-full text-center text-red-500 font-medium py-4">{metricsError}</p>}
+        </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-        <HomeTopListCard
-          title="Top Productos por Ventas"
-          items={topProducts}
-          isLoading={loadingLists}
-          loadingError={listsError}
-          noDataMessage="No hay datos de productos top."
-        />
-        <HomeTopListCard
-          title="Top Clientes por Compras"
-          items={topClients}
-          isLoading={loadingLists}
-          loadingError={listsError}
-          noDataMessage="No hay datos de clientes top."
-        />
-        <HomeTopListCard
-          title="Top Vendedores por Ventas"
-          items={topVendors}
-          isLoading={loadingLists}
-          loadingError={listsError}
-          noDataMessage="No hay datos de vendedores top."
-        />
-      </div>
-      
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <HomeTopListCard
-            title="Productos con Bajo Stock (Umbral <= 10)"
-            items={lowStockProducts}
-            isLoading={loadingLists} // Podría tener su propio loading si se carga independientemente
-            loadingError={inventoryError}
-            noDataMessage="No hay productos con bajo stock."
-            valueFormatter={(value) => value} // No es moneda, solo el número
-        />
-        {/* Aquí podrías añadir otra tarjeta, como "Valor del Inventario Total" si implementas esa RPC */}
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-5 mb-8">
+          <div className="lg:col-span-3">
+            <HomeChartContainer
+              // MODIFICADO: La key ahora también depende del tipo de gráfico para forzar re-render si cambia entre línea y barra
+              key={`sales-trend-chart-${salesTrendChartType}-${JSON.stringify(monthlySalesChartData.labels)}`}
+              title="Tendencia de Ventas por Período" 
+              chartData={monthlySalesChartData}
+              chartOptions={monthlySalesChartOptions}
+              isLoading={loadingCharts}
+              chartType={salesTrendChartType} // MODIFICADO: Tipo de gráfico dinámico
+              loadingError={chartsError}
+              noDataMessage="No hay datos de ventas para el período."
+            />
+          </div>
+          <div className="lg:col-span-2">
+            <HomeChartContainer
+              key={`pie-chart-${JSON.stringify(paymentMethodChartData.labels)}`}
+              title="Ventas por Forma de Pago"
+              chartData={paymentMethodChartData}
+              chartOptions={paymentMethodChartOptions}
+              isLoading={loadingCharts}
+              chartType="pie"
+              loadingError={chartsError}
+              noDataMessage="No hay datos de ventas por forma de pago para el período."
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 mb-8">
+          <HomeTopListCard title="Top Productos por Ventas" items={topProducts} isLoading={loadingLists} loadingError={listsError} noDataMessage="No hay datos de productos top." />
+          <HomeTopListCard title="Top Clientes por Compras" items={topClients} isLoading={loadingLists} loadingError={listsError} noDataMessage="No hay datos de clientes top." />
+          <HomeTopListCard title="Top Vendedores por Ventas" items={topVendors} isLoading={loadingLists} loadingError={listsError} noDataMessage="No hay datos de vendedores top." />
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <HomeTopListCard title="Productos con Bajo Stock (Umbral ≤ 10)" items={lowStockProducts} isLoading={loadingLists} loadingError={inventoryError} noDataMessage="No hay productos con bajo stock." valueFormatter={(value) => value} />
+        </div>
       </div>
     </div>
   );
