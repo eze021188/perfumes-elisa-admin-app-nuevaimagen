@@ -14,7 +14,9 @@ import {
   BarChart2, 
   UserCog, 
   CreditCard,
-  LogOut
+  LogOut,
+  Menu,
+  X
 } from 'lucide-react';
 
 export default function DashboardLayout() {
@@ -32,16 +34,16 @@ export default function DashboardLayout() {
   };
 
   const links = [
-    { to: '/', label: 'Inicio', icon: <Home size={18} /> },
-    { to: '/checkout', label: 'Checkout', icon: <ShoppingCart size={18} /> },
-    { to: '/presupuestos/crear', label: 'Presupuestos', icon: <FileText size={18} /> },
-    { to: '/productos', label: 'Productos', icon: <Tag size={18} /> },
-    { to: '/clientes', label: 'Clientes', icon: <Users size={18} /> },
-    { to: '/compras', label: 'Compras', icon: <Package size={18} /> },
-    { to: '/ventas', label: 'Ventas', icon: <DollarSign size={18} /> },
-    { to: '/reportes', label: 'Reportes', icon: <BarChart2 size={18} /> },
-    { to: '/usuarios', label: 'Usuarios', icon: <UserCog size={18} /> },
-    { to: '/saldos-clientes', label: 'Saldos', icon: <CreditCard size={18} /> },
+    { to: '/', label: 'Inicio', icon: <Home size={18} className="text-current" /> },
+    { to: '/checkout', label: 'Checkout', icon: <ShoppingCart size={18} className="text-current" /> },
+    { to: '/presupuestos/crear', label: 'Presupuestos', icon: <FileText size={18} className="text-current" /> },
+    { to: '/productos', label: 'Productos', icon: <Tag size={18} className="text-current" /> },
+    { to: '/clientes', label: 'Clientes', icon: <Users size={18} className="text-current" /> },
+    { to: '/compras', label: 'Compras', icon: <Package size={18} className="text-current" /> },
+    { to: '/ventas', label: 'Ventas', icon: <DollarSign size={18} className="text-current" /> },
+    { to: '/reportes', label: 'Reportes', icon: <BarChart2 size={18} className="text-current" /> },
+    { to: '/usuarios', label: 'Usuarios', icon: <UserCog size={18} className="text-current" /> },
+    { to: '/saldos-clientes', label: 'Saldos', icon: <CreditCard size={18} className="text-current" /> },
   ];
 
   return (
@@ -52,15 +54,17 @@ export default function DashboardLayout() {
           ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 md:static`}
       >
         <div className="h-full flex flex-col">
-          <div className="p-6">
+          {/* Logo - Ahora 100% más grande */}
+          <div className="p-6 flex justify-center items-center">
             <img
               src="/images/PERFUMESELISA.png"
               alt="Perfumes Elisa"
-              className="h-12 w-auto mx-auto"
+              className="h-24 w-auto" /* Tamaño duplicado de h-12 a h-24 */
             />
           </div>
 
-          <nav className="flex-1 px-4 space-y-1 overflow-y-auto">
+          {/* Navegación - Ahora con mejor espaciado */}
+          <nav className="flex-1 px-4 py-2 space-y-1 overflow-y-auto">
             {links.map(({ to, label, icon }) => (
               <NavLink
                 key={to}
@@ -76,10 +80,11 @@ export default function DashboardLayout() {
             ))}
           </nav>
 
+          {/* Perfil de usuario y botón de cierre de sesión */}
           <div className="p-4 border-t border-gray-100">
-            <div className="flex items-center space-x-3 px-4 py-3 mb-4">
+            <div className="flex items-center space-x-3 px-4 py-3 mb-4 bg-gray-50 rounded-lg">
               <div className="flex-shrink-0">
-                <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
+                <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
                   <span className="text-blue-600 text-sm font-medium">
                     {user?.email?.[0].toUpperCase()}
                   </span>
@@ -112,8 +117,9 @@ export default function DashboardLayout() {
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
             className="md:hidden text-gray-600 hover:text-gray-900 w-10 h-10 flex items-center justify-center rounded-lg hover:bg-gray-100"
+            aria-label={sidebarOpen ? "Cerrar menú" : "Abrir menú"}
           >
-            {sidebarOpen ? '✕' : '☰'}
+            {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
           
           <div className="flex-1 flex items-center justify-between">
