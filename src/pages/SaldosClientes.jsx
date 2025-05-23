@@ -1,4 +1,3 @@
-// src/pages/SaldosClientes.jsx
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { supabase } from '../supabase';
 import { useNavigate } from 'react-router-dom';
@@ -6,14 +5,27 @@ import toast from 'react-hot-toast';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { differenceInDays } from 'date-fns';
-import html2canvas from 'html2canvas'; // Importar html2canvas
+import html2canvas from 'html2canvas';
+import { 
+  ArrowLeft, 
+  Search, 
+  Download, 
+  Share2, 
+  X, 
+  FileText, 
+  DollarSign, 
+  PlusCircle, 
+  CreditCard,
+  Users,
+  Clock
+} from 'lucide-react';
 
 // Importa los componentes de modales
 import ModalAbono from '../components/ModalAbono';
 import ModalSaldoFavor from '../components/ModalSaldoFavor';
 import ModalEstadoCuenta from '../components/ModalEstadoCuenta'; 
 
-// Helpers (asumiendo que ya existen y son correctos)
+// Helpers
 const formatCurrency = (amount, includeDecimals = true) => {
     const numericAmount = parseFloat(amount);
     if (isNaN(numericAmount)) return '$0.00';
@@ -36,6 +48,7 @@ const formatNumberWithCommas = (amount, includeSign = false, includeDecimals = t
     }
     return formatted;
 };
+
 const formatSaldoDisplay = (saldo, includeDecimals = true) => {
    const saldoAbs = Math.abs(saldo);
    const formattedAmount = formatNumberWithCommas(saldoAbs, false, includeDecimals);
@@ -76,8 +89,7 @@ const getBase64Image = async (url) => {
     }
 };
 
-
-// --- Componente para el Ticket de Estado de Cuenta en Imagen ---
+// Componente para el Ticket de Estado de Cuenta en Imagen
 const EstadoCuentaParaImagen = React.forwardRef(({ cliente, movimientos, logoSrc, dateTimeFormatter, currencyFormatter, saldoFormatter }, ref) => {
     if (!cliente || !movimientos) {
         return null;
@@ -85,43 +97,41 @@ const EstadoCuentaParaImagen = React.forwardRef(({ cliente, movimientos, logoSrc
 
     const ticketStyles = {
         width: '320px', padding: '15px', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif',
-        fontSize: '11px', backgroundColor: '#fff', color: '#212529', boxSizing: 'border-box',
+        fontSize: '11px', backgroundColor: '#1f2937', color: '#e5e7eb', boxSizing: 'border-box',
     };
     const headerSectionStyles = { display: 'flex', alignItems: 'center', marginBottom: '10px',};
     const logoContainerStyles = { marginRight: '10px',};
     const logoStyles = { maxWidth: '40px', maxHeight: '40px', display: 'block',};
     const titleAndClientStyles = { flexGrow: 1,};
-    const ticketTitleStyles = { fontSize: '14px', fontWeight: '600', margin: '0', color: '#000',};
-    const clientNameStyles = { fontSize: '12px', color: '#495057', margin: '2px 0 0 0',};
-    const companyContactStyles = { textAlign: 'center', fontSize: '9px', color: '#6c757d', margin: '5px 0 10px 0',};
+    const ticketTitleStyles = { fontSize: '14px', fontWeight: '600', margin: '0', color: '#f9fafb',};
+    const clientNameStyles = { fontSize: '12px', color: '#d1d5db', margin: '2px 0 0 0',};
+    const companyContactStyles = { textAlign: 'center', fontSize: '9px', color: '#9ca3af', margin: '5px 0 10px 0',};
     
-    const movementSectionTitleStyles = { fontSize: '12px', fontWeight: '600', marginTop: '10px', marginBottom: '5px', color: '#000', borderBottom: '1px solid #eee', paddingBottom: '3px'};
+    const movementSectionTitleStyles = { fontSize: '12px', fontWeight: '600', marginTop: '10px', marginBottom: '5px', color: '#f9fafb', borderBottom: '1px solid #374151', paddingBottom: '3px'};
     
-    // MODIFICADO: Aumentado padding vertical en movementItemStyles
     const movementItemStyles = { 
         display: 'grid', 
-        gridTemplateColumns: 'auto 1fr auto auto', // Fecha, Descripción Larga, Monto, Saldo
+        gridTemplateColumns: 'auto 1fr auto auto',
         gap: '3px 8px', 
-        padding: '6px 0', // Aumentado de 3px a 6px
-        borderBottom: '1px dashed #f0f0f0', 
-        alignItems: 'flex-start', // Cambiado a flex-start para mejor alineación con texto multilínea
+        padding: '6px 0',
+        borderBottom: '1px dashed #374151', 
+        alignItems: 'flex-start',
         fontSize: '10px'
     };
     const lastMovementItemStyles = {...movementItemStyles, borderBottom: 'none'};
     
-    // MODIFICADO: Estilo para la descripción del movimiento para permitir envoltura
     const movementDescriptionStyles = {
-        wordBreak: 'break-word', // Permite que palabras largas se rompan y envuelvan
-        overflowWrap: 'break-word', // Similar a word-break, para mejor compatibilidad
-        whiteSpace: 'normal', // Asegura que el texto pueda envolverse
-        textAlign: 'left', // Alineación izquierda para la descripción
+        wordBreak: 'break-word',
+        overflowWrap: 'break-word',
+        whiteSpace: 'normal',
+        textAlign: 'left',
     };
 
-    const saldoActualSectionStyles = { marginTop: '10px', paddingTop: '5px', borderTop: '1px solid #dee2e6', textAlign: 'right'};
-    const saldoActualLabelStyles = { fontSize: '12px', fontWeight: '600', color: '#000',};
-    const saldoActualValueStyles = (saldo) => ({ fontSize: '12px', fontWeight: '600', color: saldo > 0 ? '#dc3545' : (saldo < 0 ? '#28a745' : '#212529'),});
-    const footerStyles = { textAlign: 'center', marginTop: '15px', fontSize: '9px', color: '#6c757d',};
-    const hrMinimalistStyle = { border: 'none', borderTop: '1px solid #dee2e6', margin: '10px 0',};
+    const saldoActualSectionStyles = { marginTop: '10px', paddingTop: '5px', borderTop: '1px solid #374151', textAlign: 'right'};
+    const saldoActualLabelStyles = { fontSize: '12px', fontWeight: '600', color: '#f9fafb',};
+    const saldoActualValueStyles = (saldo) => ({ fontSize: '12px', fontWeight: '600', color: saldo > 0 ? '#f87171' : (saldo < 0 ? '#34d399' : '#e5e7eb'),});
+    const footerStyles = { textAlign: 'center', marginTop: '15px', fontSize: '9px', color: '#9ca3af',};
+    const hrMinimalistStyle = { border: 'none', borderTop: '1px solid #374151', margin: '10px 0',};
 
     const saldoFinal = movimientos.length > 0 ? movimientos[movimientos.length - 1].saldo_acumulado : (cliente.balance || 0);
 
@@ -140,15 +150,14 @@ const EstadoCuentaParaImagen = React.forwardRef(({ cliente, movimientos, logoSrc
             <h3 style={movementSectionTitleStyles}>Movimientos</h3>
             {movimientos.length > 0 ? movimientos.map((mov, index) => (
                 <div key={mov.id || index} style={index === movimientos.length - 1 ? lastMovementItemStyles : movementItemStyles}>
-                    <span style={{color: '#6c757d', whiteSpace: 'nowrap'}}>{new Date(mov.created_at).toLocaleDateString('es-MX', {day:'2-digit', month:'2-digit', year:'2-digit'})}</span>
-                    {/* MODIFICADO: Aplicar estilos para envoltura de texto */}
+                    <span style={{color: '#9ca3af', whiteSpace: 'nowrap'}}>{new Date(mov.created_at).toLocaleDateString('es-MX', {day:'2-digit', month:'2-digit', year:'2-digit'})}</span>
                     <span style={movementDescriptionStyles}> 
                         {mov.tipo_movimiento.replace(/_/g, ' ')}: {mov.referencia_venta_id ? `Venta ${mov.referencia_venta_id}` : (mov.descripcion || '-')}
                     </span>
-                    <span style={{textAlign: 'right', color: mov.monto >= 0 ? '#28a745' : '#dc3545', whiteSpace: 'nowrap'}}>{currencyFormatter(mov.monto, false)}</span> {/* Monto positivo verde, negativo rojo */}
+                    <span style={{textAlign: 'right', color: mov.monto >= 0 ? '#34d399' : '#f87171', whiteSpace: 'nowrap'}}>{currencyFormatter(mov.monto, false)}</span>
                     <span style={{textAlign: 'right', fontWeight: '500', whiteSpace: 'nowrap'}}>{saldoFormatter(mov.saldo_acumulado, false)}</span>
                 </div>
-            )) : <p style={{fontSize: '10px', color: '#6c757d', textAlign: 'center'}}>No hay movimientos.</p>}
+            )) : <p style={{fontSize: '10px', color: '#9ca3af', textAlign: 'center'}}>No hay movimientos.</p>}
             
             <div style={saldoActualSectionStyles}>
                 <span style={saldoActualLabelStyles}>Saldo Actual: </span>
@@ -162,7 +171,7 @@ const EstadoCuentaParaImagen = React.forwardRef(({ cliente, movimientos, logoSrc
     );
 });
 
-// --- Componente ImageActionModal (reutilizado) ---
+// Componente ImageActionModal
 const ImageActionModal = ({ isOpen, onClose, imageDataUrl, imageFile, titlePrefix = "Ticket", ventaCodigo, currencyFormatter, clienteNombre, ventaTotal }) => {
     if (!isOpen || !imageDataUrl) return null;
     const handleShare = async () => {
@@ -192,15 +201,24 @@ const ImageActionModal = ({ isOpen, onClose, imageDataUrl, imageFile, titlePrefi
         toast.success('Imagen descargada.');
     };
     return (
-        <div className="fixed inset-0 bg-gray-800 bg-opacity-75 overflow-y-auto h-full w-full z-[100] flex items-center justify-center p-2 sm:p-4" onClick={onClose}>
-            <div className="bg-white rounded-lg shadow-xl w-auto max-w-xs sm:max-w-sm md:max-w-md relative flex flex-col items-center p-3 sm:p-4" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm overflow-y-auto h-full w-full z-[100] flex items-center justify-center p-2 sm:p-4" onClick={onClose}>
+            <div className="bg-dark-800 rounded-lg shadow-dropdown-dark border border-dark-700 w-auto max-w-xs sm:max-w-sm md:max-w-md relative flex flex-col items-center p-3 sm:p-4" onClick={e => e.stopPropagation()}>
                 <div className="w-full mb-4 flex justify-center">
-                    <img src={imageDataUrl} alt={titlePrefix} className="max-w-full h-auto max-h-[70vh] object-contain shadow-md" />
+                    <img src={imageDataUrl} alt={titlePrefix} className="max-w-full h-auto max-h-[70vh] object-contain shadow-card-dark" />
                 </div>
                 <div className="flex flex-wrap justify-center gap-2 sm:gap-3 w-full">
-                    <button onClick={handleShare} className="px-3 py-2 sm:px-4 bg-blue-600 text-white rounded-md shadow-sm hover:bg-blue-700">Compartir Imagen</button>
-                    <button onClick={handleDownload} className="px-3 py-2 sm:px-4 bg-green-600 text-white rounded-md shadow-sm hover:bg-green-700">Descargar Imagen</button>
-                    <button onClick={onClose} className="px-3 py-2 sm:px-4 bg-gray-500 text-white rounded-md shadow-sm hover:bg-gray-600">Cerrar</button>
+                    <button onClick={handleShare} className="px-3 py-2 sm:px-4 bg-primary-600 text-white rounded-md shadow-sm hover:bg-primary-700 transition-colors flex items-center gap-1">
+                        <Share2 size={16} />
+                        Compartir
+                    </button>
+                    <button onClick={handleDownload} className="px-3 py-2 sm:px-4 bg-success-600 text-white rounded-md shadow-sm hover:bg-success-700 transition-colors flex items-center gap-1">
+                        <Download size={16} />
+                        Descargar
+                    </button>
+                    <button onClick={onClose} className="px-3 py-2 sm:px-4 bg-dark-600 text-gray-200 rounded-md shadow-sm hover:bg-dark-500 transition-colors flex items-center gap-1">
+                        <X size={16} />
+                        Cerrar
+                    </button>
                 </div>
             </div>
         </div>
@@ -302,7 +320,7 @@ export default function SaldosClientes() {
             setLoading(false);
         }
     } else {
-        setMovimientosClienteSeleccionado([]); // Limpiar por si acaso
+        setMovimientosClienteSeleccionado([]);
         setShowEstadoCuentaModal(true); 
     }
   };
@@ -338,7 +356,7 @@ export default function SaldosClientes() {
         if (logoBase64) {
             try {
                 const img = new Image(); img.crossOrigin = "Anonymous"; img.src = logoBase64;
-                await new Promise(resolve => { img.onload = resolve; img.onerror = resolve; }); // Esperar carga
+                await new Promise(resolve => { img.onload = resolve; img.onerror = resolve; });
                 if (img.complete && img.naturalHeight !== 0) {
                     const desiredLogoWidthMm = 30; const aspectRatio = img.width / img.height;
                     const calculatedLogoHeightMm = desiredLogoWidthMm / aspectRatio;
@@ -352,7 +370,7 @@ export default function SaldosClientes() {
         let textStartY = margin + 3;
         let yPosAfterHeaderBlock = Math.max(margin + logoResultHeight, textStartY + (mainTitleSize*0.5) + (smallTextSize*0.8*2) ) + 7;
 
-        if (!(logoBase64 && logoResultHeight > 0)) { // Si no hay logo o falló
+        if (!(logoBase64 && logoResultHeight > 0)) {
             textStartX = pageWidth / 2; textStartY = margin;
             doc.setFont('helvetica', 'bold'); doc.setFontSize(mainTitleSize); doc.text("PERFUMES ELISA", textStartX, textStartY, { align: 'center' }); textStartY += mainTitleSize * 0.5;
             doc.setFont('helvetica', 'normal'); doc.setFontSize(smallTextSize); doc.text("Ciudad Apodaca, N.L.", textStartX, textStartY, { align: 'center' }); textStartY += lineHeight * 0.8;
@@ -395,9 +413,9 @@ export default function SaldosClientes() {
         
         const thankYouMessage = "¡Gracias por tu confianza! Visítanos de nuevo pronto.";
         const finalMessageY = pageHeight - 12; 
-        if (yPos > finalMessageY - 10 && doc.internal.getNumberOfPages() <= 1) { doc.addPage(); yPos = margin; } // Asegurar que yPos se reinicie si hay nueva página
+        if (yPos > finalMessageY - 10 && doc.internal.getNumberOfPages() <= 1) { doc.addPage(); yPos = margin; }
         doc.setFont('helvetica', 'normal'); doc.setFontSize(normalTextSize); doc.setTextColor(80,80,80);
-        doc.text(thankYouMessage, pageWidth / 2, yPos > finalMessageY ? margin : finalMessageY , { align: 'center' }); // Ajustar Y si hay nueva página
+        doc.text(thankYouMessage, pageWidth / 2, yPos > finalMessageY ? margin : finalMessageY , { align: 'center' });
 
         doc.output('dataurlnewwindow');
     } catch (pdfError) { console.error("Error catastrófico PDF:", pdfError); toast.error("Error crítico al generar PDF."); }
@@ -412,7 +430,7 @@ export default function SaldosClientes() {
     setIsProcessingEstadoCuentaImage(true);
     toast.loading('Generando imagen...', { id: 'processingECImage' });
     try {
-        const canvas = await html2canvas(estadoCuentaImageRef.current, { useCORS: true, scale: 2, backgroundColor: '#ffffff'});
+        const canvas = await html2canvas(estadoCuentaImageRef.current, { useCORS: true, scale: 2, backgroundColor: '#1f2937'});
         const dataUrl = canvas.toDataURL('image/png');
         const blob = await (await fetch(dataUrl)).blob();
         const imageFile = new File([blob], `EstadoCuenta_${clienteSeleccionado.client_name.replace(/\s/g, '_')}.png`, { type: 'image/png' });
@@ -429,7 +447,7 @@ export default function SaldosClientes() {
 
   return (
     <>
-      {clienteSeleccionado && movimientosClienteSeleccionado && ( // Asegurar que movimientos exista
+      {clienteSeleccionado && movimientosClienteSeleccionado && (
           <div style={{ position: 'absolute', left: '-9999px', top: '-9999px', zIndex: -1 }}>
               <EstadoCuentaParaImagen 
                   ref={estadoCuentaImageRef}
@@ -454,53 +472,150 @@ export default function SaldosClientes() {
           clienteNombre={clienteSeleccionado?.client_name}
       />
 
-      <div className="min-h-screen bg-gray-100 p-4 md:p-8 lg:p-12">
+      <div className="min-h-screen bg-dark-900 p-4 md:p-8 lg:p-12">
         <div className="flex flex-col md:flex-row items-center justify-between gap-6 mb-8">
-            <button onClick={() => navigate('/')} className="px-6 py-2 bg-gray-700 text-white font-semibold rounded-lg shadow-md hover:bg-gray-800">Volver al inicio</button>
-            <h1 className="text-3xl font-bold text-gray-800 text-center w-full md:w-auto">Estados de cuenta</h1>
+            <button 
+                onClick={() => navigate('/')} 
+                className="px-6 py-2 bg-dark-800 text-gray-200 font-semibold rounded-lg shadow-elegant-dark hover:bg-dark-700 transition-colors flex items-center gap-2"
+            >
+                <ArrowLeft size={18} />
+                Volver al inicio
+            </button>
+            <h1 className="text-3xl font-bold text-gray-100 text-center">Estados de cuenta</h1>
             <div className="w-full md:w-[150px]" />
         </div>
-        <div className="bg-white rounded-lg shadow p-6 mb-6">
+        
+        <div className="bg-dark-800 rounded-lg shadow-card-dark p-6 mb-6 border border-dark-700/50">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
-                <div className="text-center md:text-left">
-                    <p className="text-lg font-medium text-gray-600">Total Por Cobrar</p>
-                    <p className="text-2xl font-bold text-red-600">{totalPorCobrar === 0 ? '$0.00' : `-${formatNumberWithCommas(totalPorCobrar)}`}</p>
+                <div className="card-dark p-4 flex flex-col items-center md:items-start">
+                    <div className="flex items-center gap-2 mb-2 text-gray-400">
+                        <DollarSign size={18} className="text-error-400" />
+                        <p className="text-lg font-medium">Total Por Cobrar</p>
+                    </div>
+                    <p className="text-2xl font-bold text-error-400">{totalPorCobrar === 0 ? '$0.00' : `-${formatNumberWithCommas(totalPorCobrar)}`}</p>
                 </div>
-                <div className="text-center md:text-left">
-                    <p className="text-lg font-medium text-gray-600">Total Saldo a Favor</p>
-                    <p className="text-2xl font-bold text-green-600">${formatNumberWithCommas(totalSaldoFavor)}</p>
+                
+                <div className="card-dark p-4 flex flex-col items-center md:items-start">
+                    <div className="flex items-center gap-2 mb-2 text-gray-400">
+                        <DollarSign size={18} className="text-success-400" />
+                        <p className="text-lg font-medium">Total Saldo a Favor</p>
+                    </div>
+                    <p className="text-2xl font-bold text-success-400">${formatNumberWithCommas(totalSaldoFavor)}</p>
                 </div>
+                
                 <div className="flex flex-col gap-3 justify-center md:justify-end">
                     <div className="flex space-x-3 justify-center md:justify-end">
-                        <button onClick={() => setActiveFilter('owing')} className={`px-4 py-2 border rounded-md text-sm font-semibold ${activeFilter === 'owing' ? 'bg-blue-600 text-white' : 'bg-white text-blue-600 hover:bg-blue-50'}`}>Clientes por Cobrar ({allClientsData.filter(c => c.balance > 0).length})</button>
-                        <button onClick={() => setActiveFilter('credit')} className={`px-4 py-2 border rounded-md text-sm font-semibold ${activeFilter === 'credit' ? 'bg-green-600 text-white' : 'bg-white text-green-600 hover:bg-green-50'}`}>Clientes Saldo a Favor ({allClientsData.filter(c => c.balance < 0).length})</button>
+                        <button 
+                            onClick={() => setActiveFilter('owing')} 
+                            className={`px-4 py-2 border rounded-md text-sm font-semibold flex items-center gap-1 transition-colors ${activeFilter === 'owing' ? 'bg-primary-600 text-white border-primary-700' : 'bg-dark-800 text-primary-400 border-dark-700 hover:bg-dark-700'}`}
+                        >
+                            <Users size={16} />
+                            Clientes por Cobrar ({allClientsData.filter(c => c.balance > 0).length})
+                        </button>
+                        <button 
+                            onClick={() => setActiveFilter('credit')} 
+                            className={`px-4 py-2 border rounded-md text-sm font-semibold flex items-center gap-1 transition-colors ${activeFilter === 'credit' ? 'bg-success-600 text-white border-success-700' : 'bg-dark-800 text-success-400 border-dark-700 hover:bg-dark-700'}`}
+                        >
+                            <CreditCard size={16} />
+                            Clientes Saldo a Favor ({allClientsData.filter(c => c.balance < 0).length})
+                        </button>
                     </div>
                     <div className="flex space-x-3 justify-center md:justify-end">
-                        <button onClick={() => setActiveFilter('all')} className={`px-4 py-2 border rounded-md text-sm font-semibold ${activeFilter === 'all' ? 'bg-gray-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-100'}`}>Mostrar todos ({allClientsData.length})</button>
-                        <input type="text" placeholder="Buscar cliente..." value={searchText} onChange={(e) => setSearchText(e.target.value)} className="p-2 border rounded-md text-sm"/>
+                        <button 
+                            onClick={() => setActiveFilter('all')} 
+                            className={`px-4 py-2 border rounded-md text-sm font-semibold flex items-center gap-1 transition-colors ${activeFilter === 'all' ? 'bg-dark-700 text-white border-dark-600' : 'bg-dark-800 text-gray-300 border-dark-700 hover:bg-dark-700'}`}
+                        >
+                            <Users size={16} />
+                            Mostrar todos ({allClientsData.length})
+                        </button>
+                        <div className="relative">
+                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <Search size={16} className="text-gray-500" />
+                            </div>
+                            <input 
+                                type="text" 
+                                placeholder="Buscar cliente..." 
+                                value={searchText} 
+                                onChange={(e) => setSearchText(e.target.value)} 
+                                className="pl-10 p-2 border border-dark-700 bg-dark-900 rounded-md text-sm text-gray-200 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                            />
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-            {loading && !allClientsData.length ? <p className="p-4 text-center">Cargando...</p> : error ? <p className="p-4 text-center text-red-500">{error}</p> : filteredAndSearchedClients.length === 0 ? (
-                <p className="p-4 text-center text-gray-500">{searchText ? `No clientes para "${searchText}"` : (activeFilter === 'owing' ? "No clientes con saldo pendiente." : activeFilter === 'credit' ? "No clientes con saldo a favor." : "No hay clientes.")}</p>
+        
+        <div className="bg-dark-800 rounded-lg shadow-card-dark overflow-hidden border border-dark-700/50">
+            {loading && !allClientsData.length ? (
+                <div className="flex justify-center items-center h-64">
+                    <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-400"></div>
+                </div>
+            ) : error ? (
+                <div className="p-4 text-center text-error-400">{error}</div>
+            ) : filteredAndSearchedClients.length === 0 ? (
+                <div className="p-8 text-center">
+                    <Users size={48} className="mx-auto text-gray-600 mb-3" />
+                    <p className="text-gray-400">
+                        {searchText ? `No se encontraron clientes para "${searchText}"` : 
+                         (activeFilter === 'owing' ? "No hay clientes con saldo pendiente." : 
+                          activeFilter === 'credit' ? "No hay clientes con saldo a favor." : 
+                          "No hay clientes.")}
+                    </p>
+                </div>
             ) : (
                 <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50"><tr><th className="px-6 py-3 text-left text-xs font-medium text-gray-500">Cliente</th><th className="px-3 py-3 text-center text-xs font-medium text-gray-500">Días sin pagar</th><th className="px-3 py-3 text-center text-xs font-medium text-gray-500">Días desde compra</th><th className="px-6 py-3 text-right text-xs font-medium text-gray-500">Saldo</th><th className="px-6 py-3 text-center text-xs font-medium text-gray-500">Acciones</th></tr></thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
+                    <table className="min-w-full divide-y divide-dark-700">
+                        <thead className="bg-dark-900">
+                            <tr>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Cliente</th>
+                                <th className="px-3 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider">Días sin pagar</th>
+                                <th className="px-3 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider">Días desde compra</th>
+                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">Saldo</th>
+                                <th className="px-6 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody className="bg-dark-800 divide-y divide-dark-700/50">
                             {filteredAndSearchedClients.map(cliente => (
-                                <tr key={cliente.client_id} className="hover:bg-gray-50 cursor-pointer" onClick={() => openEstadoCuentaModal(cliente)}>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{cliente.client_name}</td>
-                                    {cliente.balance <= 0 ? (<td className="px-3 py-4 text-sm text-center text-gray-600" colSpan="2">Sin adeudo</td>) : (<>
-                                        <td className="px-3 py-4 text-sm text-center text-gray-800">{cliente.daysSinceLastPayment !== null ? `${cliente.daysSinceLastPayment} días` : '-'}</td>
-                                        <td className="px-3 py-4 text-sm text-center text-gray-800">{cliente.daysSinceFirstPurchase !== null ? `${cliente.daysSinceFirstPurchase} días` : '-'}</td>
-                                    </>)}
-                                    <td className={`px-6 py-4 whitespace-nowrap text-sm text-right font-semibold ${cliente.balance > 0 ? 'text-red-600' : cliente.balance < 0 ? 'text-green-600' : 'text-gray-700'}`}>{formatSaldoDisplay(cliente.balance)}</td>
+                                <tr key={cliente.client_id} className="hover:bg-dark-700/50 transition-colors cursor-pointer" onClick={() => openEstadoCuentaModal(cliente)}>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-200">{cliente.client_name}</td>
+                                    {cliente.balance <= 0 ? (
+                                        <td className="px-3 py-4 text-sm text-center text-gray-400" colSpan="2">Sin adeudo</td>
+                                    ) : (
+                                        <>
+                                            <td className="px-3 py-4 text-sm text-center text-gray-300">
+                                                <div className="flex items-center justify-center gap-1">
+                                                    <Clock size={14} className="text-gray-400" />
+                                                    {cliente.daysSinceLastPayment !== null ? `${cliente.daysSinceLastPayment} días` : '-'}
+                                                </div>
+                                            </td>
+                                            <td className="px-3 py-4 text-sm text-center text-gray-300">
+                                                <div className="flex items-center justify-center gap-1">
+                                                    <Clock size={14} className="text-gray-400" />
+                                                    {cliente.daysSinceFirstPurchase !== null ? `${cliente.daysSinceFirstPurchase} días` : '-'}
+                                                </div>
+                                            </td>
+                                        </>
+                                    )}
+                                    <td className={`px-6 py-4 whitespace-nowrap text-sm text-right font-semibold ${cliente.balance > 0 ? 'text-error-400' : cliente.balance < 0 ? 'text-success-400' : 'text-gray-300'}`}>
+                                        {formatSaldoDisplay(cliente.balance)}
+                                    </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
-                                        <button onClick={(e) => { e.stopPropagation(); openAbonoModal(cliente); }} className="text-blue-600 hover:text-blue-900 mr-3">Abonar</button>
-                                        <button onClick={(e) => { e.stopPropagation(); openSaldoFavorModal(cliente); }} className="text-green-600 hover:text-green-900">Saldo Favor</button>
+                                        <div className="flex justify-center space-x-2">
+                                            <button 
+                                                onClick={(e) => { e.stopPropagation(); openAbonoModal(cliente); }} 
+                                                className="px-3 py-1 bg-primary-600 text-white rounded-md shadow-sm hover:bg-primary-700 transition-colors text-xs flex items-center gap-1"
+                                            >
+                                                <DollarSign size={14} />
+                                                Abonar
+                                            </button>
+                                            <button 
+                                                onClick={(e) => { e.stopPropagation(); openSaldoFavorModal(cliente); }} 
+                                                className="px-3 py-1 bg-success-600 text-white rounded-md shadow-sm hover:bg-success-700 transition-colors text-xs flex items-center gap-1"
+                                            >
+                                                <PlusCircle size={14} />
+                                                Saldo Favor
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                             ))}
@@ -509,15 +624,28 @@ export default function SaldosClientes() {
                 </div>
             )}
         </div>
-        <ModalAbono isOpen={showAbonoModal} onClose={() => {setShowAbonoModal(false); setClienteSeleccionado(null);}} cliente={clienteSeleccionado} onRecordAbono={handleRecordAbono}/>
-        <ModalSaldoFavor isOpen={showSaldoFavorModal} onClose={() => {setShowSaldoFavorModal(false); setClienteSeleccionado(null);}} cliente={clienteSeleccionado} onAddCredit={handleAddCredit}/>
+        
+        <ModalAbono 
+            isOpen={showAbonoModal} 
+            onClose={() => {setShowAbonoModal(false); setClienteSeleccionado(null);}} 
+            cliente={clienteSeleccionado} 
+            onRecordAbono={handleRecordAbono}
+        />
+        
+        <ModalSaldoFavor 
+            isOpen={showSaldoFavorModal} 
+            onClose={() => {setShowSaldoFavorModal(false); setClienteSeleccionado(null);}} 
+            cliente={clienteSeleccionado} 
+            onAddCredit={handleAddCredit}
+        />
+        
         <ModalEstadoCuenta
-             isOpen={showEstadoCuentaModal}
-             onClose={() => {setShowEstadoCuentaModal(false); setClienteSeleccionado(null); setMovimientosClienteSeleccionado([]); setIsEstadoCuentaImageActionModalOpen(false);}}
-             cliente={clienteSeleccionado}
-             movimientos={movimientosClienteSeleccionado} 
-             onGeneratePDF={generarPDFEstadoCuenta}
-             onViewAsImage={handleViewEstadoCuentaAsImage} 
+            isOpen={showEstadoCuentaModal}
+            onClose={() => {setShowEstadoCuentaModal(false); setClienteSeleccionado(null); setMovimientosClienteSeleccionado([]); setIsEstadoCuentaImageActionModalOpen(false);}}
+            cliente={clienteSeleccionado}
+            movimientos={movimientosClienteSeleccionado} 
+            onGeneratePDF={generarPDFEstadoCuenta}
+            onViewAsImage={handleViewEstadoCuentaAsImage} 
         />
       </div>
     </>

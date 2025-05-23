@@ -1,15 +1,25 @@
 // src/pages/Reportes.jsx
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-// Asegúrate de que la ruta a supabase.js sea correcta y que el archivo exporte 'supabase'
-import { supabase } from '../supabase'; // Esta ruta '../supabase' debería ser correcta si supabase.js está en src/
+import { supabase } from '../supabase';
 import toast from 'react-hot-toast';
-// Asegúrate de tener jspdf instalado: npm install jspdf
 import jsPDF from 'jspdf';
-// Asegúrate de tener jspdf-autotable instalado: npm install jspdf-autotable
 import 'jspdf-autotable';
+import { 
+  ArrowLeft, 
+  FileText, 
+  Download, 
+  Filter, 
+  Calendar, 
+  BarChart3, 
+  PieChart, 
+  Package, 
+  Users, 
+  Wallet, 
+  CreditCard 
+} from 'lucide-react';
 
-// Helper simple para formatear moneda (si no está global)
+// Helper para formatear moneda
 const formatCurrency = (amount) => {
      const numericAmount = parseFloat(amount);
      if (isNaN(numericAmount)) {
@@ -17,7 +27,7 @@ const formatCurrency = (amount) => {
      }
      return numericAmount.toLocaleString('en-US', {
         style: 'currency',
-        currency: 'USD', // Ajusta según tu moneda
+        currency: 'USD',
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
     });
@@ -34,7 +44,7 @@ const formatDateForFilename = (dateString) => {
     return `${year}${month}${day}_${hours}${minutes}`;
 };
 
-// >>> Función para cargar una imagen local y convertirla a Base64 para jsPDF <<<
+// Función para cargar una imagen local y convertirla a Base64 para jsPDF
 const getBase64Image = async (url) => {
     try {
         const response = await fetch(url);
@@ -58,48 +68,42 @@ const getBase64Image = async (url) => {
 export default function Reportes() {
   const navigate = useNavigate();
 
-  // --- Estados para la gestión de reportes ---
-  const [selectedReport, setSelectedReport] = useState(''); // Estado para el reporte seleccionado
-  const [reportData, setReportData] = useState(null); // Estado para los datos del reporte
-  const [loadingReport, setLoadingReport] = useState(false); // Estado para indicar si el reporte está cargando
-  const [reportError, setReportError] = useState(null); // Estado para errores del reporte
+  // Estados para la gestión de reportes
+  const [selectedReport, setSelectedReport] = useState('');
+  const [reportData, setReportData] = useState(null);
+  const [loadingReport, setLoadingReport] = useState(false);
+  const [reportError, setReportError] = useState(null);
 
-  // --- Estados para los filtros (ejemplo para Ventas por Período) ---
-  const [startDate, setStartDate] = useState(''); // Fecha de inicio del filtro
-  const [endDate, setEndDate] = useState(''); // Fecha de fin del filtro
+  // Estados para los filtros (ejemplo para Ventas por Período)
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
 
-  // --- Estados para otros filtros (ejemplos, descomentar y usar según necesidad) ---
-  // const [selectedClient, setSelectedClient] = useState(''); // Para reportes por cliente
-  // const [selectedProduct, setSelectedProduct] = useState(''); // Para reportes por producto
-  // const [selectedVendedor, setSelectedVendedor] = useState(''); // Para reportes por vendedor
-  // const [filterStatus, setFilterStatus] = useState(''); // Para reportes de stock (ej: bajo stock)
-
-  // >>> Estado para almacenar la imagen del logo en Base64 para el PDF <<<
+  // Estado para almacenar la imagen del logo en Base64 para el PDF
   const [logoBase64, setLogoBase64] = useState(null);
 
 
-  // >>> Cargar logo al iniciar para el PDF <<<
+  // Cargar logo al iniciar para el PDF
   useEffect(() => {
       async function loadLogo() {
-          const logoUrl = '/images/PERFUMESELISAwhite.jpg'; // Asegúrate que esta ruta sea correcta
+          const logoUrl = '/images/PERFUMESELISAwhite.jpg';
           const base64 = await getBase64Image(logoUrl);
           setLogoBase64(base64);
       }
       loadLogo();
-  }, []); // Solo se ejecuta una vez al montar
+  }, []);
 
 
-  // --- Función para cargar los datos del reporte seleccionado ---
+  // Función para cargar los datos del reporte seleccionado
   const handleGenerateReport = async () => {
     setLoadingReport(true);
-    setReportData(null); // Limpiar datos anteriores
-    setReportError(null); // Limpiar errores anteriores
+    setReportData(null);
+    setReportError(null);
 
     try {
       let data = null;
       let error = null;
 
-      // --- Lógica para cargar datos según el reporte seleccionado ---
+      // Lógica para cargar datos según el reporte seleccionado
       switch (selectedReport) {
         case 'ventas_por_periodo':
           // Validar que las fechas estén seleccionadas para este reporte
@@ -111,42 +115,35 @@ export default function Reportes() {
           // Consulta a Supabase para Ventas por Período
           ({ data, error } = await supabase
             .from('ventas')
-            .select('fecha, total, codigo_venta, cliente_nombre, forma_pago') // Selecciona los campos relevantes
-            .gte('fecha', startDate) // Filtra por fecha mayor o igual a la fecha inicio
-            .lte('fecha', endDate) // Filtra por fecha menor o igual a la fecha fin
-            .order('fecha', { ascending: true })); // Ordena por fecha
+            .select('fecha, total, codigo_venta, cliente_nombre, forma_pago')
+            .gte('fecha', startDate)
+            .lte('fecha', endDate)
+            .order('fecha', { ascending: true }));
           break;
 
         case 'stock_actual':
-             console.log("Attempting to fetch stock data..."); // Log de depuración
-             // Consulta a Supabase para Niveles de Stock Actual
-             // Asegúrate de que tu tabla 'productos' tiene un campo 'stock'
-             // >>> CORRECCIÓN: Eliminar 'categoria' de la selección <<<
+             console.log("Attempting to fetch stock data...");
              ({ data, error } = await supabase
                  .from('productos')
-                 .select('nombre, stock') // Selecciona solo nombre y stock
+                 .select('nombre, stock')
                  .order('nombre', { ascending: true }));
 
              if (error) {
-                 console.error("Error fetching stock data:", error.message); // Log de error
+                 console.error("Error fetching stock data:", error.message);
              } else {
-                 console.log("Successfully fetched stock data:", data); // Log de datos exitosos
+                 console.log("Successfully fetched stock data:", data);
              }
              break;
 
          case 'saldos_clientes':
              // Consulta a Supabase para Saldos de Clientes
-             // Esto requeriría una consulta más compleja, quizás sumando movimientos_cuenta_clientes
-             // o si tienes un campo de saldo en la tabla clientes.
-             // Ejemplo básico (asumiendo que puedes sumar montos de movimientos):
-             // Esta es una consulta simplificada, la lógica real podría ser más compleja
              const { data: movimientosData, error: movimientosError } = await supabase
                  .from('movimientos_cuenta_clientes')
-                 .select('cliente_id, monto, clientes(nombre)') // Selecciona cliente_id, monto y nombre del cliente relacionado
-                 .order('cliente_id'); // Ordena por cliente para agrupar
+                 .select('cliente_id, monto, clientes(nombre)')
+                 .order('cliente_id');
 
              if (movimientosError) {
-                 error = movimientosError; // Propagar el error
+                 error = movimientosError;
              } else {
                   // Agrupar movimientos por cliente para calcular el saldo
                   const saldos = {};
@@ -165,7 +162,7 @@ export default function Reportes() {
                       saldos[clienteId].saldo += monto;
                   });
                   // Convertir el objeto de saldos a un array
-                  data = Object.values(saldos).filter(s => s.saldo !== 0); // Opcional: solo mostrar saldos distintos de cero
+                  data = Object.values(saldos).filter(s => s.saldo !== 0);
                   // Ordenar por nombre del cliente o por saldo si lo prefieres
                   data.sort((a, b) => a.nombre.localeCompare(b.nombre));
              }
@@ -173,10 +170,9 @@ export default function Reportes() {
 
          case 'ventas_por_cliente':
              // Consulta a Supabase para obtener clientes con sus ventas históricas y actuales
-             // Primero, obtener todos los clientes con su total_ventas_historicas
              const { data: clientesData, error: clientesError } = await supabase
                  .from('clientes')
-                 .select('id, nombre, total_ventas_historicas'); // Selecciona el nuevo campo
+                 .select('id, nombre, total_ventas_historicas');
 
              if (clientesError) {
                  error = clientesError;
@@ -185,10 +181,10 @@ export default function Reportes() {
                  // Obtener todas las ventas para sumar los totales actuales
                  const { data: ventasData, error: ventasError } = await supabase
                      .from('ventas')
-                     .select('cliente_id, total'); // Solo necesitamos el cliente_id y el total
+                     .select('cliente_id, total');
 
                  if (ventasError) {
-                     error = ventasError; // Propagar el error si falla la consulta de ventas
+                     error = ventasError;
                      console.error("Error fetching sales for Ventas por Cliente:", ventasError.message);
                  } else {
                       // Crear un mapa para sumar las ventas actuales por cliente_id
@@ -212,9 +208,9 @@ export default function Reportes() {
                           return {
                               id: cliente.id,
                               nombre: cliente.nombre,
-                              totalVentas: totalGeneralVentas // Este es el total combinado
+                              totalVentas: totalGeneralVentas
                           };
-                      }).filter(c => c.totalVentas > 0); // Opcional: solo mostrar clientes con ventas > 0
+                      }).filter(c => c.totalVentas > 0);
 
                       // Ordenar por nombre del cliente
                       data.sort((a, b) => a.nombre.localeCompare(b.nombre));
@@ -222,52 +218,40 @@ export default function Reportes() {
              }
              break;
 
-
-        // --- Agrega casos para otros reportes aquí ---
-        // case 'ventas_por_producto': break;
-        // case 'ventas_por_forma_pago': break;
-        // case 'ventas_por_vendedor': break;
-        // case 'movimientos_inventario': break;
-        // case 'valoracion_inventario': break;
-        // case 'clientes_mas_compras': break;
-        // case 'descuentos_aplicados': break;
-        // case 'gastos_envio': break;
-
         default:
           setReportError('Selecciona un tipo de reporte válido.');
           setLoadingReport(false);
           return;
       }
 
-      // --- Manejar la respuesta de la consulta ---
+      // Manejar la respuesta de la consulta
       if (error) {
         console.error(`Error fetching report "${selectedReport}":`, error.message);
         setReportError(`Error al cargar el reporte: ${error.message}`);
         setReportData(null);
-        toast.error(`Error al cargar reporte: ${error.message}`); // Mostrar toast de error
+        toast.error(`Error al cargar reporte: ${error.message}`);
       } else {
-        setReportData(data || []); // Guardar los datos obtenidos
-        console.log("reportData set to:", data || []); // Log de depuración
-        setReportError(null); // Limpiar cualquier error previo
+        setReportData(data || []);
+        console.log("reportData set to:", data || []);
+        setReportError(null);
          if ((data || []).length === 0) {
              toast('No se encontraron datos para este reporte con los filtros seleccionados.', { icon: 'ℹ️' });
          } else {
-             toast.success('Reporte generado con éxito.'); // Mostrar toast de éxito
+             toast.success('Reporte generado con éxito.');
          }
       }
 
     } catch (err) {
-      // Captura errores inesperados en la lógica
       console.error('Unexpected error generating report:', err);
       setReportError('Ocurrió un error inesperado al generar el reporte.');
       setReportData(null);
-      toast.error('Error inesperado al generar el reporte.'); // Mostrar toast de error
+      toast.error('Error inesperado al generar el reporte.');
     } finally {
-      setLoadingReport(false); // Finalizar estado de carga
+      setLoadingReport(false);
     }
   };
 
-  // --- Función para exportar a PDF (Abrir en nueva pestaña) ---
+  // Función para exportar a PDF (Abrir en nueva pestaña)
   const handleExportPDF = () => {
       if (!reportData || reportData.length === 0) {
           toast('No hay datos para exportar a PDF.', { icon: 'ℹ️' });
@@ -284,11 +268,11 @@ export default function Reportes() {
       let yOffset = margin;
 
       // Título del reporte
-      let reportCategory = 'Reporte'; // Categoría general
-      let specificReportTitle = ''; // Título específico con filtros
+      let reportCategory = 'Reporte';
+      let specificReportTitle = '';
       let head = [];
       let body = [];
-      let filename = 'reporte'; // Nombre base del archivo para descarga
+      let filename = 'reporte';
 
       // Configurar contenido del PDF según el reporte seleccionado
       switch (selectedReport) {
@@ -330,7 +314,7 @@ export default function Reportes() {
 
           case 'ventas_por_cliente':
                reportCategory = 'Reporte de Ventas';
-               specificReportTitle = 'por Cliente (Incluye Histórico)'; // Actualizado el título
+               specificReportTitle = 'por Cliente (Incluye Histórico)';
                head = [['Cliente', 'Total de Ventas']];
                body = reportData.map(cliente => [
                    cliente.nombre,
@@ -339,31 +323,16 @@ export default function Reportes() {
                filename = `ventas_por_cliente_${formatDateForFilename(new Date())}.pdf`;
                break;
 
-
-          // --- Agrega casos para otros reportes aquí ---
-          // case 'ventas_por_producto': break;
-          // case 'ventas_por_forma_pago': break;
-          // case 'ventas_por_vendedor': break;
-          // case 'movimientos_inventario': break;
-          // case 'valoracion_inventario': break;
-          // case 'clientes_mas_compras': break;
-          // case 'descuentos_aplicados': break;
-          // case 'gastos_envio': break;
-
           default:
-              // Si no se reconoce el reporte, usar un título genérico
               reportCategory = 'Reporte Desconocido';
               specificReportTitle = '';
-              // Intentar generar una tabla básica con los datos si existen
               if (reportData.length > 0) {
-                   // Usar las claves del primer objeto como encabezados
-                  head = [Object.keys(reportData[0]).map(key => key.replace(/_/g, ' ').toUpperCase())]; // Formatear encabezados
+                  head = [Object.keys(reportData[0]).map(key => key.replace(/_/g, ' ').toUpperCase())];
                   body = reportData.map(row => Object.values(row).map(value => {
-                       // Intenta formatear valores numéricos como moneda si parecen ser totales
                        if (typeof value === 'number' || (typeof value === 'string' && !isNaN(parseFloat(value)))) {
                             return formatCurrency(value);
                        }
-                       return String(value); // Convertir otros valores a string
+                       return String(value);
                    }));
               } else {
                    toast('No hay datos o el reporte no es válido para exportar a PDF.', { icon: 'ℹ️' });
@@ -373,10 +342,10 @@ export default function Reportes() {
               break;
       }
 
-      // --- Encabezado del Documento con Logo e Información de la Empresa ---
-      const logoWidth = 30; // Ancho del logo en mm
-      const logoHeight = 30; // Alto del logo en mm
-      const companyInfoX = margin + logoWidth + 10; // Posición X para la información de la empresa
+      // Encabezado del Documento con Logo e Información de la Empresa
+      const logoWidth = 30;
+      const logoHeight = 30;
+      const companyInfoX = margin + logoWidth + 10;
       const pageWidth = doc.internal.pageSize.getWidth();
 
 
@@ -384,7 +353,6 @@ export default function Reportes() {
           doc.addImage(logoBase64, 'JPEG', margin, yOffset, logoWidth, logoHeight);
       } else {
           console.warn("Logo image not loaded for PDF.");
-          // Placeholder si el logo no carga
            doc.setFontSize(10);
            doc.text("Logo Aquí", margin + logoWidth / 2, yOffset + logoHeight / 2, { align: 'center' });
       }
@@ -392,17 +360,16 @@ export default function Reportes() {
       // Información de la Empresa
       doc.setFontSize(14);
       doc.setFont(undefined, 'bold');
-      doc.text('PERFUMES ELISA', companyInfoX, yOffset + 5); // Título de la empresa
+      doc.text('PERFUMES ELISA', companyInfoX, yOffset + 5);
       doc.setFontSize(10);
       doc.setFont(undefined, 'normal');
-      // >>> CORRECCIÓN: Eliminar la línea de dirección específica <<<
-      doc.text('Ciudad Apodaca, N.L., C.P. 66640', companyInfoX, yOffset + 12); // Ciudad y CP
-      doc.text('Teléfono: 81 3080 4010', companyInfoX, yOffset + 17); // Teléfono
+      doc.text('Ciudad Apodaca, N.L., C.P. 66640', companyInfoX, yOffset + 12);
+      doc.text('Teléfono: 81 3080 4010', companyInfoX, yOffset + 17);
 
 
-      // >>> Formato del Título del Reporte (alineado a la derecha) <<<
-      const reportTitleX = pageWidth - margin; // Posición X para alinear a la derecha
-      const reportTitleY = yOffset + 5; // Posición Y inicial para el título
+      // Formato del Título del Reporte (alineado a la derecha)
+      const reportTitleX = pageWidth - margin;
+      const reportTitleY = yOffset + 5;
 
       // Primera línea: Categoría del Reporte (más grande)
       doc.setFontSize(16);
@@ -410,13 +377,13 @@ export default function Reportes() {
       doc.text(reportCategory, reportTitleX, reportTitleY, { align: 'right' });
 
       // Segunda línea: Título específico con filtros (más discreto, debajo de la categoría)
-      doc.setFontSize(10); // Tamaño más pequeño
-      doc.setFont(undefined, 'normal'); // Fuente normal
-      doc.text(specificReportTitle, reportTitleX, reportTitleY + 6, { align: 'right' }); // Ajustar Y para que esté debajo
+      doc.setFontSize(10);
+      doc.setFont(undefined, 'normal');
+      doc.text(specificReportTitle, reportTitleX, reportTitleY + 6, { align: 'right' });
 
-      yOffset += Math.max(logoHeight, 30) + 15; // Espacio después del encabezado (usar el mayor entre logoHeight y un mínimo)
+      yOffset += Math.max(logoHeight, 30) + 15;
 
-      // --- Divisor ---
+      // Divisor
       doc.line(margin, yOffset, pageWidth - margin, yOffset);
       yOffset += 10;
 
@@ -426,7 +393,7 @@ export default function Reportes() {
           startY: yOffset,
           head: head,
           body: body,
-          theme: 'striped', // O 'grid', 'plain'
+          theme: 'striped',
           styles: { fontSize: 8, cellPadding: 3, overflow: 'linebreak' },
           headStyles: { fillColor: [220, 220, 220], textColor: [0, 0, 0], fontStyle: 'bold' },
           margin: { left: margin, right: margin },
@@ -437,12 +404,12 @@ export default function Reportes() {
           }
       });
 
-      // >>> Abrir en una nueva ventana en lugar de descargar <<<
+      // Abrir en una nueva ventana en lugar de descargar
       doc.output('dataurlnewwindow');
       toast.success('Reporte PDF generado en una nueva pestaña.');
   };
 
-  // --- Función para exportar a CSV (Descarga directa) ---
+  // Función para exportar a CSV (Descarga directa)
   const handleExportCSV = () => {
       if (!reportData || reportData.length === 0) {
           toast('No hay datos para exportar a CSV.', { icon: 'ℹ️' });
@@ -462,9 +429,9 @@ export default function Reportes() {
                   const row = [
                       venta.codigo_venta,
                       new Date(venta.fecha).toLocaleDateString(),
-                      `"${venta.cliente_nombre || 'Público General'}"`, // Encerrar nombres con comillas por si tienen comas
+                      `"${venta.cliente_nombre || 'Público General'}"`,
                       venta.forma_pago,
-                      venta.total ?? 0 // Valor numérico sin formato de moneda para análisis
+                      venta.total ?? 0
                   ];
                   csvContent += row.join(',') + '\n';
               });
@@ -477,7 +444,7 @@ export default function Reportes() {
               // Datos CSV
               reportData.forEach(producto => {
                   const row = [
-                      `"${producto.nombre}"`, // Encerrar nombres con comillas
+                      `"${producto.nombre}"`,
                       producto.stock ?? 0
                   ];
                   csvContent += row.join(',') + '\n';
@@ -491,8 +458,8 @@ export default function Reportes() {
               // Datos CSV
               reportData.forEach(cliente => {
                   const row = [
-                      `"${cliente.nombre}"`, // Encerrar nombres con comillas
-                      cliente.saldo ?? 0 // Valor numérico sin formato de moneda
+                      `"${cliente.nombre}"`,
+                      cliente.saldo ?? 0
                   ];
                   csvContent += row.join(',') + '\n';
               });
@@ -501,28 +468,17 @@ export default function Reportes() {
 
           case 'ventas_por_cliente':
                // Encabezados CSV
-               csvContent += 'Cliente,Total de Ventas (Incluye Histórico)\n'; // Actualizado el encabezado
+               csvContent += 'Cliente,Total de Ventas (Incluye Histórico)\n';
                // Datos CSV
                reportData.forEach(cliente => {
                    const row = [
-                       `"${cliente.nombre}"`, // Encerrar nombres con comillas
-                       cliente.totalVentas ?? 0 // Valor numérico sin formato de moneda
+                       `"${cliente.nombre}"`,
+                       cliente.totalVentas ?? 0
                    ];
                    csvContent += row.join(',') + '\n';
                });
                filename = `ventas_por_cliente_${formatDateForFilename(new Date())}.csv`;
                break;
-
-
-          // --- Agrega casos para otros reportes ---
-          // case 'ventas_por_producto': break;
-          // case 'ventas_por_forma_pago': break;
-          // case 'ventas_por_vendedor': break;
-          // case 'movimientos_inventario': break;
-          // case 'valoracion_inventario': break;
-          // case 'clientes_mas_compras': break;
-          // case 'descuentos_aplicados': break;
-          // case 'gastos_envio': break;
 
           default:
                // Si no se reconoce el reporte, intentar generar un CSV básico
@@ -531,7 +487,7 @@ export default function Reportes() {
                    csvContent += Object.keys(reportData[0]).join(',') + '\n';
                    // Datos: convertir todos los valores a string
                    reportData.forEach(row => {
-                       csvContent += Object.values(row).map(value => `"${String(value).replace(/"/g, '""')}"`).join(',') + '\n'; // Escapar comillas dobles
+                       csvContent += Object.values(row).map(value => `"${String(value).replace(/"/g, '""')}"`).join(',') + '\n';
                    });
                } else {
                    toast('No hay datos o el reporte no es válido para exportar a CSV.', { icon: 'ℹ️' });
@@ -557,242 +513,266 @@ export default function Reportes() {
   };
 
 
-  // --- Renderizado (JSX) ---
   return (
-    <div className="min-h-screen bg-gray-100 p-4 md:p-8 lg:p-12">
+    <div className="min-h-screen bg-dark-900 p-4 md:p-8 lg:p-12">
       {/* Encabezado responsive */}
       <div className="flex flex-col md:flex-row items-center justify-between gap-6 mb-8">
         <button
           onClick={() => navigate('/')}
-          className="px-6 py-2 bg-gray-700 text-white font-semibold rounded-lg shadow-md hover:bg-gray-800 transition duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-opacity-50"
+          className="px-6 py-2 bg-dark-800 text-gray-200 font-semibold rounded-lg shadow-elegant-dark hover:bg-dark-700 transition-colors flex items-center gap-2"
         >
+          <ArrowLeft size={18} />
           Volver al inicio
         </button>
 
-        <h1 className="text-3xl font-bold text-gray-800 text-center w-full md:w-auto">
-          Reportes
-        </h1>
+        <h1 className="text-3xl font-bold text-gray-100 text-center">Reportes</h1>
 
-        <div className="w-full md:w-[150px]" /> {/* Espaciador para alinear */}
+        <div className="w-full md:w-[150px]" />
       </div>
 
       {/* Contenido principal del reporte */}
-      <div className="bg-white shadow-lg rounded-lg p-6 md:p-8">
-        <h2 className="text-2xl font-semibold mb-4">Generar Reporte</h2>
+      <div className="bg-dark-800 shadow-card-dark rounded-lg p-6 md:p-8 border border-dark-700/50">
+        <h2 className="text-2xl font-semibold mb-4 text-gray-100">Generar Reporte</h2>
 
         {/* Selector de Tipo de Reporte */}
         <div className="mb-6">
-            <label htmlFor="report-selector" className="block text-sm font-medium text-gray-700 mb-1">Selecciona un Reporte:</label>
+            <label htmlFor="report-selector" className="block text-sm font-medium text-gray-300 mb-1 flex items-center gap-1">
+              <FileText size={16} />
+              Selecciona un Reporte:
+            </label>
             <select
                 id="report-selector"
                 value={selectedReport}
                 onChange={(e) => {
                     setSelectedReport(e.target.value);
-                    // Opcional: Limpiar filtros y resultados al cambiar de reporte
                     setStartDate('');
                     setEndDate('');
                     setReportData(null);
                     setReportError(null);
-                    // Limpiar otros estados de filtro si los añades
                 }}
-                className="mt-1 block w-full md:w-1/2 p-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                disabled={loadingReport} // Deshabilitar selector mientras carga
+                className="mt-1 block w-full md:w-1/2 p-2 bg-dark-900 border border-dark-700 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 text-gray-200 disabled:opacity-50"
+                disabled={loadingReport}
             >
                 <option value="">-- Selecciona --</option>
                 <optgroup label="Reportes de Ventas">
                     <option value="ventas_por_periodo">Ventas por Período</option>
-                    {/* Agrega más opciones de reportes de ventas */}
-                    {/* <option value="ventas_por_producto">Ventas por Producto</option> */}
-                    {/* <option value="ventas_por_forma_pago">Ventas por Forma de Pago</option> */}
-                    {/* <option value="ventas_por_vendedor">Ventas por Vendedor</option> */}
+                    <option value="ventas_por_cliente">Ventas por Cliente (Incluye Histórico)</option>
                 </optgroup>
-                 <optgroup label="Reportes de Inventario">
+                <optgroup label="Reportes de Inventario">
                     <option value="stock_actual">Niveles de Stock Actual</option>
-                    {/* Agrega más opciones de reportes de inventario */}
-                    {/* <option value="movimientos_inventario">Movimientos de Inventario</option> */}
-                    {/* <option value="valoracion_inventario">Valoración de Inventario</option> */}
                 </optgroup>
-                 <optgroup label="Reportes de Clientes">
+                <optgroup label="Reportes de Clientes">
                     <option value="saldos_clientes">Saldos de Clientes</option>
-                    <option value="ventas_por_cliente">Ventas por Cliente (Incluye Histórico)</option> {/* Nuevo reporte */}
-                    {/* Agrega más opciones de reportes de clientes */}
-                    {/* <option value="clientes_mas_compras">Clientes con Más Compras</option> */}
-                </optgroup>
-                 <optgroup label="Otros Reportes">
-                     {/* Agrega más opciones de otros reportes */}
-                     {/* <option value="descuentos_aplicados">Reporte de Descuentos Aplicados</option> */}
-                     {/* <option value="gastos_envio">Reporte de Gastos de Envío</option> */}
                 </optgroup>
             </select>
         </div>
 
         {/* Área de Filtros Dinámicos */}
-        <div className="mb-6 p-4 border rounded-md bg-gray-50">
-            <h3 className="text-lg font-semibold mb-3">Filtros</h3>
-            {/* Lógica de renderizado condicional para filtros */}
+        <div className="mb-6 p-4 border border-dark-700/50 rounded-md bg-dark-900/50">
+            <h3 className="text-lg font-semibold mb-3 text-gray-200 flex items-center gap-1">
+              <Filter size={18} />
+              Filtros
+            </h3>
 
             {/* Filtros para Ventas por Período */}
             {selectedReport === 'ventas_por_periodo' && (
                 <div className="flex flex-col md:flex-row items-center gap-4">
-                    <label htmlFor="startDate" className="text-sm font-medium text-gray-700">Fecha Inicio:</label>
-                    <input
-                        type="date"
-                        id="startDate"
-                        value={startDate}
-                        onChange={(e) => setStartDate(e.target.value)}
-                        className="p-2 border rounded-md shadow-sm"
-                        disabled={loadingReport}
-                    />
-                    <label htmlFor="endDate" className="text-sm font-medium text-gray-700">Fecha Fin:</label>
-                    <input
-                        type="date"
-                        id="endDate"
-                        value={endDate}
-                        onChange={(e) => setEndDate(e.target.value)}
-                        className="p-2 border rounded-md shadow-sm"
-                        disabled={loadingReport}
-                    />
+                    <div className="w-full md:w-auto">
+                        <label htmlFor="startDate" className="text-sm font-medium text-gray-300 mb-1 flex items-center gap-1">
+                          <Calendar size={14} />
+                          Fecha Inicio:
+                        </label>
+                        <input
+                            type="date"
+                            id="startDate"
+                            value={startDate}
+                            onChange={(e) => setStartDate(e.target.value)}
+                            className="p-2 bg-dark-800 border border-dark-700 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 text-gray-200 w-full"
+                            disabled={loadingReport}
+                        />
+                    </div>
+                    <div className="w-full md:w-auto">
+                        <label htmlFor="endDate" className="text-sm font-medium text-gray-300 mb-1 flex items-center gap-1">
+                          <Calendar size={14} />
+                          Fecha Fin:
+                        </label>
+                        <input
+                            type="date"
+                            id="endDate"
+                            value={endDate}
+                            onChange={(e) => setEndDate(e.target.value)}
+                            className="p-2 bg-dark-800 border border-dark-700 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 text-gray-200 w-full"
+                            disabled={loadingReport}
+                        />
+                    </div>
                 </div>
             )}
 
-             {/* Filtros para Niveles de Stock Actual (Este reporte no necesita filtros de fecha) */}
+             {/* Filtros para Niveles de Stock Actual */}
              {selectedReport === 'stock_actual' && (
-                 <p className="text-gray-700">Este reporte muestra el stock actual de todos los productos.</p>
-                 // Puedes añadir filtros por categoría aquí si lo deseas
+                 <p className="text-gray-300">Este reporte muestra el stock actual de todos los productos.</p>
              )}
 
-             {/* Filtros para Saldos de Clientes (Este reporte no necesita filtros de fecha) */}
+             {/* Filtros para Saldos de Clientes */}
              {selectedReport === 'saldos_clientes' && (
-                  <p className="text-gray-700">Este reporte muestra los saldos actuales de los clientes con movimientos.</p>
-                  // Puedes añadir un checkbox para "Solo mostrar clientes con saldo > 0"
+                  <p className="text-gray-300">Este reporte muestra los saldos actuales de los clientes con movimientos.</p>
              )}
 
-            {/* Filtros para Ventas por Cliente (Este reporte no necesita filtros de fecha por ahora) */}
-{selectedReport === 'ventas_por_cliente' && (
-  <div>
-    <p className="text-gray-700">
-      Este reporte muestra el total de ventas por cliente, incluyendo datos históricos.
-    </p>
-    {/* Puedes añadir filtros por cliente específico o rango de fechas si lo necesitas */}
-  </div>
-)}
+            {/* Filtros para Ventas por Cliente */}
+            {selectedReport === 'ventas_por_cliente' && (
+              <div>
+                <p className="text-gray-300">
+                  Este reporte muestra el total de ventas por cliente, incluyendo datos históricos.
+                </p>
+              </div>
+            )}
 
-
-            {/* Mensaje si no hay reporte seleccionado o no tiene filtros */}
-             {!selectedReport ? (
-                 <p className="text-center text-gray-500">Selecciona un reporte y haz clic en "Generar Reporte".</p>
-             ) : (
-                 // Puedes añadir un else if para mensajes de reportes sin filtros específicos
-                 null
-             )}
-
-            {/* Agrega bloques similares para los filtros de otros reportes */}
-
+            {/* Mensaje si no hay reporte seleccionado */}
+            {!selectedReport && (
+                <p className="text-center text-gray-400">Selecciona un reporte y haz clic en "Generar Reporte".</p>
+            )}
         </div>
 
         {/* Botón "Generar Reporte" */}
         <div className="mb-8">
             <button
                 onClick={handleGenerateReport}
-                disabled={!selectedReport || loadingReport || (selectedReport === 'ventas_por_periodo' && (!startDate || !endDate))} // Deshabilita si no hay reporte, está cargando, o faltan fechas para ventas por período
-                className="px-6 py-3 bg-green-600 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!selectedReport || loadingReport || (selectedReport === 'ventas_por_periodo' && (!startDate || !endDate))}
+                className="px-6 py-3 bg-primary-600 text-white font-semibold rounded-lg shadow-elegant-dark hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
-                {loadingReport ? 'Generando…' : 'Generar Reporte'}
+                {loadingReport ? (
+                  <>
+                    <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>
+                    <span>Generando…</span>
+                  </>
+                ) : (
+                  <>
+                    <BarChart3 size={18} />
+                    <span>Generar Reporte</span>
+                  </>
+                )}
             </button>
         </div>
 
         {/* Área de Visualización de Reporte */}
-        <div className="report-results-area bg-gray-50 p-6 rounded-md">
+        <div className="report-results-area bg-dark-900/50 p-6 rounded-lg border border-dark-700/50">
             {/* Indicador de carga */}
-            {loadingReport && <p className="text-center text-blue-600 font-semibold">Cargando reporte...</p>}
+            {loadingReport && (
+              <div className="flex justify-center items-center h-64">
+                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-400"></div>
+              </div>
+            )}
 
             {/* Mensaje de error */}
-            {reportError && <p className="text-center text-red-600">{reportError}</p>}
-
-
-            {/* Contenido del reporte (renderizado condicional por selectedReport) */}
+            {reportError && (
+              <div className="flex justify-center items-center h-64">
+                <p className="text-center text-error-400">{reportError}</p>
+              </div>
+            )}
 
             {/* Tabla para Reporte de Ventas por Período */}
             {reportData && selectedReport === 'ventas_por_periodo' && (
                  <div className="overflow-x-auto">
-                     <h3 className="text-xl font-semibold mb-4">Resultados: Ventas por Período ({startDate} a {endDate})</h3>
+                     <h3 className="text-xl font-semibold mb-4 text-gray-100 flex items-center gap-2">
+                       <Calendar size={20} className="text-primary-400" />
+                       Resultados: Ventas por Período ({startDate} a {endDate})
+                     </h3>
                      {reportData.length === 0 ? (
-                         <p className="text-center text-gray-500 italic mt-4">No hay datos para este período.</p>
+                         <div className="text-center py-12 bg-dark-800/50 rounded-lg border border-dark-700/50">
+                           <FileText size={48} className="mx-auto text-gray-600 mb-3" />
+                           <p className="text-gray-400 italic">No hay datos para este período.</p>
+                         </div>
                      ) : (
-                         <table className="min-w-full divide-y divide-gray-200">
-                             <thead>
-                                 <tr className="bg-gray-200">
-                                     <th className="p-3 text-left text-xs font-semibold text-gray-600 uppercase">Código Venta</th>
-                                     <th className="p-3 text-left text-xs font-semibold text-gray-600 uppercase">Fecha</th>
-                                     <th className="p-3 text-left text-xs font-semibold text-gray-600 uppercase">Cliente</th>
-                                     <th className="p-3 text-left text-xs font-semibold text-gray-600 uppercase">Forma Pago</th>
-                                     <th className="p-3 text-right text-xs font-semibold text-gray-600 uppercase">Total Venta</th>
-                                 </tr>
-                             </thead>
-                             <tbody>
-                                 {reportData.map((venta) => (
-                                     <tr key={venta.codigo_venta} className="border-b">
-                                         <td className="p-3 text-sm text-gray-800">{venta.codigo_venta}</td>
-                                         <td className="p-3 text-sm text-gray-800">{new Date(venta.fecha).toLocaleDateString()}</td>
-                                         <td className="p-3 text-sm text-gray-800">{venta.cliente_nombre || 'Público General'}</td>
-                                         <td className="p-3 text-sm text-gray-800">{venta.forma_pago}</td>
-                                         <td className="p-3 text-sm text-gray-800 text-right">{formatCurrency(venta.total)}</td>
-                                     </tr>
-                                 ))}
-                             </tbody>
-                         </table>
+                         <div className="bg-dark-800/50 rounded-lg border border-dark-700/50 overflow-hidden">
+                           <table className="min-w-full divide-y divide-dark-700">
+                               <thead className="bg-dark-900">
+                                   <tr>
+                                       <th className="p-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Código Venta</th>
+                                       <th className="p-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Fecha</th>
+                                       <th className="p-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Cliente</th>
+                                       <th className="p-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Forma Pago</th>
+                                       <th className="p-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">Total Venta</th>
+                                   </tr>
+                               </thead>
+                               <tbody className="bg-dark-800/30 divide-y divide-dark-700/50">
+                                   {reportData.map((venta) => (
+                                       <tr key={venta.codigo_venta} className="hover:bg-dark-700/50 transition-colors">
+                                           <td className="p-3 text-sm text-gray-300">{venta.codigo_venta}</td>
+                                           <td className="p-3 text-sm text-gray-300">{new Date(venta.fecha).toLocaleDateString()}</td>
+                                           <td className="p-3 text-sm text-gray-300">{venta.cliente_nombre || 'Público General'}</td>
+                                           <td className="p-3 text-sm text-gray-300">{venta.forma_pago}</td>
+                                           <td className="p-3 text-sm text-gray-200 text-right font-medium">{formatCurrency(venta.total)}</td>
+                                       </tr>
+                                   ))}
+                               </tbody>
+                           </table>
+                         </div>
                      )}
                  </div>
             )}
 
              {/* Tabla para Reporte de Niveles de Stock Actual */}
              {reportData && selectedReport === 'stock_actual' && (
-  <div className="overflow-x-auto">
-    <h3 className="text-xl font-semibold mb-4">Resultado: Niveles de Stock Actual</h3>
-    {reportData.length === 0 ? (
-      <p className="text-center text-gray-500 italic mt-4">No hay productos en el inventario.</p>
-    ) : (
-      <table className="min-w-full divide-y divide-gray-200">
-        <thead>
-          <tr className="bg-gray-200">
-            <th className="p-3 text-left text-xs font-semibold text-gray-600 uppercase">Producto</th>
-            <th className="p-3 text-right text-xs font-semibold text-gray-600 uppercase">Stock Actual</th>
-          </tr>
-        </thead>
-        <tbody>
-          {reportData.map((producto) => (
-            <tr key={producto.nombre} className="border-b">
-              <td className="p-3 text-sm text-gray-800">{producto.nombre}</td>
-              <td className="p-3 text-sm text-gray-800 text-right">{producto.stock ?? 0}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    )}
-  </div>
-)}
-
+              <div className="overflow-x-auto">
+                <h3 className="text-xl font-semibold mb-4 text-gray-100 flex items-center gap-2">
+                  <Package size={20} className="text-primary-400" />
+                  Resultado: Niveles de Stock Actual
+                </h3>
+                {reportData.length === 0 ? (
+                  <div className="text-center py-12 bg-dark-800/50 rounded-lg border border-dark-700/50">
+                    <Package size={48} className="mx-auto text-gray-600 mb-3" />
+                    <p className="text-gray-400 italic">No hay productos en el inventario.</p>
+                  </div>
+                ) : (
+                  <div className="bg-dark-800/50 rounded-lg border border-dark-700/50 overflow-hidden">
+                    <table className="min-w-full divide-y divide-dark-700">
+                      <thead className="bg-dark-900">
+                        <tr>
+                          <th className="p-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Producto</th>
+                          <th className="p-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">Stock Actual</th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-dark-800/30 divide-y divide-dark-700/50">
+                        {reportData.map((producto) => (
+                          <tr key={producto.nombre} className="hover:bg-dark-700/50 transition-colors">
+                            <td className="p-3 text-sm text-gray-300">{producto.nombre}</td>
+                            <td className="p-3 text-sm text-gray-200 text-right font-medium">{producto.stock ?? 0}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
 
               {/* Tabla para Reporte de Saldos de Clientes */}
              {reportData && selectedReport === 'saldos_clientes' && (
                  <div className="overflow-x-auto">
-                     <h3 className="text-xl font-semibold mb-4">Resultados: Saldos de Clientes</h3>
+                     <h3 className="text-xl font-semibold mb-4 text-gray-100 flex items-center gap-2">
+                       <Wallet size={20} className="text-primary-400" />
+                       Resultados: Saldos de Clientes
+                     </h3>
                       {reportData.length === 0 ? (
-                         <p className="text-center text-gray-500 italic mt-4">No hay clientes con saldo registrado.</p>
+                         <div className="text-center py-12 bg-dark-800/50 rounded-lg border border-dark-700/50">
+                           <Users size={48} className="mx-auto text-gray-600 mb-3" />
+                           <p className="text-gray-400 italic">No hay clientes con saldo registrado.</p>
+                         </div>
                      ) : (
-                         <table className="min-w-full divide-y divide-gray-200">
-                             <thead>
-                                 <tr className="bg-gray-200">
-                                     <th className="p-3 text-left text-xs font-semibold text-gray-600 uppercase">Cliente</th>
-                                     <th className="p-3 text-right text-xs font-semibold text-gray-600 uppercase">Saldo Actual</th>
+                       <div className="bg-dark-800/50 rounded-lg border border-dark-700/50 overflow-hidden">
+                         <table className="min-w-full divide-y divide-dark-700">
+                             <thead className="bg-dark-900">
+                                 <tr>
+                                     <th className="p-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Cliente</th>
+                                     <th className="p-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">Saldo Actual</th>
                                  </tr>
                              </thead>
-                             <tbody>
+                             <tbody className="bg-dark-800/30 divide-y divide-dark-700/50">
                                  {reportData.map((cliente) => (
-                                     <tr key={cliente.id} className="border-b">
-                                         <td className="p-3 text-sm text-gray-800">{cliente.nombre}</td>
-                                         <td className="p-3 text-sm text-gray-800 text-right">
-                                             <span className={cliente.saldo > 0 ? 'text-red-600 font-semibold' : 'text-green-700 font-semibold'}>
+                                     <tr key={cliente.id} className="hover:bg-dark-700/50 transition-colors">
+                                         <td className="p-3 text-sm text-gray-300">{cliente.nombre}</td>
+                                         <td className="p-3 text-sm text-right">
+                                             <span className={cliente.saldo > 0 ? 'text-error-400 font-semibold' : 'text-success-400 font-semibold'}>
                                                 {formatCurrency(cliente.saldo)}
                                              </span>
                                          </td>
@@ -800,67 +780,70 @@ export default function Reportes() {
                                  ))}
                              </tbody>
                          </table>
+                       </div>
                      )}
                  </div>
              )}
 
-             {/* Tabla para Reporte de Ventas por Cliente (Nuevo) */}
+             {/* Tabla para Reporte de Ventas por Cliente */}
              {reportData && selectedReport === 'ventas_por_cliente' && (
                  <div className="overflow-x-auto">
-                     <h3 className="text-xl font-semibold mb-4">Resultados: Ventas por Cliente (Incluye Histórico)</h3> {/* Actualizado el título */}
+                     <h3 className="text-xl font-semibold mb-4 text-gray-100 flex items-center gap-2">
+                       <Users size={20} className="text-primary-400" />
+                       Resultados: Ventas por Cliente (Incluye Histórico)
+                     </h3>
                       {reportData.length === 0 ? (
-                         <p className="text-center text-gray-500 italic mt-4">No hay ventas registradas para clientes.</p>
+                         <div className="text-center py-12 bg-dark-800/50 rounded-lg border border-dark-700/50">
+                           <Users size={48} className="mx-auto text-gray-600 mb-3" />
+                           <p className="text-gray-400 italic">No hay ventas registradas para clientes.</p>
+                         </div>
                      ) : (
-                         <table className="min-w-full divide-y divide-gray-200">
-                             <thead>
-                                 <tr className="bg-gray-200">
-                                     <th className="p-3 text-left text-xs font-semibold text-gray-600 uppercase">Cliente</th>
-                                     <th className="p-3 text-right text-xs font-semibold text-gray-600 uppercase">Total de Ventas</th>
+                       <div className="bg-dark-800/50 rounded-lg border border-dark-700/50 overflow-hidden">
+                         <table className="min-w-full divide-y divide-dark-700">
+                             <thead className="bg-dark-900">
+                                 <tr>
+                                     <th className="p-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Cliente</th>
+                                     <th className="p-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">Total de Ventas</th>
                                  </tr>
                              </thead>
-                             <tbody>
+                             <tbody className="bg-dark-800/30 divide-y divide-dark-700/50">
                                  {reportData.map((cliente) => (
-                                     // Usar cliente.id como key si está disponible, de lo contrario, usar nombre + index
-                                     <tr key={cliente.id || `${cliente.nombre}-${Math.random()}`} className="border-b">
-                                         <td className="p-3 text-sm text-gray-800">{cliente.nombre}</td>
-                                         <td className="p-3 text-sm text-gray-800 text-right">
+                                     <tr key={cliente.id || `${cliente.nombre}-${Math.random()}`} className="hover:bg-dark-700/50 transition-colors">
+                                         <td className="p-3 text-sm text-gray-300">{cliente.nombre}</td>
+                                         <td className="p-3 text-sm text-gray-200 text-right font-medium">
                                              {formatCurrency(cliente.totalVentas)}
                                          </td>
                                      </tr>
                                  ))}
                              </tbody>
                          </table>
+                       </div>
                      )}
                  </div>
              )}
-
-
-            {/* Agrega bloques de renderizado condicional para las tablas/gráficos de otros reportes */}
-
         </div>
 
         {/* Opciones de Exportación */}
         {reportData && reportData.length > 0 && (
             <div className="mt-6 flex justify-end gap-4">
-                {/* Botón para Exportar a PDF */}
                 <button
-                    onClick={handleExportPDF} // Implementar función de exportación a PDF
-                    className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition"
+                    onClick={handleExportPDF}
+                    className="px-4 py-2 bg-error-600 text-white rounded-md hover:bg-error-700 transition-colors flex items-center gap-1"
                     disabled={loadingReport}
                 >
+                    <FileText size={16} />
                     Ver PDF
                 </button>
-                 {/* Botón para Exportar a CSV */}
                 <button
-                    onClick={handleExportCSV} // Implementar función de exportación a CSV
-                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition"
-                     disabled={loadingReport}
+                    onClick={handleExportCSV}
+                    className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 transition-colors flex items-center gap-1"
+                    disabled={loadingReport}
                 >
+                    <Download size={16} />
                     Exportar CSV
                 </button>
             </div>
         )}
-
       </div>
     </div>
   );
