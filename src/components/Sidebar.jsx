@@ -42,7 +42,7 @@ export default function Sidebar({ open, onClose }) {
         <div className="p-6 border-b border-dark-800">
           <div className="flex items-center justify-center">
             <img
-              src="/images/PERFUMESELISAwhite.jpg"
+              src="/images/PERFUMESELISA.png"
               alt="Perfumes Elisa"
               className="h-24 w-auto object-contain"
             />

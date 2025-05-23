@@ -32,7 +32,7 @@ export default function Login() {
       <div className="w-full max-w-md">
         <div className="text-center mb-8 animate-fade-in">
           <img
-            src="/images/PERFUMESELISAwhite.jpg"
+            src="/images/PERFUMESELISA.png"
             alt="Perfumes Elisa"
             className="h-24 mx-auto mb-6 hover-lift"
           />
