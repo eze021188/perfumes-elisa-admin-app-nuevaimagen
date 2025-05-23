@@ -9,8 +9,11 @@ import {
   Search,
   Settings,
   User,
-  ChevronDown
+  ChevronDown,
+  LogOut
 } from 'lucide-react';
+import { supabase } from '../supabase';
+import toast from 'react-hot-toast';
 
 export default function DashboardLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -19,14 +22,25 @@ export default function DashboardLayout() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
+  const handleLogout = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      toast.error('Error al cerrar sesión.');
+    } else {
+      toast.success('Sesión cerrada.');
+      navigate('/login');
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-dark-950 text-gray-100">
+    <div className="min-h-screen bg-dark-950 text-gray-100 flex">
+      {/* Sidebar */}
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-h-screen lg:pl-64">
+      <div className="flex-1 flex flex-col min-h-screen">
         {/* Top Navigation Bar */}
-        <header className="h-16 bg-dark-900 border-b border-dark-800 px-4 flex items-center justify-between">
+        <header className="h-16 bg-dark-900 border-b border-dark-800 px-4 flex items-center justify-between sticky top-0 z-10">
           {/* Left Section */}
           <div className="flex items-center space-x-4">
             <button
@@ -93,7 +107,11 @@ export default function DashboardLayout() {
                       Configuración
                     </button>
                     <div className="border-t border-dark-700"></div>
-                    <button className="w-full px-4 py-2 text-left text-sm text-error-400 hover:bg-dark-700 hover:text-error-300 transition-colors">
+                    <button 
+                      onClick={handleLogout}
+                      className="w-full px-4 py-2 text-left text-sm text-error-400 hover:bg-dark-700 hover:text-error-300 transition-colors flex items-center"
+                    >
+                      <LogOut size={16} className="mr-2" />
                       Cerrar Sesión
                     </button>
                   </div>
@@ -104,7 +122,7 @@ export default function DashboardLayout() {
         </header>
 
         {/* Main Content */}
-        <main className="flex-1 p-6 bg-gradient-to-br from-dark-950 to-dark-900">
+        <main className="flex-1 p-6 bg-gradient-to-br from-dark-950 to-dark-900 overflow-auto">
           <Outlet />
         </main>
 

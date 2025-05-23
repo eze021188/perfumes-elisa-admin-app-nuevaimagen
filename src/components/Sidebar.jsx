@@ -10,9 +10,7 @@ import {
   Receipt, 
   BarChart3, 
   Shield, 
-  Wallet,
-  Settings,
-  LogOut 
+  Wallet
 } from 'lucide-react';
 
 export default function Sidebar({ open, onClose }) {
@@ -34,19 +32,17 @@ export default function Sidebar({ open, onClose }) {
       className={`fixed inset-y-0 left-0 w-64 bg-dark-900 text-gray-100 z-50
         transform transition-transform duration-200 ease-in-out
         ${open ? 'translate-x-0' : '-translate-x-full'}
-        md:translate-x-0 md:static md:inset-auto flex-shrink-0
+        lg:translate-x-0 lg:static lg:inset-auto flex-shrink-0
         border-r border-dark-800`}
     >
       <div className="h-full flex flex-col">
         {/* Logo and Brand */}
-        <div className="p-6 border-b border-dark-800">
-          <div className="flex items-center justify-center">
-            <img
-              src="/images/PERFUMESELISA.png"
-              alt="Perfumes Elisa"
-              className="h-24 w-auto object-contain"
-            />
-          </div>
+        <div className="p-6 border-b border-dark-800 flex justify-center">
+          <img
+            src="/images/PERFUMESELISA.png"
+            alt="Perfumes Elisa"
+            className="h-24 w-auto object-contain"
+          />
         </div>
 
         {/* Navigation Links */}
@@ -67,22 +63,6 @@ export default function Sidebar({ open, onClose }) {
               <span>{label}</span>
             </NavLink>
           ))}
-        </div>
-
-        {/* Footer Actions */}
-        <div className="p-4 border-t border-dark-800 space-y-2">
-          <button className="nav-link-dark w-full group">
-            <div className="w-10 h-10 flex items-center justify-center rounded-lg bg-dark-800 group-hover:bg-primary-900/50 transition-colors">
-              <Settings size={20} />
-            </div>
-            <span>Configuración</span>
-          </button>
-          <button className="nav-link-dark w-full group text-error-400 hover:text-error-300">
-            <div className="w-10 h-10 flex items-center justify-center rounded-lg bg-dark-800 group-hover:bg-error-900/50 transition-colors">
-              <LogOut size={20} />
-            </div>
-            <span>Cerrar Sesión</span>
-          </button>
         </div>
       </div>
     </nav>
