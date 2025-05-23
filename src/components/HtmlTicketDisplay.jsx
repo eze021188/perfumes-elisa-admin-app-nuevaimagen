@@ -1,22 +1,20 @@
 // src/components/HtmlTicketDisplay.jsx
 import React, { useRef } from 'react';
-// html2canvas se cargará dinámicamente si es necesario
+import { Download, X } from 'lucide-react';
 
-// Helper simple para formatear moneda (debe ser consistente)
+// Helper simple para formatear moneda
 const formatCurrency = (amount) => {
      const numericAmount = parseFloat(amount);
      if (isNaN(numericAmount)) {
          return '$0.00';
      }
-     return numericAmount.toLocaleString('en-US', { // O 'es-MX' o la configuración que uses
+     return numericAmount.toLocaleString('en-US', {
         style: 'currency',
-        currency: 'USD', // Ajusta tu moneda
+        currency: 'USD',
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
     });
 };
-
-// No es necesario un helper de fecha aquí si el componente padre ya envía la fecha formateada.
 
 export default function HtmlTicketDisplay({ saleData, onClose }) {
     if (!saleData) {
@@ -29,7 +27,7 @@ export default function HtmlTicketDisplay({ saleData, onClose }) {
         codigo_venta,
         cliente,
         vendedor,
-        fecha, // <<< Se asume que esta fecha ya viene formateada con la zona horaria correcta desde el padre
+        fecha,
         productosVenta,
         originalSubtotal,
         discountAmount,
@@ -37,11 +35,11 @@ export default function HtmlTicketDisplay({ saleData, onClose }) {
         forma_pago,
         enganche,
         gastos_envio,
-        total_final, // Este es el total que el cliente pagó por otros medios (después de crédito aplicado)
+        total_final,
         balance_cuenta
     } = saleData;
 
-    const balanceClass = balance_cuenta > 0 ? 'negative' : 'positive'; // Asumiendo que balance positivo es deuda
+    const balanceClass = balance_cuenta > 0 ? 'negative' : 'positive';
     const balanceNote = balance_cuenta > 0
         ? '(Saldo positivo indica deuda del cliente)'
         : '(Saldo negativo indica crédito a favor del cliente)';
@@ -62,11 +60,11 @@ export default function HtmlTicketDisplay({ saleData, onClose }) {
                  }
 
                  const canvas = await html2canvas(ticketRef.current, {
-                     scale: 2, // Aumentar la escala para mejor resolución
-                     logging: true, // Habilitar logs para depuración
-                     useCORS: true // Intentar usar CORS para imágenes (como el logo)
+                     scale: 2,
+                     logging: true,
+                     useCORS: true
                  });
-                 const image = canvas.toDataURL('image/jpeg', 0.9); // Formato JPG con calidad 90%
+                 const image = canvas.toDataURL('image/jpeg', 0.9);
                  const link = document.createElement('a');
                  link.href = image;
                  link.download = `ticket_venta_${codigo_venta || 'sin_codigo'}.jpg`;
@@ -91,54 +89,55 @@ export default function HtmlTicketDisplay({ saleData, onClose }) {
              }
              document.body.appendChild(script);
         } else {
-             captureAndDownload(); // Si ya está cargada, ejecutar directamente
+             captureAndDownload();
         }
     };
 
     return (
         // Overlay del modal
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-2" onClick={onClose}> {/* Aumentar z-index si es necesario */}
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[100] p-2" onClick={onClose}>
             {/* Contenedor principal del modal */}
             <div
-                className="bg-white rounded-lg shadow-xl overflow-y-auto max-h-[95vh] w-full"
-                style={{ maxWidth: '400px', borderRadius: '8px', boxShadow: '0 2px 6px rgba(0, 0, 0, 0.08)' }}
-                onClick={(e) => e.stopPropagation()} // Evita que el clic en el ticket cierre el modal
+                className="bg-dark-800 rounded-lg shadow-dropdown-dark border border-dark-700 overflow-y-auto max-h-[95vh] w-full"
+                style={{ maxWidth: '400px' }}
+                onClick={(e) => e.stopPropagation()}
             >
-                    {/* Estilos CSS para el ticket */}
-                    <style>
-                        {`
-                        .ticket-content-printable {
-                            font-family: 'Arial', sans-serif; /* Fuente genérica para mejor compatibilidad */
-                            color: #333; /* Color de texto principal */
-                            padding: 20px; /* Más padding */
-                            line-height: 1.5;
-                        }
-                        .divider { border-top: 1px dashed #ccc; margin: 12px 0; } /* Línea punteada */
-                        .ticket-header { display: flex; flex-direction: column; align-items: center; margin-bottom: 15px; text-align: center; }
-                        .ticket-header .header-top { display: flex; align-items: center; justify-content: center; margin-bottom: 8px; width:100%;}
-                        .ticket-header img { margin-right: 10px; height: 50px; width: 50px; object-fit: contain; } /* Ajuste de logo */
-                        .ticket-title-block { text-align: left; }
-                        .ticket-title-block h2 { font-size: 1.1rem; font-weight: bold; margin-bottom: 2px; color: #111; }
-                        .ticket-title-block p { font-size: 0.8rem; color: #555; margin-top: 0; }
-                        .contact-info { font-size: 0.8rem; color: #555; margin-top: 2px; text-align: center; }
-                        .info-grid { display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; font-size: 0.85rem; color: #333; margin-bottom:10px; }
-                        .info-grid strong { font-weight: bold; color: #111; }
-                        .product-list-header { font-weight: bold; font-size: 0.9rem; margin-bottom: 5px; color: #111;}
-                        .product-item { display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 5px; padding-bottom:5px; border-bottom: 1px dotted #eee; }
-                        .product-item:last-child { border-bottom: none; margin-bottom: 0; padding-bottom:0;}
-                        .product-item .name { flex-grow: 1; margin-right: 8px; word-break: break-word; }
-                        .product-item .details { white-space: nowrap; }
-                        .totals-section { margin-top:10px; padding-top:10px; border-top: 1px dashed #ccc;}
-                        .totals-row { display: flex; justify-content: space-between; font-size: 0.85rem; color: #333; margin-bottom: 5px; }
-                        .totals-row.total-final-amount { font-size: 1.1rem; font-weight: bold; color: #28a745; margin-top: 10px; border-top: 1px solid #ccc; padding-top: 10px; }
-                        .balance-section { margin-top: 15px; padding-top: 10px; border-top: 1px dashed #ccc; text-align: center; font-size: 0.85rem; color: #333; }
-                        .balance-value { font-size: 1.05rem; font-weight: bold; margin-top: 3px; }
-                        .balance-value.positive { color: #28a745; }
-                        .balance-value.negative { color: #dc3545; }
-                        .thank-you { text-align: center; font-size: 0.8rem; color: #555; margin-top: 15px; padding-top: 10px; border-top: 1px dashed #ccc; }
-                        .thank-you p { margin: 2px 0; }
-                        `}
-                    </style>
+                {/* Estilos CSS para el ticket */}
+                <style>
+                    {`
+                    .ticket-content-printable {
+                        font-family: 'Arial', sans-serif;
+                        color: #e5e7eb;
+                        padding: 20px;
+                        line-height: 1.5;
+                        background-color: #1f2937;
+                    }
+                    .divider { border-top: 1px dashed #4b5563; margin: 12px 0; }
+                    .ticket-header { display: flex; flex-direction: column; align-items: center; margin-bottom: 15px; text-align: center; }
+                    .ticket-header .header-top { display: flex; align-items: center; justify-content: center; margin-bottom: 8px; width:100%;}
+                    .ticket-header img { margin-right: 10px; height: 50px; width: 50px; object-fit: contain; }
+                    .ticket-title-block { text-align: left; }
+                    .ticket-title-block h2 { font-size: 1.1rem; font-weight: bold; margin-bottom: 2px; color: #f9fafb; }
+                    .ticket-title-block p { font-size: 0.8rem; color: #9ca3af; margin-top: 0; }
+                    .contact-info { font-size: 0.8rem; color: #9ca3af; margin-top: 2px; text-align: center; }
+                    .info-grid { display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; font-size: 0.85rem; color: #d1d5db; margin-bottom:10px; }
+                    .info-grid strong { font-weight: bold; color: #f3f4f6; }
+                    .product-list-header { font-weight: bold; font-size: 0.9rem; margin-bottom: 5px; color: #f3f4f6;}
+                    .product-item { display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 5px; padding-bottom:5px; border-bottom: 1px dotted #374151; }
+                    .product-item:last-child { border-bottom: none; margin-bottom: 0; padding-bottom:0;}
+                    .product-item .name { flex-grow: 1; margin-right: 8px; word-break: break-word; }
+                    .product-item .details { white-space: nowrap; }
+                    .totals-section { margin-top:10px; padding-top:10px; border-top: 1px dashed #4b5563;}
+                    .totals-row { display: flex; justify-content: space-between; font-size: 0.85rem; color: #d1d5db; margin-bottom: 5px; }
+                    .totals-row.total-final-amount { font-size: 1.1rem; font-weight: bold; color: #10b981; margin-top: 10px; border-top: 1px solid #4b5563; padding-top: 10px; }
+                    .balance-section { margin-top: 15px; padding-top: 10px; border-top: 1px dashed #4b5563; text-align: center; font-size: 0.85rem; color: #d1d5db; }
+                    .balance-value { font-size: 1.05rem; font-weight: bold; margin-top: 3px; }
+                    .balance-value.positive { color: #10b981; }
+                    .balance-value.negative { color: #ef4444; }
+                    .thank-you { text-align: center; font-size: 0.8rem; color: #9ca3af; margin-top: 15px; padding-top: 10px; border-top: 1px dashed #4b5563; }
+                    .thank-you p { margin: 2px 0; }
+                    `}
+                </style>
 
                 <div className="ticket-content-printable" ref={ticketRef}>
                     <div className="ticket-header">
@@ -156,7 +155,7 @@ export default function HtmlTicketDisplay({ saleData, onClose }) {
                         <p><strong>Cliente:</strong></p><p>{saleData?.cliente?.nombre || 'N/A'}</p>
                         {saleData?.cliente?.telefono && saleData.cliente.telefono !== 'N/A' && <> <p><strong>Teléfono:</strong></p><p>{saleData.cliente.telefono}</p> </>}
                         <p><strong>Vendedor:</strong></p><p>{saleData?.vendedor?.nombre || 'N/A'}</p>
-                        <p><strong>Fecha:</strong></p><p>{fecha || 'N/A'}</p> {/* Se muestra la fecha ya formateada */}
+                        <p><strong>Fecha:</strong></p><p>{fecha || 'N/A'}</p>
                     </div>
                     <div className="divider"></div>
                     <div className="mb-4">
@@ -169,7 +168,7 @@ export default function HtmlTicketDisplay({ saleData, onClose }) {
                                 </div>
                             ))
                         ) : (
-                            <p className="text-gray-600 text-center">No hay productos en la venta.</p>
+                            <p className="text-gray-400 text-center">No hay productos en la venta.</p>
                         )}
                     </div>
                     <div className="divider"></div>
@@ -179,7 +178,7 @@ export default function HtmlTicketDisplay({ saleData, onClose }) {
                             <span>{formatCurrency(saleData?.originalSubtotal || 0)}</span>
                         </div>
                         {(saleData?.discountAmount || 0) > 0 && (
-                            <div className="totals-row" style={{color: '#dc3545'}}>
+                            <div className="totals-row" style={{color: '#ef4444'}}>
                                  <span>Descuento:</span>
                                  <span>- {formatCurrency(saleData?.discountAmount || 0)}</span>
                             </div>
@@ -191,7 +190,7 @@ export default function HtmlTicketDisplay({ saleData, onClose }) {
                              </div>
                          )}
                         {(saleData?.monto_credito_aplicado || 0) > 0 && (
-                            <div className="totals-row" style={{ color: '#007bff' }}>
+                            <div className="totals-row" style={{ color: '#60a5fa' }}>
                                 <span>Saldo a Favor Aplicado:</span>
                                 <span>- {formatCurrency(saleData.monto_credito_aplicado)}</span>
                             </div>
@@ -222,17 +221,19 @@ export default function HtmlTicketDisplay({ saleData, onClose }) {
                         <p>Visítanos de nuevo pronto.</p>
                     </div>
                 </div>
-                <div className="p-4 text-center flex justify-center space-x-4 border-t mt-2">
+                <div className="p-4 text-center flex justify-center space-x-4 border-t border-dark-700 mt-2">
                     <button
                         onClick={handleDownloadTicket}
-                        className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition duration-200"
+                        className="px-6 py-2 bg-success-600 text-white rounded-md hover:bg-success-700 transition-colors flex items-center"
                     >
-                        Descargar Ticket (JPG)
+                        <Download size={18} className="mr-1.5" />
+                        Descargar Ticket
                     </button>
                     <button
                         onClick={onClose}
-                        className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition duration-200"
+                        className="px-6 py-2 bg-dark-700 text-gray-200 rounded-md hover:bg-dark-600 transition-colors flex items-center"
                     >
+                        <X size={18} className="mr-1.5" />
                         Cerrar
                     </button>
                 </div>

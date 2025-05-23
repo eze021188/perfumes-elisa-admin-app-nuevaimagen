@@ -1,6 +1,6 @@
 // src/components/NewClientModal.jsx
 import React, { useState, useEffect, useRef } from 'react'
-import { X } from 'lucide-react'
+import { X, User, Phone, Mail, MapPin, Save } from 'lucide-react'
 import { supabase } from '../supabase'
 
 export default function NewClientModal({
@@ -97,76 +97,118 @@ export default function NewClientModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 w-80 relative">
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50">
+      <div className="bg-dark-800 rounded-lg p-6 w-full max-w-md relative border border-dark-700 shadow-dropdown-dark">
         <button
           onClick={onClose}
-          className="absolute top-3 right-3 text-gray-500 hover:text-gray-800"
+          className="absolute top-3 right-3 text-gray-400 hover:text-gray-200 transition-colors"
           aria-label="Cerrar modal"
         >
-          <X />
+          <X size={20} />
         </button>
 
-        <h2 className="text-lg font-semibold mb-4">
+        <h2 className="text-xl font-semibold mb-6 text-gray-100">
           {cliente ? 'Editar Cliente' : 'Nuevo Cliente'}
         </h2>
 
-        {/* Nombre */}
-        <label htmlFor="nc-nombre" className="block text-sm mb-1">Nombre*</label>
-        <input
-          id="nc-nombre"
-          ref={inputRef}
-          className={`w-full p-2 border rounded mb-1 ${errors.nombre ? 'border-red-500' : ''}`}
-          value={form.nombre}
-          onChange={e => setForm({ ...form, nombre: e.target.value })}
-          aria-invalid={!!errors.nombre}
-          disabled={loading}
-        />
-        {errors.nombre && <p className="text-red-500 text-xs mb-2">{errors.nombre}</p>}
+        <div className="space-y-4">
+          {/* Nombre */}
+          <div>
+            <label htmlFor="nc-nombre" className="block text-sm font-medium text-gray-300 mb-1">Nombre*</label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <User size={16} className="text-gray-500" />
+              </div>
+              <input
+                id="nc-nombre"
+                ref={inputRef}
+                className={`w-full pl-10 p-2 bg-dark-900 border ${errors.nombre ? 'border-error-500' : 'border-dark-700'} rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-gray-200`}
+                value={form.nombre}
+                onChange={e => setForm({ ...form, nombre: e.target.value })}
+                aria-invalid={!!errors.nombre}
+                disabled={loading}
+              />
+            </div>
+            {errors.nombre && <p className="text-error-400 text-xs mt-1">{errors.nombre}</p>}
+          </div>
 
-        {/* Teléfono */}
-        <label htmlFor="nc-telefono" className="block text-sm mb-1">Teléfono</label>
-        <input
-          id="nc-telefono"
-          type="tel"
-          className={`w-full p-2 border rounded mb-1 ${errors.telefono ? 'border-red-500' : ''}`}
-          value={form.telefono}
-          onChange={e => setForm({ ...form, telefono: e.target.value })}
-          aria-invalid={!!errors.telefono}
-          disabled={loading}
-        />
-        {errors.telefono && <p className="text-red-500 text-xs mb-2">{errors.telefono}</p>}
+          {/* Teléfono */}
+          <div>
+            <label htmlFor="nc-telefono" className="block text-sm font-medium text-gray-300 mb-1">Teléfono</label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <Phone size={16} className="text-gray-500" />
+              </div>
+              <input
+                id="nc-telefono"
+                type="tel"
+                className={`w-full pl-10 p-2 bg-dark-900 border ${errors.telefono ? 'border-error-500' : 'border-dark-700'} rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-gray-200`}
+                value={form.telefono}
+                onChange={e => setForm({ ...form, telefono: e.target.value })}
+                aria-invalid={!!errors.telefono}
+                disabled={loading}
+              />
+            </div>
+            {errors.telefono && <p className="text-error-400 text-xs mt-1">{errors.telefono}</p>}
+          </div>
 
-        {/* Correo */}
-        <label htmlFor="nc-correo" className="block text-sm mb-1">Correo</label>
-        <input
-          id="nc-correo"
-          type="email"
-          className={`w-full p-2 border rounded mb-1 ${errors.correo ? 'border-red-500' : ''}`}
-          value={form.correo}
-          onChange={e => setForm({ ...form, correo: e.target.value })}
-          aria-invalid={!!errors.correo}
-          disabled={loading}
-        />
-        {errors.correo && <p className="text-red-500 text-xs mb-2">{errors.correo}</p>}
+          {/* Correo */}
+          <div>
+            <label htmlFor="nc-correo" className="block text-sm font-medium text-gray-300 mb-1">Correo</label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <Mail size={16} className="text-gray-500" />
+              </div>
+              <input
+                id="nc-correo"
+                type="email"
+                className={`w-full pl-10 p-2 bg-dark-900 border ${errors.correo ? 'border-error-500' : 'border-dark-700'} rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-gray-200`}
+                value={form.correo}
+                onChange={e => setForm({ ...form, correo: e.target.value })}
+                aria-invalid={!!errors.correo}
+                disabled={loading}
+              />
+            </div>
+            {errors.correo && <p className="text-error-400 text-xs mt-1">{errors.correo}</p>}
+          </div>
 
-        {/* Dirección */}
-        <label htmlFor="nc-direccion" className="block text-sm mb-1">Dirección</label>
-        <input
-          id="nc-direccion"
-          className="w-full p-2 border rounded mb-4"
-          value={form.direccion}
-          onChange={e => setForm({ ...form, direccion: e.target.value })}
-          disabled={loading}
-        />
+          {/* Dirección */}
+          <div>
+            <label htmlFor="nc-direccion" className="block text-sm font-medium text-gray-300 mb-1">Dirección</label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <MapPin size={16} className="text-gray-500" />
+              </div>
+              <input
+                id="nc-direccion"
+                className={`w-full pl-10 p-2 bg-dark-900 border border-dark-700 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-gray-200`}
+                value={form.direccion}
+                onChange={e => setForm({ ...form, direccion: e.target.value })}
+                disabled={loading}
+              />
+            </div>
+          </div>
+        </div>
 
-        <button
-          onClick={handleSave}
-          disabled={loading}
-          className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {loading ? 'Guardando…' : (cliente ? 'Guardar Cambios' : 'Guardar Cliente')}
-        </button>
+        <div className="mt-6 flex justify-end">
+          <button
+            onClick={handleSave}
+            disabled={loading}
+            className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center"
+          >
+            {loading ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-2"></div>
+                <span>Guardando…</span>
+              </>
+            ) : (
+              <>
+                <Save size={16} className="mr-1.5" />
+                <span>{cliente ? 'Guardar Cambios' : 'Guardar Cliente'}</span>
+              </>
+            )}
+          </button>
+        </div>
       </div>
     </div>
   )

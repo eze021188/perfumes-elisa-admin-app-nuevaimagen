@@ -42,8 +42,11 @@ function ProtectedRoute({ children }) {
 
   // Si todavía estamos verificando la sesión inicial, muestra un indicador de carga
   if (loading) {
-    // Puedes reemplazar esto con un spinner o una página de carga completa si lo deseas
-    return <p>Cargando autenticación...</p>;
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-dark-950">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-400"></div>
+      </div>
+    );
   }
 
   // Si no hay usuario (no autenticado) y la carga terminó, redirige a la página de login
@@ -65,8 +68,11 @@ function RedirectIfAuthenticated({ children }) {
 
     // Si todavía estamos verificando la sesión inicial, muestra un indicador de carga
     if (loading) {
-        // Puedes reemplazar esto con un spinner
-        return <p>Cargando autenticación...</p>;
+        return (
+          <div className="flex items-center justify-center min-h-screen bg-dark-950">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-400"></div>
+          </div>
+        );
     }
 
     // Si hay usuario (autenticado) y la carga terminó, redirige a la página principal
@@ -91,7 +97,30 @@ export default function App() {
         <ProductosProvider>
           <ComprasProvider>
             {/* Toast notifications */}
-            <Toaster position="top-right" reverseOrder={false} />
+            <Toaster 
+              position="top-right" 
+              reverseOrder={false} 
+              toastOptions={{
+                // Estilos para los toasts en modo oscuro
+                style: {
+                  background: '#1f2937',
+                  color: '#e5e7eb',
+                  border: '1px solid #374151',
+                },
+                success: {
+                  iconTheme: {
+                    primary: '#10b981',
+                    secondary: '#1f2937',
+                  },
+                },
+                error: {
+                  iconTheme: {
+                    primary: '#ef4444',
+                    secondary: '#1f2937',
+                  },
+                },
+              }}
+            />
 
             <BrowserRouter>
               <Routes>

@@ -28,26 +28,26 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-dark-950 to-dark-900 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8 animate-fade-in">
           <img
-            src="/images/PERFUMESELISA.png"
+            src="/images/PERFUMESELISAwhite.jpg"
             alt="Perfumes Elisa"
             className="h-24 mx-auto mb-6 hover-lift"
           />
-          <h2 className="text-3xl font-bold text-gray-900 mb-2">
+          <h2 className="text-3xl font-bold text-gray-100 mb-2">
             Bienvenido
           </h2>
-          <p className="text-gray-600">
+          <p className="text-gray-400">
             Inicia sesión para continuar
           </p>
         </div>
 
-        <form onSubmit={handleLogin} className="bg-white/90 backdrop-blur-sm rounded-xl shadow-elegant border border-gray-100 p-8 animate-slide-up">
+        <form onSubmit={handleLogin} className="glass-dark p-8 rounded-xl animate-slide-up">
           <div className="space-y-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-gray-300 mb-1">
                 Correo electrónico
               </label>
               <div className="relative">
@@ -59,14 +59,14 @@ export default function Login() {
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                   required
-                  className="pl-10 input-primary"
+                  className="pl-10 w-full p-3 bg-dark-900 border border-dark-700 rounded-lg text-gray-100 placeholder-gray-500 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                   placeholder="tu@email.com"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-gray-300 mb-1">
                 Contraseña
               </label>
               <div className="relative">
@@ -78,7 +78,7 @@ export default function Login() {
                   value={password}
                   onChange={e => setPassword(e.target.value)}
                   required
-                  className="pl-10 input-primary"
+                  className="pl-10 w-full p-3 bg-dark-900 border border-dark-700 rounded-lg text-gray-100 placeholder-gray-500 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                   placeholder="••••••••"
                 />
               </div>
@@ -90,16 +90,16 @@ export default function Login() {
                   id="remember_me"
                   name="remember_me"
                   type="checkbox"
-                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-dark-700 rounded bg-dark-900"
                 />
-                <label htmlFor="remember_me" className="ml-2 block text-sm text-gray-700">
+                <label htmlFor="remember_me" className="ml-2 block text-sm text-gray-300">
                   Recordarme
                 </label>
               </div>
 
               <Link
                 to="/reset-password"
-                className="text-sm font-medium text-blue-600 hover:text-blue-500 transition-colors"
+                className="text-sm font-medium text-primary-400 hover:text-primary-300 transition-colors"
               >
                 ¿Olvidaste tu contraseña?
               </Link>
@@ -108,7 +108,7 @@ export default function Login() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full flex items-center justify-center space-x-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-medium py-2.5 px-4 rounded-lg shadow-sm transition-all duration-200 ease-in-out disabled:opacity-70 disabled:cursor-not-allowed"
+              className="w-full flex items-center justify-center space-x-2 bg-gradient-to-r from-primary-600 to-accent-600 hover:from-primary-700 hover:to-accent-700 text-white font-medium py-3 px-4 rounded-lg shadow-elegant-dark transition-all duration-200 ease-in-out disabled:opacity-70 disabled:cursor-not-allowed"
             >
               {loading ? (
                 <>
@@ -129,7 +129,7 @@ export default function Login() {
         </form>
 
         <div className="mt-6 text-center">
-          <p className="text-sm text-gray-600">
+          <p className="text-sm text-gray-400">
             Sistema de Gestión Perfumes Elisa
           </p>
           <p className="text-xs text-gray-500 mt-1">
