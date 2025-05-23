@@ -2,9 +2,10 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { supabase } from '../supabase';
 import { useNavigate, useLocation } from 'react-router-dom';
-// import jsPDF from 'jspdf'; // No se usa directamente para el ticket HTML aquí
-// import 'jspdf-autotable'; // No se usa directamente para el ticket HTML aquí
 import toast from 'react-hot-toast';
+import { ChevronRight, Eye, EyeOff, ArrowLeft } from 'lucide-react';
+
+// Components
 import QuickEntryBar from '../components/QuickEntryBar';
 import QuickSaleModal from '../components/QuickSaleModal';
 import ClientSelector from '../components/ClientSelector';
@@ -13,9 +14,8 @@ import FilterTabs from '../components/FilterTabs';
 import ProductGrid from '../components/ProductGrid';
 import ModalCheckout from '../components/ModalCheckout';
 import HtmlTicketDisplay from '../components/HtmlTicketDisplay';
-import { ChevronRight, Eye, EyeOff } from 'lucide-react';
 
-// --- NUEVO: Importar los componentes divididos ---
+// Checkout components
 import CheckoutCartDisplay from '../components/checkout/CheckoutCartDisplay';
 import CheckoutPaymentForm from '../components/checkout/CheckoutPaymentForm';
 
@@ -25,7 +25,7 @@ const formatCurrency = (amount) => {
      if (isNaN(numericAmount)) {
          return '$0.00';
      }
-     return numericAmount.toLocaleString('es-MX', { // Cambiado a es-MX y MXN
+     return numericAmount.toLocaleString('es-MX', {
         style: 'currency',
         currency: 'MXN',
         minimumFractionDigits: 2,
@@ -44,26 +44,23 @@ const formatDateTimeForCode = (date) => {
     return `${year}${month}${day}${hours}${minutes}${seconds}`;
 };
 
-// --- NUEVO/MODIFICADO: Helper para formatear fecha para el ticket en zona horaria específica ---
+// Helper para formatear fecha para el ticket en zona horaria específica
 const formatTicketDateTime = (dateString) => {
     if (!dateString) return 'Fecha desconocida';
     try {
         return new Date(dateString).toLocaleString('es-MX', {
-            timeZone: 'America/Mexico_City', // O 'America/Monterrey'
+            timeZone: 'America/Mexico_City',
             year: '2-digit',
             month: '2-digit',
             day: '2-digit',
             hour: '2-digit',
             minute: '2-digit',
-            // second: '2-digit', // Opcional
-            // hour12: true // Opcional
         });
     } catch (e) {
         console.error("Error formateando fecha para ticket:", e);
-        return new Date(dateString).toLocaleString(); // Fallback a local del navegador
+        return new Date(dateString).toLocaleString();
     }
 };
-
 
 export default function Checkout() {
     const navigate = useNavigate();
@@ -194,7 +191,7 @@ export default function Checkout() {
                 else toast.error("No se pudo abrir modal de venta desde presupuesto.");
             }, 100);
         } else { setBudgetSourceId(null); }
-    }, [location.state, productos]); // productos es dependencia clave aquí
+    }, [location.state, productos]);
 
     const productosFiltrados = useMemo(() => {
         return productos.filter(p =>
@@ -258,7 +255,7 @@ export default function Checkout() {
         setProductosVenta(prev => prev.map(p => {
             if (p.id === productoId) {
                 const stockTotalProducto = productos.find(prod => prod.id === p.id)?.stock || 0;
-                if (isNaN(newQuantity) || newQuantity < 1) return { ...p, cantidad: 1, total: p.promocion }; // O eliminar si es 0
+                if (isNaN(newQuantity) || newQuantity < 1) return { ...p, cantidad: 1, total: p.promocion };
                 if (newQuantity > stockTotalProducto) {
                     toast.error(`Stock máximo: ${stockTotalProducto}`);
                     return { ...p, cantidad: stockTotalProducto, total: stockTotalProducto * p.promocion };
@@ -266,7 +263,7 @@ export default function Checkout() {
                 return { ...p, cantidad: newQuantity, total: newQuantity * p.promocion };
             }
             return p;
-        }).filter(p => p.cantidad > 0)); // Eliminar si la cantidad llega a 0
+        }).filter(p => p.cantidad > 0));
     };
 
     const openSaleModal = () => {
@@ -282,10 +279,9 @@ export default function Checkout() {
         if (!currentUser?.id || !infoClienteConSaldo?.client_id || productosVenta.length === 0 || (totalFinalAPagar > 0 && !paymentType)) {
             toast.error('Faltan datos para finalizar la venta.'); setProcessing(false); return;
         }
-        // ... (otras validaciones de enganche, gastosEnvio que ya tenías)
 
         try {
-            const now = new Date(); // Usar esta 'now' para consistencia
+            const now = new Date();
             const codigo = `VT${formatDateTimeForCode(now)}`;
             let ventaId;
 
@@ -293,9 +289,8 @@ export default function Checkout() {
                 const { error: errorMovSaldo } = await supabase.from('movimientos_cuenta_clientes').insert([{
                     cliente_id: infoClienteConSaldo.client_id,
                     tipo_movimiento: 'USO_SALDO_VENTA',
-                    monto: montoAplicadoDelSaldoFavor, // Positivo
+                    monto: montoAplicadoDelSaldoFavor,
                     descripcion: `Aplicación saldo en Venta ${codigo}`,
-                    // referencia_venta_id se actualizará después
                 }]);
                 if (errorMovSaldo) throw errorMovSaldo;
             }
@@ -304,7 +299,7 @@ export default function Checkout() {
                 codigo_venta: codigo,
                 cliente_id: infoClienteConSaldo.client_id,
                 vendedor_id: currentUser.id,
-                fecha: now.toISOString(), // --- NUEVO/MODIFICADO: Enviar fecha UTC ---
+                fecha: now.toISOString(),
                 subtotal: originalSubtotal,
                 forma_pago: totalFinalAPagar === 0 && montoAplicadoDelSaldoFavor > 0 ? 'SALDO_A_FAVOR' : paymentType,
                 tipo_descuento: discountType,
@@ -354,8 +349,7 @@ export default function Checkout() {
                 await supabase.from('presupuestos').update({ estado: 'Convertido a Venta' }).eq('id', budgetSourceId);
             }
             
-            // --- NUEVO/MODIFICADO: Usar formatTicketDateTime para la fecha del ticket ---
-            const ticketFormattedDate = formatTicketDateTime(now.toISOString()); // Formatear para la zona horaria correcta
+            const ticketFormattedDate = formatTicketDateTime(now.toISOString());
 
             let balanceFinalClienteParaTicket = infoClienteConSaldo?.balance !== undefined ? infoClienteConSaldo.balance : 0;
             if (usarSaldoFavor && montoAplicadoDelSaldoFavor > 0) balanceFinalClienteParaTicket += montoAplicadoDelSaldoFavor;
@@ -369,7 +363,7 @@ export default function Checkout() {
                 codigo_venta: codigo,
                 cliente: { id: infoClienteConSaldo.client_id, nombre: infoClienteConSaldo.client_name, telefono: infoClienteConSaldo.telefono || 'N/A' },
                 vendedor: { nombre: vendedorInfo?.nombre || currentUser?.email || 'N/A' },
-                fecha: ticketFormattedDate, // --- NUEVO/MODIFICADO ---
+                fecha: ticketFormattedDate,
                 productosVenta: productosVenta.map(p => ({ ...p })),
                 originalSubtotal, discountAmount,
                 forma_pago: totalFinalAPagar === 0 && montoAplicadoDelSaldoFavor > 0 ? 'SALDO_A_FAVOR' : paymentType,
@@ -385,7 +379,6 @@ export default function Checkout() {
             setProductosVenta([]); setClienteSeleccionado(null); setPaymentType('');
             setDiscountType('Sin descuento'); setDiscountValue(0); setEnganche(0);
             setGastosEnvio(0); setBudgetSourceId(null);
-            // setUsarSaldoFavor y setMontoAplicadoDelSaldoFavor se resetean con clienteSeleccionado
 
             toast.success(`Venta ${codigo} registrada!`);
         } catch (err) {
@@ -403,29 +396,33 @@ export default function Checkout() {
     }, [clientes, clienteSeleccionado]);
 
     return (
-        <div className="min-h-screen bg-gray-100 p-4 md:p-8 lg:p-12">
+        <div className="min-h-screen bg-dark-900 p-4 md:p-8 lg:p-12">
             {/* Encabezado */}
             <div className="flex flex-col md:flex-row items-center justify-between gap-6 mb-8">
-                <button onClick={() => navigate('/')} className="px-6 py-2 bg-gray-700 text-white font-semibold rounded-lg shadow-md hover:bg-gray-800">
+                <button 
+                    onClick={() => navigate('/')} 
+                    className="px-6 py-2 bg-dark-800 text-gray-200 font-semibold rounded-lg shadow-elegant-dark hover:bg-dark-700 transition-colors flex items-center gap-2"
+                >
+                    <ArrowLeft size={18} />
                     Volver al inicio
                 </button>
-                <h1 className="text-3xl font-bold text-gray-800 text-center">Gestión de Ventas</h1>
+                <h1 className="text-3xl font-bold text-gray-100 text-center">Gestión de Ventas</h1>
                 <div className="w-full md:w-[150px]" />
             </div>
 
             {/* Selector de Cliente */}
-            <div className="mb-6">
+            <div className="mb-6 bg-dark-800/50 p-6 rounded-xl border border-dark-700/50 shadow-card-dark">
                 <ClientSelector
                     clientes={clientesParaSelector}
                     clienteSeleccionado={clienteSeleccionado}
                     onSelect={setClienteSeleccionado}
                     onCreateNew={() => setShowNewClient(true)}
                 />
-                {loadingSaldoCliente && clienteSeleccionado && <p className="mt-2 text-sm text-gray-600">Cargando saldo...</p>}
+                {loadingSaldoCliente && clienteSeleccionado && <p className="mt-2 text-sm text-gray-400">Cargando saldo...</p>}
                 {infoClienteConSaldo && !loadingSaldoCliente && (
-                    <p className="mt-2 text-sm text-gray-700">
+                    <p className="mt-2 text-sm text-gray-300">
                         Balance Actual:
-                        <span className={`font-semibold ${infoClienteConSaldo.balance === 0 ? 'text-gray-700' : infoClienteConSaldo.balance < 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        <span className={`font-semibold ${infoClienteConSaldo.balance === 0 ? 'text-gray-300' : infoClienteConSaldo.balance < 0 ? 'text-success-400' : 'text-error-400'}`}>
                             {' '}{formatCurrency(infoClienteConSaldo.balance)}
                             {infoClienteConSaldo.balance < 0 ? ' (a favor)' : infoClienteConSaldo.balance > 0 ? ' (por cobrar)' : ''}
                         </span>
@@ -437,17 +434,17 @@ export default function Checkout() {
             {/* Barra de búsqueda, filtro de productos y switch de stock */}
             <div className="mb-6 flex flex-col md:flex-row md:items-center gap-4">
                 <div className="flex-grow">
-                    <QuickEntryBar busqueda={busqueda} onChangeBusqueda={setBusqueda} onQuickSaleClick={() => setShowQuickSale(true)} />
+                    <QuickEntryBar busqueda={busqueda} onChangeBusqueda={e => setBusqueda(e.target.value)} onQuickSaleClick={() => setShowQuickSale(true)} />
                 </div>
                 <div className="flex items-center space-x-2 whitespace-nowrap">
-                    {showOutOfStock ? <EyeOff size={20} className="text-gray-600"/> : <Eye size={20} className="text-gray-600"/>}
-                    <span className="text-sm text-gray-700 select-none">
+                    {showOutOfStock ? <EyeOff size={20} className="text-gray-400"/> : <Eye size={20} className="text-gray-400"/>}
+                    <span className="text-sm text-gray-300 select-none">
                         {showOutOfStock ? 'Ocultar sin stock' : 'Mostrar sin stock'}
                     </span>
                     <label htmlFor="stockToggle" className="flex items-center cursor-pointer">
                         <div className="relative">
                             <input type="checkbox" id="stockToggle" className="sr-only" checked={showOutOfStock} onChange={() => setShowOutOfStock(!showOutOfStock)} />
-                            <div className={`block w-10 h-6 rounded-full transition-colors ${showOutOfStock ? 'bg-blue-600' : 'bg-gray-300'}`}></div>
+                            <div className={`block w-10 h-6 rounded-full transition-colors ${showOutOfStock ? 'bg-primary-600' : 'bg-dark-600'}`}></div>
                             <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${showOutOfStock ? 'translate-x-full' : ''}`}></div>
                         </div>
                     </label>
@@ -460,13 +457,17 @@ export default function Checkout() {
 
             {/* Footer Fijo */}
             <div
-                className={`fixed bottom-0 left-0 right-0 p-4 text-center rounded-t-xl shadow-lg flex justify-between items-center transition-colors ${productosVenta.length === 0 || !infoClienteConSaldo?.client_id || processing ? 'bg-gray-300 text-gray-600 cursor-not-allowed' : 'bg-green-600 text-white cursor-pointer hover:bg-green-700'}`}
+                className={`fixed bottom-0 left-0 right-0 p-4 text-center rounded-t-xl shadow-lg flex justify-between items-center transition-colors ${
+                    productosVenta.length === 0 || !infoClienteConSaldo?.client_id || processing 
+                    ? 'bg-dark-700 text-gray-500 cursor-not-allowed' 
+                    : 'bg-primary-600 text-white cursor-pointer hover:bg-primary-700'
+                }`}
                 onClick={openSaleModal}
                 aria-disabled={productosVenta.length === 0 || !infoClienteConSaldo?.client_id || processing}
             >
                 <div className="flex-1 text-left">
                     <span className="font-semibold text-lg">{totalItems} item{totalItems !== 1 ? 's' : ''}</span>
-                    {infoClienteConSaldo?.client_name && <span className="ml-4 text-sm text-gray-200">Cliente: {infoClienteConSaldo.client_name}</span>}
+                    {infoClienteConSaldo?.client_name && <span className="ml-4 text-sm text-gray-300">Cliente: {infoClienteConSaldo.client_name}</span>}
                 </div>
                 <div className="flex-1 text-right"><span className="font-bold text-xl">{formatCurrency(totalFinalAPagar)}</span></div>
                 {processing && <div className="ml-4 text-sm font-semibold">Procesando…</div>}
@@ -481,16 +482,15 @@ export default function Checkout() {
                     title={`Detalle de venta para: ${infoClienteConSaldo.client_name}`}
                     footer={
                         <>
-                            <button onClick={() => setShowSaleModal(false)} className="px-4 py-2 bg-gray-300 text-gray-800 rounded-md hover:bg-gray-400" disabled={processing}>Cancelar</button>
+                            <button onClick={() => setShowSaleModal(false)} className="px-4 py-2 bg-dark-700 text-gray-300 rounded-md hover:bg-dark-600" disabled={processing}>Cancelar</button>
                             <button onClick={handleFinalize}
                                 disabled={processing || (totalFinalAPagar > 0 && !paymentType) || (paymentType === 'Crédito cliente' && (totalFinalAPagar - (parseFloat(enganche) || 0)) < 0 && totalFinalAPagar !==0)}
-                                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50">
+                                className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 disabled:opacity-50">
                                 {processing ? 'Confirmando…' : 'Confirmar Venta'}
                             </button>
                         </>
                     }
                 >
-                    {/* --- NUEVO: Usar los componentes divididos dentro del ModalCheckout --- */}
                     <CheckoutCartDisplay
                         productosVenta={productosVenta}
                         onUpdateQuantity={onUpdateQuantity}

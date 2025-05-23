@@ -1,4 +1,3 @@
-// src/components/home/HomeDateRangePicker.jsx
 import React from 'react';
 
 export default function HomeDateRangePicker({
@@ -7,12 +6,9 @@ export default function HomeDateRangePicker({
   onStartDateChange,
   onEndDateChange,
 }) {
-  // Estilos para los inputs de fecha para un look minimalista y profesional
-  const dateInputClass = "bg-white border border-slate-300 text-slate-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 shadow-sm hover:border-slate-400 transition-colors duration-200";
-
   return (
-    <div className="flex flex-col sm:flex-row items-center gap-2 md:gap-3 bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
-      <label htmlFor="startDate" className="text-sm font-medium text-slate-600 whitespace-nowrap">
+    <div className="flex flex-col sm:flex-row gap-4 items-center bg-dark-800/50 p-4 rounded-xl border border-dark-700/50 backdrop-blur-sm">
+      <label htmlFor="startDate" className="text-sm font-medium text-gray-300 whitespace-nowrap">
         Rango:
       </label>
       <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -21,16 +17,16 @@ export default function HomeDateRangePicker({
           id="startDate"
           value={startDate}
           onChange={(e) => onStartDateChange(e.target.value)}
-          className={dateInputClass}
+          className="w-full px-4 py-2 bg-dark-900 border border-dark-700 rounded-lg text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 shadow-inner-glow"
           aria-label="Fecha de inicio"
         />
-        <span className="text-slate-500">-</span>
+        <span className="text-gray-400">-</span>
         <input
           type="date"
           id="endDate"
           value={endDate}
           onChange={(e) => onEndDateChange(e.target.value)}
-          className={dateInputClass}
+          className="w-full px-4 py-2 bg-dark-900 border border-dark-700 rounded-lg text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 shadow-inner-glow"
           aria-label="Fecha de fin"
         />
       </div>

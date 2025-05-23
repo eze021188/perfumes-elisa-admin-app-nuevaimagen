@@ -6,6 +6,7 @@ import 'jspdf-autotable';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import html2canvas from 'html2canvas';
+import { ArrowLeft, FileText, Share2, Download, X } from 'lucide-react';
 
 // Componentes divididos
 import VentasFiltroBusqueda from '../components/ventas/VentasFiltroBusqueda';
@@ -343,37 +344,40 @@ const ImageActionModal = ({ isOpen, onClose, imageDataUrl, imageFile, ventaCodig
     console.log("ImageActionModal: Renderizando. isOpen:", isOpen, "imageDataUrl:", !!imageDataUrl);
     return (
         <div 
-            className="fixed inset-0 bg-gray-800 bg-opacity-75 overflow-y-auto h-full w-full z-[100] flex items-center justify-center p-2 sm:p-4" 
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm overflow-y-auto h-full w-full z-[100] flex items-center justify-center p-2 sm:p-4" 
             onClick={onClose}
         >
             <div 
-                className="bg-white rounded-lg shadow-xl w-auto max-w-xs sm:max-w-sm md:max-w-md relative flex flex-col items-center p-3 sm:p-4" // Ajustado max-w para que no sea demasiado ancho
+                className="bg-dark-800 rounded-lg shadow-dropdown-dark border border-dark-700 w-auto max-w-xs sm:max-w-sm md:max-w-md relative flex flex-col items-center p-3 sm:p-4" 
                 onClick={e => e.stopPropagation()}
             >
                 <div className="w-full mb-4 flex justify-center">
                     <img 
                         src={imageDataUrl} 
                         alt="Ticket de Venta" 
-                        className="max-w-full h-auto max-h-[70vh] object-contain shadow-md" // Agregada sombra a la imagen
+                        className="max-w-full h-auto max-h-[70vh] object-contain shadow-card-dark" 
                     />
                 </div>
                 <div className="flex flex-wrap justify-center gap-2 sm:gap-3 w-full">
                     <button
                         onClick={handleShare}
-                        className="px-3 py-2 sm:px-4 bg-blue-600 text-white rounded-md shadow-sm hover:bg-blue-700 transition duration-200 text-xs sm:text-sm"
+                        className="px-3 py-2 sm:px-4 bg-primary-600 text-white rounded-md shadow-sm hover:bg-primary-700 transition-colors flex items-center"
                     >
-                        Compartir Imagen
+                        <Share2 size={16} className="mr-1" />
+                        Compartir
                     </button>
                     <button
                         onClick={handleDownload}
-                        className="px-3 py-2 sm:px-4 bg-green-600 text-white rounded-md shadow-sm hover:bg-green-700 transition duration-200 text-xs sm:text-sm"
+                        className="px-3 py-2 sm:px-4 bg-success-600 text-white rounded-md shadow-sm hover:bg-success-700 transition-colors flex items-center"
                     >
-                        Descargar Imagen
+                        <Download size={16} className="mr-1" />
+                        Descargar
                     </button>
                     <button
                         onClick={onClose}
-                        className="px-3 py-2 sm:px-4 bg-gray-500 text-white rounded-md shadow-sm hover:bg-gray-600 transition duration-200 text-xs sm:text-sm"
+                        className="px-3 py-2 sm:px-4 bg-dark-600 text-gray-200 rounded-md shadow-sm hover:bg-dark-500 transition-colors flex items-center"
                     >
+                        <X size={16} className="mr-1" />
                         Cerrar
                     </button>
                 </div>
@@ -432,7 +436,7 @@ export default function Ventas() {
 
   useEffect(() => {
     async function loadLogoImg() {
-        const base64 = await getBase64Image('/images/PERFUMESELISAwhite.jpg'); // Asegúrate que esta ruta sea correcta
+        const base64 = await getBase64Image('/images/PERFUMESELISAwhite.jpg');
         setLogoBase64(base64);
     }
     loadLogoImg();
@@ -451,7 +455,12 @@ export default function Ventas() {
         const { data: detalleItems, error: errDetalle } = await supabase
             .from('detalle_venta').select('*, productos(id, nombre)').eq('venta_id', venta.id);
         if (errDetalle) throw errDetalle;
-        ventaConDetallesYInfoCompleta.productos = (detalleItems || []).map(item => ({ ...item, nombre: item.productos?.nombre || 'Producto Desconocido' }));
+        ventaConDetallesYInfoCompleta.productos = (detalleItems || []).map(item => ({
+            ...item,
+            nombreProducto: item.productos?.nombre || 'Producto desconocido',
+            id: item.productos?.id || item.producto_id,
+            nombre: item.productos?.nombre || 'Producto desconocido'
+        }));
         
         console.log("handleSelectSale: Productos mapeados", ventaConDetallesYInfoCompleta.productos);
 
@@ -512,7 +521,7 @@ export default function Ventas() {
   const handleShareTicketAsPDF = async () => {
       console.log("handleShareTicketAsPDF: Iniciando");
       if (!ventaSeleccionada || !ventaSeleccionada.productos || !clienteInfoTicket || !vendedorInfoTicket) {
-          toast.error("Datos incompletos para PDF."); 
+          toast.error("Datos incompletos para generar el PDF."); 
           console.log("handleShareTicketAsPDF: Datos incompletos", {ventaSeleccionada, clienteInfoTicket, vendedorInfoTicket});
           return;
       }
@@ -690,8 +699,6 @@ export default function Ventas() {
       );
   }, [ventas, busqueda]);
 
-  const handleNewSaleCreatedAndShowModal = async (newSaleId) => { /* ... */ };
-
   return (
     <>
       {ventaSeleccionada && clienteInfoTicket && vendedorInfoTicket && (
@@ -719,12 +726,16 @@ export default function Ventas() {
           ventaTotal={ventaSeleccionada?.total}
       />
 
-      <div className="min-h-screen bg-gray-100 p-4 md:p-8 lg:p-12">
+      <div className="min-h-screen bg-dark-900 p-4 md:p-8 lg:p-12">
         <div className="flex flex-col md:flex-row items-center justify-between gap-6 mb-8">
-          <button onClick={() => navigate('/')} className="px-6 py-2 bg-gray-700 text-white font-semibold rounded-lg shadow-md hover:bg-gray-800">
+          <button 
+            onClick={() => navigate('/')} 
+            className="px-6 py-2 bg-dark-800 text-gray-200 font-semibold rounded-lg shadow-elegant-dark hover:bg-dark-700 transition-colors flex items-center gap-2"
+          >
+            <ArrowLeft size={18} />
             Volver al inicio
           </button>
-          <h1 className="text-3xl font-bold text-gray-800 text-center">Historial de Ventas</h1>
+          <h1 className="text-3xl font-bold text-gray-100 text-center">Historial de Ventas</h1>
           <div className="w-full md:w-[150px]" />
         </div>
         

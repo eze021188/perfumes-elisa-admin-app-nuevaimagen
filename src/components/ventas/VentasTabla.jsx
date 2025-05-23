@@ -1,15 +1,16 @@
 // src/components/ventas/VentasTabla.jsx
 import React from 'react';
+import { FileText, Loader } from 'lucide-react';
 
-// Helper para formatear moneda (debe ser consistente con el resto de tu app)
+// Helper para formatear moneda
 const formatCurrency = (amount) => {
     const numericAmount = parseFloat(amount);
     if (isNaN(numericAmount)) {
         return '$0.00';
     }
-    return numericAmount.toLocaleString('en-US', { // O 'es-MX' o la configuración que uses
+    return numericAmount.toLocaleString('en-US', {
        style: 'currency',
-       currency: 'USD', // Ajusta según tu moneda
+       currency: 'USD',
        minimumFractionDigits: 2,
        maximumFractionDigits: 2,
    });
@@ -20,66 +21,73 @@ export default function VentasTabla({
   onSelectSale,
   loading,
   busqueda,
-  formatDateFunction // Recibe la función de formateo de fecha
+  formatDateFunction
 }) {
   if (loading) {
-    return <p className="p-4 text-center text-lg font-semibold text-gray-700">Cargando ventas...</p>;
+    return (
+      <div className="flex justify-center items-center h-64 bg-dark-800/50 rounded-lg border border-dark-700/50">
+        <Loader size={24} className="text-primary-400 animate-spin mr-2" />
+        <p className="text-gray-300 font-medium">Cargando ventas...</p>
+      </div>
+    );
   }
 
   if (ventasFiltradas.length === 0) {
     return (
-      <p className="p-4 text-center text-gray-500 italic">
-        {busqueda
-          ? `No hay ventas que coincidan con "${busqueda}".`
-          : "No hay ventas registradas."
-        }
-      </p>
+      <div className="flex flex-col items-center justify-center h-64 bg-dark-800/50 rounded-lg border border-dark-700/50">
+        <p className="text-gray-400 italic mb-2">
+          {busqueda
+            ? `No hay ventas que coincidan con "${busqueda}".`
+            : "No hay ventas registradas."
+          }
+        </p>
+        <FileText size={48} className="text-gray-600 opacity-50" />
+      </div>
     );
   }
 
   return (
-    <div className="bg-white shadow-lg rounded-lg overflow-hidden mb-6">
-      <div className="overflow-x-auto"> {/* Para responsividad en tablas */}
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-200">
+    <div className="bg-dark-800 shadow-card-dark rounded-lg overflow-hidden mb-6 border border-dark-700/50">
+      <div className="overflow-x-auto">
+        <table className="min-w-full divide-y divide-dark-700">
+          <thead className="bg-dark-900/50">
             <tr>
-              <th className="p-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Código</th>
-              <th className="p-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Cliente</th>
-              <th className="p-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider hidden md:table-cell">Fecha</th>
-              <th className="p-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider hidden sm:table-cell">Pago</th>
-              <th className="p-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Total</th>
-              <th className="p-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Acciones</th>
+              <th className="p-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Código</th>
+              <th className="p-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Cliente</th>
+              <th className="p-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider hidden md:table-cell">Fecha</th>
+              <th className="p-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider hidden sm:table-cell">Pago</th>
+              <th className="p-4 text-right text-xs font-semibold text-gray-400 uppercase tracking-wider">Total</th>
+              <th className="p-4 text-center text-xs font-semibold text-gray-400 uppercase tracking-wider">Acciones</th>
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
+          <tbody className="bg-dark-800 divide-y divide-dark-700/50">
             {ventasFiltradas.map(venta => (
               <tr
                 key={venta.id}
-                className="hover:bg-gray-50 transition duration-150 ease-in-out"
+                className="hover:bg-dark-700/50 transition-colors"
               >
                 <td
-                    className="p-4 whitespace-nowrap text-sm font-medium text-blue-600 hover:text-blue-800 cursor-pointer"
+                    className="p-4 whitespace-nowrap text-sm font-medium text-primary-400 hover:text-primary-300 cursor-pointer"
                     onClick={() => onSelectSale(venta)}
                     title={`Ver detalle de venta ${venta.codigo_venta}`}
                 >
                     {venta.codigo_venta}
                 </td>
-                {/* CORREGIDO: Usar display_cliente_nombre en lugar de display_cliente_nombre_tabla */}
-                <td className="p-4 whitespace-nowrap text-sm text-gray-700">{venta.display_cliente_nombre}</td>
-                <td className="p-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">
-                  {/* Usar la función de formateo pasada como prop */}
+                <td className="p-4 whitespace-nowrap text-sm text-gray-300">{venta.display_cliente_nombre}</td>
+                <td className="p-4 whitespace-nowrap text-sm text-gray-400 hidden md:table-cell">
                   {formatDateFunction ? formatDateFunction(venta.fecha || venta.created_at) : new Date(venta.fecha || venta.created_at).toLocaleString()}
                 </td>
-                <td className="p-4 whitespace-nowrap text-sm text-gray-500 hidden sm:table-cell">{venta.forma_pago}</td>
-                <td className="p-4 whitespace-nowrap text-sm font-semibold text-gray-900 text-right">
+                <td className="p-4 whitespace-nowrap text-sm text-gray-400 hidden sm:table-cell">{venta.forma_pago}</td>
+                <td className="p-4 whitespace-nowrap text-sm font-semibold text-gray-200 text-right">
                   {formatCurrency(venta.total ?? 0)}
                 </td>
                 <td className="p-4 whitespace-nowrap text-center text-sm font-medium">
                   <button
                     onClick={() => onSelectSale(venta)}
-                    className="px-3 py-1 bg-blue-600 text-white rounded-md shadow-sm hover:bg-blue-700 transition duration-200 ease-in-out text-xs"
+                    className="px-3 py-1.5 bg-primary-600/80 text-white rounded-md shadow-sm hover:bg-primary-600 transition-colors text-xs flex items-center mx-auto"
                     title="Ver Detalle de la Venta"
                   >
+                    <FileText size={14} className="mr-1" />
                     Ver Detalle
                   </button>
                 </td>
