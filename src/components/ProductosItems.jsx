@@ -1,20 +1,30 @@
-// src/components/ProductosItems.jsx 
-// o src/pages/ProductosItems.jsx (asegúrate que el nombre y ruta de importación sean correctos)
+// src/components/ProductosItems.jsx
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../supabase';
 import ModalEditarProducto from './ModalEditarProducto';
 import toast from 'react-hot-toast';
+import { 
+  Plus, 
+  Trash2, 
+  Save, 
+  Search, 
+  Edit, 
+  Package, 
+  Filter, 
+  CheckSquare, 
+  Square 
+} from 'lucide-react';
 
 export default function ProductosItems() {
   const [productos, setProductos] = useState([]);
   const [busqueda, setBusqueda] = useState('');
   const [modalActivo, setModalActivo] = useState(false);
   const [productoEditando, setProductoEditando] = useState(null);
-  const [actualizando, setActualizando] = useState(false); // Para la actualización de precios
+  const [actualizando, setActualizando] = useState(false);
   const [seleccionados, setSeleccionados] = useState(new Set());
   
   // Estado para el filtro de stock
-  const [stockFilter, setStockFilter] = useState('con-stock'); // Opciones: 'con-stock', 'sin-stock', 'todos'
+  const [stockFilter, setStockFilter] = useState('con-stock');
 
   const [sortColumn, setSortColumn] = useState('nombre');
   const [sortDirection, setSortDirection] = useState('asc');
@@ -68,7 +78,6 @@ export default function ProductosItems() {
       } else if (stockFilter === 'sin-stock') {
           productosTrabajo = productosTrabajo.filter(p => !p.stock || parseFloat(p.stock) <= 0);
       }
-      // Si stockFilter es 'todos', no se aplica filtro de stock.
 
       // 3. Ordenar
       if (sortColumn) {
@@ -184,7 +193,7 @@ export default function ProductosItems() {
          toast.success(`${updatesToApply.length} precios actualizados exitosamente.`);
     }
     setSeleccionados(new Set());
-    setActualizando(false); // Asegúrate de resetear el estado 'actualizando'
+    setActualizando(false);
   };
 
   const abrirModal = producto => {
@@ -271,157 +280,183 @@ export default function ProductosItems() {
 
   return (
     <div>
-      <div className="mb-4 p-4 border rounded-lg shadow-sm bg-gray-50 flex flex-wrap gap-x-6 gap-y-2 justify-around items-center text-sm">
-        <div>Costo de stock: <span className="font-semibold">{formatCurrencyMXN(costoTotalStock)}</span></div>
-        <div>Total en stock (Venta): <span className="font-semibold">{formatCurrencyMXN(totalValorStock)}</span></div>
-        <div>Ganancias proyectadas: <span className="font-semibold">{formatCurrencyMXN(gananciasProyectadas)}</span></div>
-        <div>Total artículos en tienda: <span className="font-semibold">{totalUnidadesStock}</span></div>
+      <div className="mb-4 p-4 border border-dark-700/50 rounded-lg shadow-card-dark bg-dark-900/50 flex flex-wrap gap-x-6 gap-y-2 justify-around items-center text-sm">
+        <div className="text-gray-300">Costo de stock: <span className="font-semibold text-gray-100">{formatCurrencyMXN(costoTotalStock)}</span></div>
+        <div className="text-gray-300">Total en stock (Venta): <span className="font-semibold text-gray-100">{formatCurrencyMXN(totalValorStock)}</span></div>
+        <div className="text-gray-300">Ganancias proyectadas: <span className="font-semibold text-success-400">{formatCurrencyMXN(gananciasProyectadas)}</span></div>
+        <div className="text-gray-300">Total artículos en tienda: <span className="font-semibold text-gray-100">{totalUnidadesStock}</span></div>
       </div>
 
       <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
         <div className="flex items-center gap-4">
             <button
                 onClick={() => setShowAddProductModal(true)}
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors text-xs md:text-sm whitespace-nowrap"
+                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-xs md:text-sm whitespace-nowrap flex items-center gap-1"
             >
+                <Plus size={16} />
                 Agregar producto
             </button>
             <button
                 onClick={eliminarSeleccionados}
                 disabled={seleccionados.size === 0}
-                className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50 text-xs md:text-sm"
+                className="px-4 py-2 bg-error-600 text-white rounded-lg hover:bg-error-700 disabled:opacity-50 text-xs md:text-sm flex items-center gap-1"
             >
+                <Trash2 size={16} />
                 Eliminar ({seleccionados.size})
             </button>
             <button
                 onClick={handleActualizarPrecios}
                 disabled={actualizando || seleccionados.size === 0}
-                className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 text-xs md:text-sm"
+                className="px-4 py-2 bg-success-600 text-white rounded-lg hover:bg-success-700 disabled:opacity-50 text-xs md:text-sm flex items-center gap-1"
             >
-                {actualizando ? 'Actualizando...' : 'Actualizar Precios Seleccionados'}
+                <Save size={16} />
+                {actualizando ? 'Actualizando...' : 'Actualizar Precios'}
             </button>
         </div>
       </div>
 
-      {/* Buscador, selección y NUEVOS filtros de stock */}
+      {/* Buscador, selección y filtros de stock */}
       <div className="flex flex-col md:flex-row items-center mb-4 gap-4">
         <label className="inline-flex items-center">
-          <input
-            type="checkbox"
-            checked={productosFiltradosYOrdenados.length > 0 && seleccionados.size === productosFiltradosYOrdenados.length}
-            onChange={toggleSeleccionarTodos}
-            disabled={productosFiltradosYOrdenados.length === 0}
-            className="form-checkbox"
-          />
-          <span className="ml-2 text-sm text-gray-700">Seleccionar todos ({seleccionados.size}/{productosFiltradosYOrdenados.length})</span>
+          <div 
+            onClick={toggleSeleccionarTodos} 
+            className="cursor-pointer text-gray-300 hover:text-gray-100 transition-colors"
+          >
+            {productosFiltradosYOrdenados.length > 0 && seleccionados.size === productosFiltradosYOrdenados.length ? (
+              <CheckSquare size={18} className="text-primary-400" />
+            ) : (
+              <Square size={18} />
+            )}
+          </div>
+          <span className="ml-2 text-sm text-gray-300">Seleccionar todos ({seleccionados.size}/{productosFiltradosYOrdenados.length})</span>
         </label>
-        <input
-          type="text"
-          placeholder="Buscar producto..."
-          value={busqueda}
-          onChange={e => setBusqueda(e.target.value)}
-          className="border border-gray-300 px-3 py-2 rounded w-full md:w-1/3 text-sm"
-        />
-        {/* NUEVOS BOTONES DE FILTRO DE STOCK */}
+        
+        <div className="relative flex-grow">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <Search size={18} className="text-gray-500" />
+          </div>
+          <input
+            type="text"
+            placeholder="Buscar producto..."
+            value={busqueda}
+            onChange={e => setBusqueda(e.target.value)}
+            className="pl-10 w-full p-2 bg-dark-900 border border-dark-700 rounded-lg text-gray-200 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+          />
+        </div>
+        
+        {/* Botones de filtro de stock */}
         <div className="flex space-x-2">
             <button
                 onClick={() => setStockFilter('con-stock')}
-                className={`px-3 py-2 text-xs md:text-sm font-medium rounded-md border transition-colors ${stockFilter === 'con-stock' ? 'bg-green-600 text-white border-green-700' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
+                className={`px-3 py-2 text-xs md:text-sm font-medium rounded-lg border transition-colors flex items-center gap-1 ${stockFilter === 'con-stock' ? 'bg-success-900/50 text-success-300 border-success-800/50' : 'bg-dark-900 text-gray-400 border-dark-700 hover:bg-dark-800'}`}
             >
+                <Filter size={16} />
                 Con Stock ({countConStock})
             </button>
             <button
                 onClick={() => setStockFilter('sin-stock')}
-                className={`px-3 py-2 text-xs md:text-sm font-medium rounded-md border transition-colors ${stockFilter === 'sin-stock' ? 'bg-red-600 text-white border-red-700' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
+                className={`px-3 py-2 text-xs md:text-sm font-medium rounded-lg border transition-colors flex items-center gap-1 ${stockFilter === 'sin-stock' ? 'bg-error-900/50 text-error-300 border-error-800/50' : 'bg-dark-900 text-gray-400 border-dark-700 hover:bg-dark-800'}`}
             >
+                <Filter size={16} />
                 Sin Stock ({countSinStock})
             </button>
             <button
                 onClick={() => setStockFilter('todos')}
-                className={`px-3 py-2 text-xs md:text-sm font-medium rounded-md border transition-colors ${stockFilter === 'todos' ? 'bg-gray-600 text-white border-gray-700' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
+                className={`px-3 py-2 text-xs md:text-sm font-medium rounded-lg border transition-colors flex items-center gap-1 ${stockFilter === 'todos' ? 'bg-dark-700 text-gray-200 border-dark-600' : 'bg-dark-900 text-gray-400 border-dark-700 hover:bg-dark-800'}`}
             >
+                <Filter size={16} />
                 Todos ({productos.length})
             </button>
         </div>
       </div>
 
-       <div className="grid grid-cols-[auto_60px_1fr_auto_auto_auto] gap-2 items-center border rounded-lg p-2 shadow-sm bg-gray-200 text-xs font-semibold text-gray-600 uppercase tracking-wider mb-2">
-           <div className="p-1"></div> 
-           <div className="p-1">Imagen</div>
-           <div className="p-1 cursor-pointer hover:text-gray-800" onClick={() => handleSort('nombre')}>
-               Nombre {sortColumn === 'nombre' && (<span>{sortDirection === 'asc' ? '▲' : '▼'}</span>)}
-           </div>
-           <div className="p-1 text-right cursor-pointer hover:text-gray-800" onClick={() => handleSort('promocion')}>
-               Promoción {sortColumn === 'promocion' && (<span>{sortDirection === 'asc' ? '▲' : '▼'}</span>)}
-           </div>
-           <div className="p-1 text-right cursor-pointer hover:text-gray-800" onClick={() => handleSort('precio_normal')}>
-               P. Normal {sortColumn === 'precio_normal' && (<span>{sortDirection === 'asc' ? '▲' : '▼'}</span>)}
-           </div>
-            <div className="p-1 text-center">Acciones</div>
-       </div>
+      {/* Encabezados de tabla */}
+      <div className="grid grid-cols-[auto_60px_1fr_auto_auto_auto] gap-2 items-center border border-dark-700 rounded-lg p-2 shadow-card-dark bg-dark-900 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+          <div className="p-1"></div> 
+          <div className="p-1">Imagen</div>
+          <div className="p-1 cursor-pointer hover:text-gray-200 flex items-center gap-1" onClick={() => handleSort('nombre')}>
+              Nombre {sortColumn === 'nombre' && (<span>{sortDirection === 'asc' ? '▲' : '▼'}</span>)}
+          </div>
+          <div className="p-1 text-right cursor-pointer hover:text-gray-200 flex items-center gap-1 justify-end" onClick={() => handleSort('promocion')}>
+              Promoción {sortColumn === 'promocion' && (<span>{sortDirection === 'asc' ? '▲' : '▼'}</span>)}
+          </div>
+          <div className="p-1 text-right cursor-pointer hover:text-gray-200 flex items-center gap-1 justify-end" onClick={() => handleSort('precio_normal')}>
+              P. Normal {sortColumn === 'precio_normal' && (<span>{sortDirection === 'asc' ? '▲' : '▼'}</span>)}
+          </div>
+          <div className="p-1 text-center">Acciones</div>
+      </div>
 
+      {/* Lista de productos */}
       <div className="space-y-2">
         {productosFiltradosYOrdenados.map(producto => (
           <div
             key={producto.id}
-            className={`grid grid-cols-[auto_60px_1fr_auto_auto_auto] gap-2 items-center border rounded-lg p-2 shadow-sm hover:shadow transition text-xs 
-                        ${(stockFilter !== 'sin-stock' && (!producto.stock || parseFloat(producto.stock) <= 0)) ? 
-                            (stockFilter === 'todos' ? 'opacity-50' : '') : ''}
-                       `}
+            className={`grid grid-cols-[auto_60px_1fr_auto_auto_auto] gap-2 items-center border border-dark-700/50 rounded-lg p-2 shadow-card-dark hover:shadow-dropdown-dark transition-shadow bg-dark-800/50 text-xs`}
           >
-            <input
-              type="checkbox"
-              checked={seleccionados.has(producto.id)}
-              onChange={() => toggleSeleccionarProducto(producto.id)}
-              className="form-checkbox"
-            />
-            <div className="w-14 h-14 bg-gray-100 rounded overflow-hidden flex items-center justify-center">
-              {producto.imagen_url ? (
-                <img src={producto.imagen_url} alt={producto.nombre || 'Producto sin nombre'} className="object-cover w-full h-full" onError={(e) => { e.target.onerror = null; e.target.src="https://placehold.co/56x56/e5e7eb/4b5563?text=Sin+Imagen" }} />
+            <div 
+              onClick={() => toggleSeleccionarProducto(producto.id)}
+              className="cursor-pointer text-gray-300 hover:text-gray-100 transition-colors"
+            >
+              {seleccionados.has(producto.id) ? (
+                <CheckSquare size={18} className="text-primary-400" />
               ) : (
-                <span className="text-gray-400 text-[10px] text-center">Sin imagen</span>
+                <Square size={18} />
+              )}
+            </div>
+            <div className="w-14 h-14 bg-dark-900 rounded-lg overflow-hidden flex items-center justify-center">
+              {producto.imagen_url ? (
+                <img src={producto.imagen_url} alt={producto.nombre || 'Producto sin nombre'} className="object-cover w-full h-full" onError={(e) => { e.target.onerror = null; e.target.src="https://placehold.co/56x56/1f2937/6b7280?text=Sin+Imagen" }} />
+              ) : (
+                <span className="text-gray-600 text-[10px] text-center">Sin imagen</span>
               )}
             </div>
             <div className="whitespace-normal break-words max-w-full">
-              <div className="font-medium">{producto.nombre || 'Producto sin nombre'}</div>
-              <div className="text-gray-500 text-[11px]">{producto.categoria || 'Sin categoría'}</div>
-              <div className={`text-[11px] font-semibold ${parseFloat(producto.stock || 0) <= 0 ? 'text-red-500' : 'text-green-600'}`}>
+              <div className="font-medium text-gray-200">{producto.nombre || 'Producto sin nombre'}</div>
+              <div className="text-gray-400 text-[11px]">{producto.categoria || 'Sin categoría'}</div>
+              <div className={`text-[11px] font-semibold ${parseFloat(producto.stock || 0) <= 0 ? 'text-error-400' : 'text-success-400'}`}>
                 Stock: {producto.stock ?? 0}
               </div>
             </div>
             <div className="flex flex-col items-start">
-              <label className="text-gray-600 mb-1 text-[10px]">Promoción</label>
+              <label className="text-gray-400 mb-1 text-[10px]">Promoción</label>
               <input
                 type="number" min="0" step="0.01"
                 value={(producto.promocion ?? '').toString()}
                 onChange={e => handleEditarLocal(producto.id, 'promocion', e.target.value)}
-                className="w-20 border px-2 py-1 rounded text-right text-xs"
+                className="w-20 border border-dark-700 bg-dark-900 px-2 py-1 rounded text-right text-xs text-gray-200 focus:ring-primary-500 focus:border-primary-500"
                 placeholder="0.00"
               />
             </div>
             <div className="flex flex-col items-start">
-              <label className="text-gray-600 mb-1 text-[10px]">P. Normal</label>
+              <label className="text-gray-400 mb-1 text-[10px]">P. Normal</label>
               <input
                 type="number" min="0" step="0.01"
                 value={(producto.precio_normal ?? '').toString()}
                 onChange={e => handleEditarLocal(producto.id, 'precio_normal', e.target.value)}
-                className="w-20 border px-2 py-1 rounded text-right text-xs"
+                className="w-20 border border-dark-700 bg-dark-900 px-2 py-1 rounded text-right text-xs text-gray-200 focus:ring-primary-500 focus:border-primary-500"
                 placeholder="0.00"
               />
             </div>
             <div>
-              <button onClick={() => abrirModal(producto)} className="text-blue-600 hover:underline text-xs">
+              <button 
+                onClick={() => abrirModal(producto)} 
+                className="text-primary-400 hover:text-primary-300 transition-colors flex items-center gap-1"
+              >
+                <Edit size={14} />
                 Editar
               </button>
             </div>
           </div>
         ))}
         {productosFiltradosYOrdenados.length === 0 && (
-          <div className="text-center text-gray-500 py-4">
-            {busqueda ? 'No se encontraron productos que coincidan con tu búsqueda y filtros.'
-             : (stockFilter !== 'todos') ? 'No hay productos que coincidan con el filtro de stock actual.'
-             : 'No hay productos disponibles.'
-            }
+          <div className="text-center py-8 bg-dark-800/50 rounded-lg border border-dark-700/50">
+            <Package size={48} className="mx-auto text-gray-600 mb-3" />
+            <p className="text-gray-400">
+              {busqueda ? 'No se encontraron productos que coincidan con tu búsqueda y filtros.'
+               : (stockFilter !== 'todos') ? 'No hay productos que coincidan con el filtro de stock actual.'
+               : 'No hay productos disponibles.'
+              }
+            </p>
           </div>
         )}
       </div>
@@ -436,67 +471,77 @@ export default function ProductosItems() {
 
       {showAddProductModal && (
           <div
-              className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+              className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4"
               onClick={closeAddProductModal}
           >
               <div
                   onClick={(e) => e.stopPropagation()}
-                  className="bg-white rounded-lg shadow-lg w-full max-w-md p-6 max-h-[90vh] overflow-y-auto relative"
+                  className="bg-dark-800 rounded-lg shadow-dropdown-dark border border-dark-700 w-full max-w-md p-6 max-h-[90vh] overflow-y-auto relative"
               >
-                  <div className="flex justify-between items-center mb-4 border-b pb-3">
-                      <h3 className="text-xl font-bold text-gray-800">Agregar Nuevo Producto</h3>
-                      <button onClick={closeAddProductModal} className="text-gray-600 hover:text-gray-800 text-2xl font-bold leading-none ml-4">&times;</button>
+                  <div className="flex justify-between items-center mb-4 border-b border-dark-700 pb-3">
+                      <h3 className="text-xl font-bold text-gray-100">Agregar Nuevo Producto</h3>
+                      <button onClick={closeAddProductModal} className="text-gray-400 hover:text-gray-200 transition-colors">&times;</button>
                   </div>
                   <div className="grid grid-cols-1 gap-4 mb-6">
                       <div>
-                          <label htmlFor="nombre" className="block text-sm font-medium text-gray-700 mb-1">Nombre del Producto <span className="text-red-500">*</span></label>
-                          <input type="text" id="nombre" name="nombre" value={newProductForm.nombre} onChange={handleNewProductInputChange} className="w-full border border-gray-300 px-3 py-2 rounded-md focus:ring-blue-500 focus:border-blue-500" required />
+                          <label htmlFor="nombre" className="block text-sm font-medium text-gray-300 mb-1">Nombre del Producto <span className="text-error-400">*</span></label>
+                          <input type="text" id="nombre" name="nombre" value={newProductForm.nombre} onChange={handleNewProductInputChange} className="w-full border border-dark-700 bg-dark-900 px-3 py-2 rounded-md focus:ring-primary-500 focus:border-primary-500 text-gray-200" required />
                       </div>
                        <div>
-                          <label htmlFor="stock" className="block text-sm font-medium text-gray-700 mb-1">Stock Inicial <span className="text-red-500">*</span></label>
-                          <input type="number" id="stock" name="stock" min="0" step="any" value={newProductForm.stock} onChange={handleNewProductInputChange} className="w-full border border-gray-300 px-3 py-2 rounded-md focus:ring-blue-500 focus:border-blue-500" required />
+                          <label htmlFor="stock" className="block text-sm font-medium text-gray-300 mb-1">Stock Inicial <span className="text-error-400">*</span></label>
+                          <input type="number" id="stock" name="stock" min="0" step="any" value={newProductForm.stock} onChange={handleNewProductInputChange} className="w-full border border-dark-700 bg-dark-900 px-3 py-2 rounded-md focus:ring-primary-500 focus:border-primary-500 text-gray-200" required />
                       </div>
                        <div>
-                          <label htmlFor="precio_normal" className="block text-sm font-medium text-gray-700 mb-1">Precio de Venta (Normal) <span className="text-red-500">*</span></label>
-                          <input type="number" id="precio_normal" name="precio_normal" min="0" step="0.01" value={newProductForm.precio_normal} onChange={handleNewProductInputChange} className="w-full border border-gray-300 px-3 py-2 rounded-md focus:ring-blue-500 focus:border-blue-500" required />
+                          <label htmlFor="precio_normal" className="block text-sm font-medium text-gray-300 mb-1">Precio de Venta (Normal) <span className="text-error-400">*</span></label>
+                          <input type="number" id="precio_normal" name="precio_normal" min="0" step="0.01" value={newProductForm.precio_normal} onChange={handleNewProductInputChange} className="w-full border border-dark-700 bg-dark-900 px-3 py-2 rounded-md focus:ring-primary-500 focus:border-primary-500 text-gray-200" required />
                       </div>
                        <div>
-                          <label htmlFor="promocion" className="block text-sm font-medium text-gray-700 mb-1">Precio de Venta (Promoción)</label>
-                          <input type="number" id="promocion" name="promocion" min="0" step="0.01" value={newProductForm.promocion} onChange={handleNewProductInputChange} className="w-full border border-gray-300 px-3 py-2 rounded-md focus:ring-blue-500 focus:border-blue-500" />
+                          <label htmlFor="promocion" className="block text-sm font-medium text-gray-300 mb-1">Precio de Venta (Promoción)</label>
+                          <input type="number" id="promocion" name="promocion" min="0" step="0.01" value={newProductForm.promocion} onChange={handleNewProductInputChange} className="w-full border border-dark-700 bg-dark-900 px-3 py-2 rounded-md focus:ring-primary-500 focus:border-primary-500 text-gray-200" />
                       </div>
                        <div>
-                          <label htmlFor="costo_final_usd" className="block text-sm font-medium text-gray-700 mb-1">Costo Final (USD)</label>
-                          <input type="number" id="costo_final_usd" name="costo_final_usd" min="0" step="0.01" value={newProductForm.costo_final_usd} onChange={handleNewProductInputChange} className="w-full border border-gray-300 px-3 py-2 rounded-md focus:ring-blue-500 focus:border-blue-500" />
+                          <label htmlFor="costo_final_usd" className="block text-sm font-medium text-gray-300 mb-1">Costo Final (USD)</label>
+                          <input type="number" id="costo_final_usd" name="costo_final_usd" min="0" step="0.01" value={newProductForm.costo_final_usd} onChange={handleNewProductInputChange} className="w-full border border-dark-700 bg-dark-900 px-3 py-2 rounded-md focus:ring-primary-500 focus:border-primary-500 text-gray-200" />
                       </div>
                        <div>
-                          <label htmlFor="costo_final_mxn" className="block text-sm font-medium text-gray-700 mb-1">Costo Final (MXN)</label>
-                          <input type="number" id="costo_final_mxn" name="costo_final_mxn" min="0" step="0.01" value={newProductForm.costo_final_mxn} onChange={handleNewProductInputChange} className="w-full border border-gray-300 px-3 py-2 rounded-md focus:ring-blue-500 focus:border-blue-500" />
+                          <label htmlFor="costo_final_mxn" className="block text-sm font-medium text-gray-300 mb-1">Costo Final (MXN)</label>
+                          <input type="number" id="costo_final_mxn" name="costo_final_mxn" min="0" step="0.01" value={newProductForm.costo_final_mxn} onChange={handleNewProductInputChange} className="w-full border border-dark-700 bg-dark-900 px-3 py-2 rounded-md focus:ring-primary-500 focus:border-primary-500 text-gray-200" />
                       </div>
                        <div>
-                          <label htmlFor="codigo" className="block text-sm font-medium text-gray-700 mb-1">Código</label>
-                          <input type="text" id="codigo" name="codigo" value={newProductForm.codigo} onChange={handleNewProductInputChange} className="w-full border border-gray-300 px-3 py-2 rounded-md focus:ring-blue-500 focus:border-blue-500" />
+                          <label htmlFor="codigo" className="block text-sm font-medium text-gray-300 mb-1">Código</label>
+                          <input type="text" id="codigo" name="codigo" value={newProductForm.codigo} onChange={handleNewProductInputChange} className="w-full border border-dark-700 bg-dark-900 px-3 py-2 rounded-md focus:ring-primary-500 focus:border-primary-500 text-gray-200" />
                       </div>
                        <div>
-                          <label htmlFor="categoria" className="block text-sm font-medium text-gray-700 mb-1">Categoría</label>
-                          <input type="text" id="categoria" name="categoria" value={newProductForm.categoria} onChange={handleNewProductInputChange} className="w-full border border-gray-300 px-3 py-2 rounded-md focus:ring-blue-500 focus:border-blue-500" />
+                          <label htmlFor="categoria" className="block text-sm font-medium text-gray-300 mb-1">Categoría</label>
+                          <input type="text" id="categoria" name="categoria" value={newProductForm.categoria} onChange={handleNewProductInputChange} className="w-full border border-dark-700 bg-dark-900 px-3 py-2 rounded-md focus:ring-primary-500 focus:border-primary-500 text-gray-200" />
                       </div>
                        <div>
-                          <label htmlFor="imagen_url" className="block text-sm font-medium text-gray-700 mb-1">URL Imagen</label>
-                          <input type="text" id="imagen_url" name="imagen_url" value={newProductForm.imagen_url} onChange={handleNewProductInputChange} className="w-full border border-gray-300 px-3 py-2 rounded-md focus:ring-blue-500 focus:border-blue-500" />
+                          <label htmlFor="imagen_url" className="block text-sm font-medium text-gray-300 mb-1">URL Imagen</label>
+                          <input type="text" id="imagen_url" name="imagen_url" value={newProductForm.imagen_url} onChange={handleNewProductInputChange} className="w-full border border-dark-700 bg-dark-900 px-3 py-2 rounded-md focus:ring-primary-500 focus:border-primary-500 text-gray-200" />
                       </div>
                   </div>
                   <div className="flex justify-end gap-4">
                       <button
                           onClick={handleAddProduct}
                           disabled={isAddingProduct || !newProductForm.nombre || newProductForm.stock === '' || newProductForm.precio_normal === ''}
-                          className="px-6 py-2 bg-green-600 text-white rounded-md font-semibold hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="px-6 py-2 bg-primary-600 text-white rounded-md font-semibold hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
                       >
-                          {isAddingProduct ? 'Agregando...' : 'Guardar Producto'}
+                          {isAddingProduct ? (
+                            <>
+                              <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-2"></div>
+                              <span>Agregando...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Plus size={16} />
+                              <span>Guardar Producto</span>
+                            </>
+                          )}
                       </button>
                       <button
                           onClick={closeAddProductModal}
                           disabled={isAddingProduct}
-                          className="px-6 py-2 bg-gray-300 text-gray-800 rounded-md font-semibold hover:bg-gray-400 transition-colors disabled:opacity-50"
+                          className="px-6 py-2 bg-dark-700 text-gray-200 rounded-md font-semibold hover:bg-dark-600 transition-colors disabled:opacity-50"
                       >
                           Cancelar
                       </button>

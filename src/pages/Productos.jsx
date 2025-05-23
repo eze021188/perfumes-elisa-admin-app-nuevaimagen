@@ -1,89 +1,84 @@
 // src/pages/Productos.jsx
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import ProductosItems from '../components/ProductosItems'; // Tu componente existente
-import ProductosStock from '../components/ProductosStock.jsx'; // Tu componente existente
-// Asegúrate de que este archivo exista en la ruta correcta: src/components/ProductoHTMLInput.jsx
-import ProductoHTMLInput from '../components/ProductoHTMLInput.jsx'; // Componente para gestionar el HTML del producto
+import ProductosItems from '../components/ProductosItems'; 
+import ProductosStock from '../components/ProductosStock.jsx'; 
+import ProductoHTMLInput from '../components/ProductoHTMLInput.jsx';
+import { ArrowLeft, Package, Activity, Code } from 'lucide-react';
 
 export default function Productos() {
-  const [pestaniaActiva, setPestaniaActiva] = useState('ITEMS'); // 'ITEMS' como pestaña inicial
+  const [pestaniaActiva, setPestaniaActiva] = useState('ITEMS');
   const navigate = useNavigate();
 
   return (
-    // Contenedor principal con padding, fondo ligero, bordes redondeados y sombra
-    <div className="min-h-screen bg-gray-100 p-4 md:p-8 lg:p-12 rounded-lg shadow-xl">
+    <div className="min-h-screen bg-dark-900 p-4 md:p-8 lg:p-12">
       {/* Encabezado */}
-      <div className="flex flex-col md:flex-row items-center justify-between gap-6 mb-8"> {/* Aumentado gap y mb */}
-        {/* Botón Volver al inicio con diseño moderno */}
+      <div className="flex flex-col md:flex-row items-center justify-between gap-6 mb-8">
         <button
           onClick={() => navigate('/')}
-          className="px-6 py-2 bg-gray-700 text-white font-semibold rounded-lg shadow-md hover:bg-gray-800 transition duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-opacity-50"
+          className="px-6 py-2 bg-dark-800 text-gray-200 font-semibold rounded-lg shadow-elegant-dark hover:bg-dark-700 transition-colors flex items-center gap-2"
         >
+          <ArrowLeft size={18} />
           Volver al inicio
         </button>
 
-        {/* Título principal con estilo mejorado */}
-        <h1 className="text-3xl font-bold text-gray-800 text-center w-full md:w-auto"> {/* Tamaño y peso de fuente aumentados, color más oscuro */}
+        <h1 className="text-3xl font-bold text-gray-100 text-center w-full md:w-auto">
           Gestión de Productos
         </h1>
-         {/* Div vacío para mantener el espacio si es necesario en flexbox */}
-         <div className="w-auto md:w-[150px]"></div> {/* Ajusta el ancho según el botón */}
+        <div className="w-auto md:w-[150px]"></div>
       </div>
 
       {/* Pestañas con diseño moderno */}
-      <div className="flex border-b-2 border-gray-300 mb-8"> {/* Borde inferior más pronunciado */}
-        {/* Botón Pestaña ITEMS */}
+      <div className="flex border-b border-dark-700 mb-8">
         <button
           className={`
-            px-6 py-3 -mb-[2px] border-b-2 text-lg font-semibold transition duration-200 ease-in-out focus:outline-none
+            px-6 py-3 -mb-px border-b-2 text-lg font-semibold transition-colors focus:outline-none flex items-center gap-2
             ${
               pestaniaActiva === 'ITEMS'
-                ? 'border-blue-600 text-blue-600' // Estilo para pestaña activa
-                : 'border-transparent text-gray-600 hover:text-blue-600 hover:border-blue-300' // Estilo para pestaña inactiva
+                ? 'border-primary-500 text-primary-400' 
+                : 'border-transparent text-gray-500 hover:text-gray-300 hover:border-dark-600' 
             }
           `}
           onClick={() => setPestaniaActiva('ITEMS')}
         >
+          <Package size={18} />
           ITEMS
         </button>
-        {/* Botón Pestaña STOCK */}
         <button
           className={`
-             px-6 py-3 -mb-[2px] border-b-2 text-lg font-semibold transition duration-200 ease-in-out focus:outline-none
+             px-6 py-3 -mb-px border-b-2 text-lg font-semibold transition-colors focus:outline-none flex items-center gap-2
             ${
               pestaniaActiva === 'STOCK'
-                ? 'border-blue-600 text-blue-600' // Estilo para pestaña activa
-                : 'border-transparent text-gray-600 hover:text-blue-600 hover:border-blue-300' // Estilo para pestaña inactiva
+                ? 'border-primary-500 text-primary-400'
+                : 'border-transparent text-gray-500 hover:text-gray-300 hover:border-dark-600'
             }
           `}
           onClick={() => setPestaniaActiva('STOCK')}
         >
+          <Activity size={18} />
           STOCK
         </button>
-        {/* --- NUEVO BOTÓN DE PESTAÑA: DETALLE HTML --- */}
         <button
           className={`
-             px-6 py-3 -mb-[2px] border-b-2 text-lg font-semibold transition duration-200 ease-in-out focus:outline-none
+             px-6 py-3 -mb-px border-b-2 text-lg font-semibold transition-colors focus:outline-none flex items-center gap-2
             ${
-              pestaniaActiva === 'HTML_DETALLE' // Nuevo identificador para esta pestaña
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-gray-600 hover:text-blue-600 hover:border-blue-300'
+              pestaniaActiva === 'HTML_DETALLE'
+                ? 'border-primary-500 text-primary-400'
+                : 'border-transparent text-gray-500 hover:text-gray-300 hover:border-dark-600'
             }
           `}
           onClick={() => setPestaniaActiva('HTML_DETALLE')}
         >
+          <Code size={18} />
           DETALLE HTML
         </button>
       </div>
 
       {/* Contenido según pestaña activa */}
-      {/* Contenedor del contenido con padding y fondo blanco */}
-      <div className="bg-white p-6 rounded-lg shadow-md"> {/* Aumentado padding, bordes redondeados y sombra */}
-      {pestaniaActiva === 'ITEMS' && <ProductosItems />}
-      {pestaniaActiva === 'STOCK' && <ProductosStock />}
-      {/* --- NUEVA CONDICIÓN PARA RENDERIZAR EL COMPONENTE DE GESTIÓN DE HTML --- */}
-      {pestaniaActiva === 'HTML_DETALLE' && <ProductoHTMLInput />}
+      <div className="bg-dark-800 p-6 rounded-lg shadow-card-dark border border-dark-700/50">
+        {pestaniaActiva === 'ITEMS' && <ProductosItems />}
+        {pestaniaActiva === 'STOCK' && <ProductosStock />}
+        {pestaniaActiva === 'HTML_DETALLE' && <ProductoHTMLInput />}
       </div>
     </div>
   );
