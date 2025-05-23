@@ -28,11 +28,11 @@ export default function Sidebar({ open, onClose }) {
   ];
 
   return (
-    <aside
+    <nav
       className={`fixed inset-y-0 left-0 w-64 bg-dark-900 text-gray-100 z-50
         transform transition-transform duration-200 ease-in-out
         ${open ? 'translate-x-0' : '-translate-x-full'}
-        lg:translate-x-0 lg:static lg:inset-auto h-full
+        lg:translate-x-0 lg:static lg:inset-auto flex-shrink-0
         border-r border-dark-800`}
     >
       <div className="h-full flex flex-col">
@@ -53,15 +53,11 @@ export default function Sidebar({ open, onClose }) {
               to={to}
               end={to === '/'}
               className={({ isActive }) =>
-                `flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
-                  isActive
-                    ? 'bg-primary-900/50 text-primary-400 border border-primary-800/50'
-                    : 'text-gray-400 hover:text-gray-200 hover:bg-dark-800'
-                }`
+                `nav-link-dark group ${isActive ? 'active' : ''}`
               }
               onClick={onClose}
             >
-              <div className="w-10 h-10 flex items-center justify-center rounded-lg bg-dark-800 text-inherit">
+              <div className="w-10 h-10 flex items-center justify-center rounded-lg bg-dark-800 group-hover:bg-primary-900/50 transition-colors">
                 {icon}
               </div>
               <span>{label}</span>
@@ -69,6 +65,6 @@ export default function Sidebar({ open, onClose }) {
           ))}
         </div>
       </div>
-    </aside>
+    </nav>
   );
 }
