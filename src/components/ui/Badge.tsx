@@ -21,13 +21,13 @@ const Badge: React.FC<BadgeProps> = ({
   className = '',
 }) => {
   const variantClasses = {
-    primary: 'bg-primary-100 text-primary-800',
-    secondary: 'bg-secondary-100 text-secondary-800',
-    success: 'bg-success-100 text-success-800',
-    danger: 'bg-error-100 text-error-800',
-    warning: 'bg-warning-100 text-warning-800',
-    info: 'bg-blue-100 text-blue-800',
-    default: 'bg-gray-100 text-gray-800',
+    primary: 'bg-primary-900/50 text-primary-300 border border-primary-800/30',
+    secondary: 'bg-dark-700 text-gray-300 border border-dark-600/50',
+    success: 'bg-success-900/50 text-success-300 border border-success-800/30',
+    danger: 'bg-error-900/50 text-error-300 border border-error-800/30',
+    warning: 'bg-warning-900/50 text-warning-300 border border-warning-800/30',
+    info: 'bg-blue-900/50 text-blue-300 border border-blue-800/30',
+    default: 'bg-dark-700 text-gray-300 border border-dark-600/50',
   };
 
   const sizeClasses = {

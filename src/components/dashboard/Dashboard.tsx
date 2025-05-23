@@ -109,7 +109,7 @@ const Dashboard = () => {
     maintainAspectRatio: false,
     plugins: {
       legend: {
-        position: 'top',
+        position: 'top' as const,
         labels: {
           font: {
             family: "'Inter', sans-serif",
@@ -121,7 +121,7 @@ const Dashboard = () => {
         }
       },
       tooltip: {
-        mode: 'index',
+        mode: 'index' as const,
         intersect: false,
         backgroundColor: 'rgba(17, 24, 39, 0.9)',
         titleFont: {
@@ -152,7 +152,7 @@ const Dashboard = () => {
           },
           color: 'rgba(156, 163, 175, 0.8)',
           padding: 8,
-          callback: function(value) {
+          callback: function(value: number) {
             return '$' + value.toLocaleString();
           }
         }
@@ -178,7 +178,7 @@ const Dashboard = () => {
     maintainAspectRatio: false,
     plugins: {
       legend: {
-        position: 'bottom',
+        position: 'bottom' as const,
         labels: {
           font: {
             family: "'Inter', sans-serif",
@@ -203,10 +203,10 @@ const Dashboard = () => {
         padding: 12,
         cornerRadius: 8,
         callbacks: {
-          label: function(context) {
+          label: function(context: any) {
             const label = context.label || '';
             const value = context.raw || 0;
-            const total = context.dataset.data.reduce((a, b) => a + b, 0);
+            const total = context.dataset.data.reduce((a: number, b: number) => a + b, 0);
             const percentage = Math.round((value / total) * 100);
             return `${label}: ${percentage}% (${value})`;
           }

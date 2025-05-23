@@ -27,13 +27,13 @@ const Button: React.FC<ButtonProps> = ({
 }) => {
   const variantClasses = {
     primary: 'bg-primary-600 hover:bg-primary-700 text-white',
-    secondary: 'bg-secondary-600 hover:bg-secondary-700 text-white',
+    secondary: 'bg-dark-700 hover:bg-dark-600 text-gray-200',
     success: 'bg-success-600 hover:bg-success-700 text-white',
     danger: 'bg-error-600 hover:bg-error-700 text-white',
     warning: 'bg-warning-600 hover:bg-warning-700 text-white',
     info: 'bg-blue-600 hover:bg-blue-700 text-white',
-    outline: 'bg-transparent border border-gray-300 hover:bg-gray-50 text-gray-700',
-    ghost: 'bg-transparent hover:bg-gray-100 text-gray-700',
+    outline: 'bg-transparent border border-dark-700 hover:bg-dark-800 text-gray-300',
+    ghost: 'bg-transparent hover:bg-dark-800 text-gray-300',
   };
 
   const sizeClasses = {
@@ -61,7 +61,7 @@ const Button: React.FC<ButtonProps> = ({
     <button
       className={`
         inline-flex items-center justify-center font-medium rounded-md transition-colors
-        focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500
+        focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 focus:ring-offset-dark-900
         ${variantClasses[variant]}
         ${sizeClasses[size]}
         ${fullWidth ? 'w-full' : ''}
