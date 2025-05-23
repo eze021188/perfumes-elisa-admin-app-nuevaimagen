@@ -38,7 +38,7 @@
 
 @layer base {
   * {
-    @apply border-border;
+    @apply border-dark-700;
   }
   
   body {
