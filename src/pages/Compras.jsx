@@ -3,6 +3,7 @@ import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabase';
 import toast from 'react-hot-toast';
+import { ArrowLeft, Plus, X } from 'lucide-react';
 
 // Importar componentes divididos
 import ComprasFormularioNueva from '../components/compras/ComprasFormularioNueva';
@@ -14,7 +15,7 @@ const formatCurrency = (amount, currency = 'USD') => {
     if (isNaN(numericAmount)) {
         return currency === 'USD' ? '$0.00' : '0.00';
     }
-    return numericAmount.toLocaleString('en-US', { // Ajusta 'en-US' y 'USD' según tu configuración regional
+    return numericAmount.toLocaleString('en-US', {
        style: 'currency',
        currency: currency,
        minimumFractionDigits: 2,
@@ -22,41 +23,35 @@ const formatCurrency = (amount, currency = 'USD') => {
    });
 };
 
-// --- Helper para formatear fecha y hora para visualización en zona horaria específica ---
+// Helper para formatear fecha y hora para visualización en zona horaria específica
 const formatDisplayDateTime = (dateString) => {
     if (!dateString) return 'Fecha desconocida';
     try {
         const date = new Date(dateString); 
-        return date.toLocaleString('es-MX', { // 'es-MX' para formato mexicano
-            timeZone: 'America/Mexico_City', // O 'America/Monterrey'
+        return date.toLocaleString('es-MX', {
+            timeZone: 'America/Mexico_City',
             year: 'numeric',
             month: '2-digit',
             day: '2-digit',
             hour: '2-digit',
             minute: '2-digit',
-            // second: '2-digit', // Opcional
-            hour12: true // Opcional, para formato AM/PM
+            hour12: true
         });
     } catch (e) {
         console.error("Error formateando fecha de compra:", e, dateString);
         try { 
-            // Fallback si la fecha es solo YYYY-MM-DD, la interpreta como local y luego la formatea
-            // Esto es importante porque el input type="date" devuelve solo YYYY-MM-DD
-            // Ajustamos para que la fecha se interprete correctamente como local antes de formatear
             const dateParts = dateString.split('-');
             if (dateParts.length === 3) {
                 const year = parseInt(dateParts[0], 10);
-                const month = parseInt(dateParts[1], 10) -1; // Meses en JS son 0-indexados
+                const month = parseInt(dateParts[1], 10) -1;
                 const day = parseInt(dateParts[2], 10);
-                const localDate = new Date(year, month, day); // Crea la fecha asumiendo que es local
+                const localDate = new Date(year, month, day);
                  return localDate.toLocaleDateString('es-MX', {
-                    // timeZone: 'America/Mexico_City', // No es necesario si ya es local y solo queremos la fecha
                     year: 'numeric', month: '2-digit', day: '2-digit'
                 });
             }
             throw new Error("Formato de fecha no reconocido para fallback simple.");
         } catch (e2) {
-            // Último fallback si todo falla
             return new Date(dateString).toLocaleString(); 
         }
     }
@@ -301,32 +296,21 @@ export default function Compras() {
         inventario_afectado: false
     };
 
-    // --- MODIFICADO: Manejo de fecha_compra para UTC ---
+    // Manejo de fecha_compra para UTC
     if (formulario.fechaCompra) {
-        // El input type="date" devuelve "YYYY-MM-DD".
-        // Para una columna TIMESTAMPTZ, queremos el inicio de ese día en UTC.
-        // O si la columna es solo DATE, formulario.fechaCompra es suficiente.
-        // Asumiendo que `fecha_compra` en la BD es TIMESTAMPTZ:
         const dateParts = formulario.fechaCompra.split('-');
         if (dateParts.length === 3) {
             const year = parseInt(dateParts[0], 10);
-            const month = parseInt(dateParts[1], 10) - 1; // Meses en JS son 0-indexados
+            const month = parseInt(dateParts[1], 10) - 1;
             const day = parseInt(dateParts[2], 10);
-            // Crea la fecha como inicio del día en UTC
             compraDataToInsert.fecha_compra = new Date(Date.UTC(year, month, day, 0, 0, 0)).toISOString();
         } else {
-            // Si el formato es inesperado, usar la hora actual del cliente en UTC
              compraDataToInsert.fecha_compra = new Date().toISOString();
             console.warn("Formato de fecha de compra inválido, se usó la fecha y hora actual en UTC:", formulario.fechaCompra);
         }
     } else {
-        // Si no se proporciona fecha y tu BD tiene un DEFAULT (ej. now() para timestamptz),
-        // es mejor NO incluir `fecha_compra` en `compraDataToInsert` para que se use el DEFAULT.
-        // Si quieres la hora actual del cliente en UTC si no selecciona nada:
          compraDataToInsert.fecha_compra = new Date().toISOString();
     }
-    // --- FIN MODIFICADO ---
-
 
     const { data: newCompra, error: errCompra } = await supabase
       .from('compras')
@@ -620,7 +604,6 @@ export default function Compras() {
         } catch (error) {
             console.error("Error durante la actualización/inserción de productos o movimientos:", error);
             toast.error("Error al actualizar/crear algunos productos o sus movimientos. El inventario podría no estar completamente afectado.");
-            // No revertir 'inventario_afectado' automáticamente, requiere revisión.
             return; 
         }
 
@@ -632,17 +615,18 @@ export default function Compras() {
 
 
   return (
-    <div className="min-h-screen bg-gray-100 p-4 md:p-8 lg:p-12">
+    <div className="min-h-screen bg-dark-900 p-4 md:p-8 lg:p-12">
       <div className="flex flex-col md:flex-row items-center justify-between gap-6 mb-8">
         <button
           onClick={() => navigate('/')}
-          className="px-6 py-2 bg-gray-700 text-white font-semibold rounded-lg shadow-md hover:bg-gray-800"
+          className="px-6 py-2 bg-dark-800 text-gray-200 font-semibold rounded-lg shadow-elegant-dark hover:bg-dark-700 transition-colors flex items-center gap-2"
         >
+          <ArrowLeft size={18} />
           Volver al inicio
         </button>
       </div>
-      <div className="mt-6 bg-white shadow-lg rounded-lg p-6 md:p-8">
-        <h1 className="text-3xl font-bold text-gray-800 mb-6 text-center">Gestión de Compras</h1>
+      <div className="mt-6 bg-dark-800 shadow-card-dark rounded-lg p-6 md:p-8 border border-dark-700/50">
+        <h1 className="text-3xl font-bold text-gray-100 mb-6 text-center">Gestión de Compras</h1>
         <button
           onClick={() => {
             setMostrarFormulario(!mostrarFormulario);
@@ -652,9 +636,19 @@ export default function Compras() {
                 setProductosAgregados([]);
             }
           }}
-          className={`mb-6 px-6 py-2 rounded-lg shadow-md transition duration-200 ${mostrarFormulario ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'} text-white`}
+          className={`mb-6 px-6 py-2 rounded-lg shadow-elegant-dark transition-colors flex items-center gap-2 ${mostrarFormulario ? 'bg-error-600 hover:bg-error-700' : 'bg-primary-600 hover:bg-primary-700'} text-white`}
         >
-          {mostrarFormulario ? 'Cancelar Nueva Compra' : 'Registrar Nueva Compra'}
+          {mostrarFormulario ? (
+            <>
+              <X size={18} />
+              Cancelar Nueva Compra
+            </>
+          ) : (
+            <>
+              <Plus size={18} />
+              Registrar Nueva Compra
+            </>
+          )}
         </button>
 
         {mostrarFormulario && (
@@ -680,7 +674,7 @@ export default function Compras() {
           />
         )}
 
-        <h2 className="text-2xl font-bold text-gray-800 mb-6 mt-8">Historial de Compras</h2>
+        <h2 className="text-2xl font-bold text-gray-100 mb-6 mt-8">Historial de Compras</h2>
         <ComprasHistorialLista
             savedCompras={savedCompras}
             expandedIdx={expandedIdx}
@@ -702,7 +696,7 @@ export default function Compras() {
             nombresSugeridos={nombresSugeridos}
             existenteProductoInputRef={existenteProductoInputRef}
             existenteSugerenciasRef={existenteSugerenciasRef}
-            formatDisplayDate={formatDisplayDateTime} // --- Pasar helper de fecha ---
+            formatDisplayDate={formatDisplayDateTime}
         />
       </div>
     </div>

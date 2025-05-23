@@ -1,5 +1,5 @@
 // src/pages/Clientes.jsx
-import React, { useEffect, useState, useMemo, useRef } from 'react'; // Agregado useRef
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { supabase } from '../supabase';
 import { useNavigate } from 'react-router-dom';
 import { useClientes } from '../contexts/ClientesContext';
@@ -7,7 +7,8 @@ import NewClientModal from '../components/NewClientModal';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import toast from 'react-hot-toast';
-import html2canvas from 'html2canvas'; // Importar html2canvas
+import html2canvas from 'html2canvas';
+import { ArrowLeft, UserPlus, Trash2, Search, CheckSquare, Square, ChevronLeft, ChevronRight } from 'lucide-react';
 
 // Componentes divididos
 import ClientesAccionesBarra from '../components/clientes/ClientesAccionesBarra';
@@ -15,11 +16,10 @@ import ClientesTabla from '../components/clientes/ClientesTabla';
 import ClientesPaginacion from '../components/clientes/ClientesPaginacion';
 import ClienteVentasModal from '../components/clientes/ClienteVentasModal';
 import ClienteVentaDetalleModal from '../components/clientes/ClienteVentaDetalleModal';
-// import HtmlTicketDisplay from '../components/HtmlTicketDisplay'; // Eliminado, "Ver Ticket" ahora muestra imagen
 
 import { useAuth } from '../contexts/AuthContext';
 
-// Helpers (ya existentes)
+// Helpers
 const formatCurrency = (amount) => {
     const numericAmount = parseFloat(amount);
     if (isNaN(numericAmount)) return '$0.00';
@@ -59,41 +59,41 @@ const formatTicketDateTime = (dateString) => {
     }
 };
 
-// --- Componente TicketParaImagen (adaptado del Canvas Ventas.jsx) ---
+// Componente TicketParaImagen
 const TicketParaImagen = React.forwardRef(({ venta, cliente, vendedor, logoSrc, dateTimeFormatter, currencyFormatter }, ref) => {
     if (!venta || !cliente || !vendedor) {
         return null;
     }
     const ticketStyles = {
         width: '300px', padding: '15px', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif',
-        fontSize: '12px', backgroundColor: '#fff', color: '#212529', boxSizing: 'border-box',
+        fontSize: '12px', backgroundColor: '#1f2937', color: '#e5e7eb', boxSizing: 'border-box',
     };
     const headerSectionStyles = { display: 'flex', alignItems: 'center', marginBottom: '12px',};
     const logoContainerStyles = { marginRight: '10px',};
     const logoStyles = { maxWidth: '40px', maxHeight: '40px', display: 'block',};
     const titleAndCodeStyles = { flexGrow: 1,};
-    const ticketTitleStyles = { fontSize: '16px', fontWeight: '600', margin: '0', color: '#000',};
-    const ticketCodeStyles = { fontSize: '10px', color: '#6c757d', margin: '0',};
-    const companyContactStyles = { textAlign: 'center', fontSize: '10px', color: '#6c757d', margin: '5px 0 12px 0',};
+    const ticketTitleStyles = { fontSize: '16px', fontWeight: '600', margin: '0', color: '#f9fafb',};
+    const ticketCodeStyles = { fontSize: '10px', color: '#9ca3af', margin: '0',};
+    const companyContactStyles = { textAlign: 'center', fontSize: '10px', color: '#9ca3af', margin: '5px 0 12px 0',};
     const infoSectionStyles = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '12px', fontSize: '11px',};
     const infoBlockStyles = {};
-    const infoLabelStyles = { fontWeight: '600', color: '#495057', display: 'block', marginBottom: '2px',};
-    const infoValueStyles = { display: 'block', color: '#212529', marginBottom: '5px',};
+    const infoLabelStyles = { fontWeight: '600', color: '#d1d5db', display: 'block', marginBottom: '2px',};
+    const infoValueStyles = { display: 'block', color: '#e5e7eb', marginBottom: '5px',};
     const productDetailsSectionStyles = { marginBottom: '12px',};
-    const productDetailsTitleStyles = { fontSize: '13px', fontWeight: '600', marginBottom: '6px', color: '#000',};
-    const productItemStyles = { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '4px 0', fontSize: '11px', borderTop: '1px solid #f0f0f0',};
+    const productDetailsTitleStyles = { fontSize: '13px', fontWeight: '600', marginBottom: '6px', color: '#f9fafb',};
+    const productItemStyles = { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '4px 0', fontSize: '11px', borderTop: '1px solid #374151',};
     const firstProductItemStyles = { ...productItemStyles, borderTop: 'none', paddingTop: '0',};
     const productNameStyles = { flex: '1', marginRight: '8px', wordBreak: 'break-word',};
-    const productQuantityPriceStyles = { textAlign: 'right', minWidth: '80px', whiteSpace: 'nowrap', color: '#495057',};
+    const productQuantityPriceStyles = { textAlign: 'right', minWidth: '80px', whiteSpace: 'nowrap', color: '#d1d5db',};
     const totalsSectionStyles = { marginTop: '12px', fontSize: '12px',};
     const totalRowStyles = { display: 'flex', justifyContent: 'space-between', padding: '3px 0',};
-    const totalLabelStyles = { color: '#495057',};
-    const totalValueStyles = { fontWeight: '500', color: '#212529',};
-    const grandTotalLabelStyles = { fontSize: '14px', fontWeight: '600', color: '#000',};
-    const grandTotalValueStyles = { fontSize: '14px', fontWeight: '600', color: '#28a745',};
-    const saldoAplicadoStyles = { color: '#007bff', fontWeight: '500',};
-    const hrMinimalistStyle = { border: 'none', borderTop: '1px solid #dee2e6', margin: '12px 0',};
-    const footerStyles = { textAlign: 'center', marginTop: '15px', fontSize: '10px', color: '#6c757d',};
+    const totalLabelStyles = { color: '#d1d5db',};
+    const totalValueStyles = { fontWeight: '500', color: '#e5e7eb',};
+    const grandTotalLabelStyles = { fontSize: '14px', fontWeight: '600', color: '#f9fafb',};
+    const grandTotalValueStyles = { fontSize: '14px', fontWeight: '600', color: '#10b981',};
+    const saldoAplicadoStyles = { color: '#60a5fa', fontWeight: '500',};
+    const hrMinimalistStyle = { border: 'none', borderTop: '1px solid #374151', margin: '12px 0',};
+    const footerStyles = { textAlign: 'center', marginTop: '15px', fontSize: '10px', color: '#9ca3af',};
 
     return (
         <div ref={ref} style={ticketStyles}>
@@ -124,7 +124,7 @@ const TicketParaImagen = React.forwardRef(({ venta, cliente, vendedor, logoSrc, 
             <div style={productDetailsSectionStyles}>
                 <h3 style={productDetailsTitleStyles}>Detalle de Venta:</h3>
                 {(venta.productos || []).map((p, i) => (
-                    <div key={p.id || i} style={i === 0 ? firstProductItemStyles : productItemStyles}> {/* Asegurar key única */}
+                    <div key={p.id || i} style={i === 0 ? firstProductItemStyles : productItemStyles}>
                         <span style={productNameStyles}>{p.nombreProducto || p.nombre || 'Producto Desconocido'}</span>
                         <span style={productQuantityPriceStyles}>
                             {p.cantidad} x {currencyFormatter(p.precio_unitario ?? 0)} = {currencyFormatter(p.total_parcial ?? 0)}
@@ -138,17 +138,17 @@ const TicketParaImagen = React.forwardRef(({ venta, cliente, vendedor, logoSrc, 
                     <span style={totalLabelStyles}>Subtotal (Productos):</span>
                     <span style={totalValueStyles}>{currencyFormatter(venta.subtotal ?? 0)}</span>
                 </div>
-                {(venta.valor_descuento ?? 0) > 0 && ( <div style={totalRowStyles}> <span style={totalLabelStyles}>Descuento:</span> <span style={{...totalValueStyles, color: '#dc3545'}}>- {currencyFormatter(venta.valor_descuento ?? 0)}</span> </div> )}
+                {(venta.valor_descuento ?? 0) > 0 && ( <div style={totalRowStyles}> <span style={totalLabelStyles}>Descuento:</span> <span style={{...totalValueStyles, color: '#f87171'}}>- {currencyFormatter(venta.valor_descuento ?? 0)}</span> </div> )}
                 {(venta.gastos_envio ?? 0) > 0 && ( <div style={totalRowStyles}> <span style={totalLabelStyles}>Envío:</span> <span style={totalValueStyles}>{currencyFormatter(venta.gastos_envio ?? 0)}</span> </div> )}
                 {(venta.monto_credito_aplicado ?? 0) > 0 && ( <div style={totalRowStyles}> <span style={{...totalLabelStyles, ...saldoAplicadoStyles}}>Saldo a Favor Aplicado:</span> <span style={{...totalValueStyles, ...saldoAplicadoStyles}}>- {currencyFormatter(venta.monto_credito_aplicado ?? 0)}</span> </div> )}
-                 <div style={{...totalRowStyles, marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #dee2e6'}}> <span style={grandTotalLabelStyles}>Total Pagado:</span> <span style={grandTotalValueStyles}>{currencyFormatter(venta.total ?? 0)}</span> </div>
+                 <div style={{...totalRowStyles, marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #374151'}}> <span style={grandTotalLabelStyles}>Total Pagado:</span> <span style={grandTotalValueStyles}>{currencyFormatter(venta.total ?? 0)}</span> </div>
             </div>
             <div style={footerStyles}> <p style={{margin: '2px 0'}}>¡Gracias por tu compra!</p> <p style={{margin: '2px 0'}}>Visítanos de nuevo pronto.</p> </div>
         </div>
     );
 });
 
-// --- Componente ImageActionModal (adaptado del Canvas Ventas.jsx) ---
+// Componente ImageActionModal
 const ImageActionModal = ({ isOpen, onClose, imageDataUrl, imageFile, ventaCodigo, currencyFormatter, clienteNombre, ventaTotal }) => {
     if (!isOpen || !imageDataUrl) return null;
     const handleShare = async () => {
@@ -178,15 +178,15 @@ const ImageActionModal = ({ isOpen, onClose, imageDataUrl, imageFile, ventaCodig
         toast.success('Imagen descargada.');
     };
     return (
-        <div className="fixed inset-0 bg-gray-800 bg-opacity-75 overflow-y-auto h-full w-full z-[100] flex items-center justify-center p-2 sm:p-4" onClick={onClose}>
-            <div className="bg-white rounded-lg shadow-xl w-auto max-w-xs sm:max-w-sm md:max-w-md relative flex flex-col items-center p-3 sm:p-4" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm overflow-y-auto h-full w-full z-[100] flex items-center justify-center p-2 sm:p-4" onClick={onClose}>
+            <div className="bg-dark-800 rounded-lg shadow-dropdown-dark border border-dark-700 w-auto max-w-xs sm:max-w-sm md:max-w-md relative flex flex-col items-center p-3 sm:p-4" onClick={e => e.stopPropagation()}>
                 <div className="w-full mb-4 flex justify-center">
-                    <img src={imageDataUrl} alt="Ticket de Venta" className="max-w-full h-auto max-h-[70vh] object-contain shadow-md" />
+                    <img src={imageDataUrl} alt="Ticket de Venta" className="max-w-full h-auto max-h-[70vh] object-contain shadow-card-dark" />
                 </div>
                 <div className="flex flex-wrap justify-center gap-2 sm:gap-3 w-full">
-                    <button onClick={handleShare} className="px-3 py-2 sm:px-4 bg-blue-600 text-white rounded-md shadow-sm hover:bg-blue-700">Compartir Imagen</button>
-                    <button onClick={handleDownload} className="px-3 py-2 sm:px-4 bg-green-600 text-white rounded-md shadow-sm hover:bg-green-700">Descargar Imagen</button>
-                    <button onClick={onClose} className="px-3 py-2 sm:px-4 bg-gray-500 text-white rounded-md shadow-sm hover:bg-gray-600">Cerrar</button>
+                    <button onClick={handleShare} className="px-3 py-2 sm:px-4 bg-primary-600 text-white rounded-md shadow-sm hover:bg-primary-700 transition-colors">Compartir Imagen</button>
+                    <button onClick={handleDownload} className="px-3 py-2 sm:px-4 bg-success-600 text-white rounded-md shadow-sm hover:bg-success-700 transition-colors">Descargar Imagen</button>
+                    <button onClick={onClose} className="px-3 py-2 sm:px-4 bg-dark-600 text-gray-200 rounded-md shadow-sm hover:bg-dark-500 transition-colors">Cerrar</button>
                 </div>
             </div>
         </div>
@@ -211,15 +211,15 @@ export default function Clientes() {
   
   const [showSaleDetailModal, setShowSaleDetailModal] = useState(false);
   const [selectedSaleForDetail, setSelectedSaleForDetail] = useState(null);
-  const [selectedSaleDetailsItems, setSelectedSaleDetailsItems] = useState([]); // Productos de la venta seleccionada
-  const [detailLoading, setDetailLoading] = useState(false); // Para el modal de detalle de venta
-  const [cancelSaleLoading, setCancelSaleLoading] = useState(false); // Para el botón de cancelar venta
+  const [selectedSaleDetailsItems, setSelectedSaleDetailsItems] = useState([]);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [cancelSaleLoading, setCancelSaleLoading] = useState(false);
 
-  // Estados para la funcionalidad de tickets (PDF e Imagen)
+  // Estados para la funcionalidad de tickets
   const [logoBase64, setLogoBase64] = useState(null);
-  const [clienteInfoForTicket, setClienteInfoForTicket] = useState(null); // Cliente de la venta para el ticket
-  const [vendedorInfoForTicket, setVendedorInfoForTicket] = useState(null); // Vendedor para el ticket
-  const [clienteBalanceForTicket, setClienteBalanceForTicket] = useState(0); // Saldo del cliente para el ticket
+  const [clienteInfoForTicket, setClienteInfoForTicket] = useState(null);
+  const [vendedorInfoForTicket, setVendedorInfoForTicket] = useState(null);
+  const [clienteBalanceForTicket, setClienteBalanceForTicket] = useState(0);
 
   const [isImageActionModalOpen, setIsImageActionModalOpen] = useState(false);
   const [generatedImageDataUrl, setGeneratedImageDataUrl] = useState(null);
@@ -281,15 +281,13 @@ export default function Clientes() {
     try {
         const { data, error } = await supabase
           .from('ventas')
-          .select('*, monto_credito_aplicado, enganche, gastos_envio, cliente_nombre, clientes(nombre, telefono, correo, direccion)') // Incluir datos del cliente si es necesario
+          .select('*, monto_credito_aplicado, enganche, gastos_envio, cliente_nombre, clientes(nombre, telefono, correo, direccion)')
           .eq('cliente_id', cliente.id)
           .order('fecha', { ascending: false }); 
         if (error) throw error;
         
-        // Mapear para asegurar que display_cliente_nombre (o similar) esté disponible si se usa en TicketParaImagen
         const ventasMapeadas = data.map(v => ({
             ...v,
-            // Usar el nombre del cliente de la relación si existe, sino el campo cliente_nombre de la venta
             display_cliente_nombre: v.clientes?.nombre || v.cliente_nombre || 'Público General'
         }));
         setVentasDelClienteSeleccionado(ventasMapeadas || []);
@@ -364,7 +362,7 @@ export default function Clientes() {
         toast.error(`Error al cargar detalles de la venta: ${error.message}`);
     } finally {
         setDetailLoading(false);
-        setShowSaleDetailModal(true); // Abrir el modal de detalle de venta
+        setShowSaleDetailModal(true);
     }
   };
   
@@ -396,7 +394,7 @@ export default function Clientes() {
     }
   };
 
-  // --- Funciones de Ticket adaptadas de Ventas.jsx ---
+  // Funciones de Ticket adaptadas de Ventas.jsx
   const handleShareTicketAsPDFFromCliente = async () => {
       if (!selectedSaleForDetail || !selectedSaleDetailsItems.length || !clienteInfoForTicket || !vendedorInfoForTicket) {
           toast.error("Datos incompletos para generar el PDF."); return;
@@ -479,7 +477,7 @@ export default function Clientes() {
     setIsProcessingImage(true);
     toast.loading('Generando imagen...', { id: 'processingImgCliente' });
     try {
-        const canvas = await html2canvas(ticketImageRef.current, { useCORS: true, scale: 2, backgroundColor: '#ffffff' });
+        const canvas = await html2canvas(ticketImageRef.current, { useCORS: true, scale: 2, backgroundColor: '#1f2937' });
         const dataUrl = canvas.toDataURL('image/png');
         const blob = await (await fetch(dataUrl)).blob();
         const imageFile = new File([blob], `Ticket_${selectedSaleForDetail.codigo_venta || 'venta'}.png`, { type: 'image/png' });
@@ -502,7 +500,7 @@ export default function Clientes() {
     setIsProcessingImage(true);
     toast.loading('Preparando imagen...', { id: 'sharingDirectlyCliente' });
     try {
-        const canvas = await html2canvas(ticketImageRef.current, { useCORS: true, scale: 2, backgroundColor: '#ffffff'});
+        const canvas = await html2canvas(ticketImageRef.current, { useCORS: true, scale: 2, backgroundColor: '#1f2937'});
         const dataUrl = canvas.toDataURL('image/png');
         const blob = await (await fetch(dataUrl)).blob();
         const imageFileToShare = new File([blob], `Ticket_${selectedSaleForDetail.codigo_venta || 'venta'}.png`, { type: 'image/png' });
@@ -527,12 +525,60 @@ export default function Clientes() {
     }
   };
   
-  const handleSelectClienteCheckbox = (clienteId) => { /* ... */ };
-  const handleSelectTodosClientesVisibles = (e) => { /* ... */ };
-  const handleEliminarSeleccionados = () => { /* ... */ };
+  const handleSelectClienteCheckbox = (clienteId) => {
+    setSelectedIds(prev => {
+      const newIds = [...prev];
+      const index = newIds.indexOf(clienteId);
+      if (index === -1) {
+        newIds.push(clienteId);
+      } else {
+        newIds.splice(index, 1);
+      }
+      return newIds;
+    });
+  };
+
+  const handleSelectTodosClientesVisibles = () => {
+    if (selectedIds.length === clientesPag.length) {
+      // Deseleccionar todos
+      setSelectedIds([]);
+    } else {
+      // Seleccionar todos los visibles
+      const idsVisibles = clientesPag.map(c => c.id);
+      setSelectedIds(idsVisibles);
+    }
+  };
+
+  const handleEliminarSeleccionados = async () => {
+    if (selectedIds.length === 0) {
+      toast.info('No hay clientes seleccionados para eliminar.');
+      return;
+    }
+
+    if (!window.confirm(`¿Estás seguro de eliminar ${selectedIds.length} cliente(s)? Esta acción no se puede deshacer.`)) {
+      return;
+    }
+
+    try {
+      // Eliminar cada cliente seleccionado
+      for (const id of selectedIds) {
+        await eliminarClienteContext(id);
+      }
+      
+      toast.success(`${selectedIds.length} cliente(s) eliminado(s) exitosamente.`);
+      setSelectedIds([]);
+    } catch (error) {
+      console.error('Error al eliminar clientes:', error);
+      toast.error('Error al eliminar clientes.');
+    }
+  };
 
   if (clientesLoadingFromContext) {
-     return <div className="text-center p-10">Cargando clientes...</div>;
+     return (
+       <div className="flex justify-center items-center h-64">
+         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-400"></div>
+       </div>
+     );
   }
 
   return (
@@ -542,7 +588,7 @@ export default function Clientes() {
           <div style={{ position: 'absolute', left: '-9999px', top: '-9999px', zIndex: -1 }}>
               <TicketParaImagen 
                   ref={ticketImageRef}
-                  venta={selectedSaleForDetail} // Usar la venta seleccionada para el detalle
+                  venta={selectedSaleForDetail}
                   cliente={clienteInfoForTicket}
                   vendedor={vendedorInfoForTicket}
                   logoSrc={logoBase64}
@@ -564,54 +610,209 @@ export default function Clientes() {
           ventaTotal={selectedSaleForDetail?.total}
       />
 
-      <div className="min-h-screen bg-gray-100 p-4 md:p-8 lg:p-12">
+      <div className="min-h-screen bg-dark-900 p-4 md:p-8 lg:p-12">
         <div className="flex flex-col md:flex-row items-center justify-between mb-6 gap-4">
-          <button onClick={() => navigate('/')} className="px-6 py-2 bg-gray-700 text-white font-semibold rounded-lg shadow-md hover:bg-gray-800">
+          <button 
+            onClick={() => navigate('/')} 
+            className="px-6 py-2 bg-dark-800 text-gray-200 font-semibold rounded-lg shadow-elegant-dark hover:bg-dark-700 transition-colors flex items-center gap-2"
+          >
+            <ArrowLeft size={18} />
             Volver al inicio
           </button>
-          <h1 className="text-3xl font-bold text-gray-800 text-center">Gestión de Clientes</h1>
+          <h1 className="text-3xl font-bold text-gray-100 text-center">Gestión de Clientes</h1>
           <div className="w-full md:w-auto md:min-w-[150px]"></div>
         </div>
 
-        <ClientesAccionesBarra
-          busqueda={busqueda}
-          onBusquedaChange={(text) => { setBusqueda(text); setPagina(1);}}
-          onAbrirNuevoCliente={() => { setEditingClient(null); setShowNewOrEditClientModal(true); }}
-          porPagina={porPagina}
-          onPorPaginaChange={(num) => { setPorPagina(num); setPagina(1); }}
-          onEliminarSeleccionados={handleEliminarSeleccionados}
-          selectedIdsCount={selectedIds.length}
-          disabledEliminar={selectedIds.length === 0}
-        />
+        <div className="bg-dark-800 p-6 rounded-lg shadow-card-dark border border-dark-700/50 mb-6">
+          <div className="flex flex-col md:flex-row items-center justify-between mb-6 gap-4">
+            <div className="flex items-center gap-2 w-full md:w-auto">
+              <label htmlFor="items-per-page" className="text-gray-300 text-sm whitespace-nowrap">
+                Mostrar:
+              </label>
+              <select
+                id="items-per-page"
+                value={porPagina}
+                onChange={e => setPorPagina(Number(e.target.value))}
+                className="border border-dark-700 bg-dark-900 p-2 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 text-sm text-gray-200"
+              >
+                {[10, 25, 50, 100].map(n => (
+                  <option key={n} value={n}>
+                    {n} por página
+                  </option>
+                ))}
+              </select>
+            </div>
 
-        <ClientesTabla
-          clientesPag={clientesPag}
-          selectedIds={selectedIds}
-          onSelectCliente={handleSelectClienteCheckbox}
-          onSelectTodosClientes={handleSelectTodosClientesVisibles}
-          onAbrirEditar={(cliente) => { setEditingClient(cliente); setShowNewOrEditClientModal(true); }}
-          onHandleVerCompras={handleVerCompras}
-          sortColumn={sortColumn}
-          sortDirection={sortDirection}
-          onSort={handleSort}
-          areAnyClientesVisible={clientesPag.length > 0}
-          formatDateFunction={formatTicketDateTime}
-        />
+            <div className="flex flex-col sm:flex-row items-center gap-4 w-full md:w-auto">
+              <div className="relative w-full sm:w-auto md:w-64">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Search size={18} className="text-gray-500" />
+                </div>
+                <input
+                  type="text"
+                  placeholder="Buscar cliente..."
+                  value={busqueda}
+                  onChange={e => setBusqueda(e.target.value)}
+                  className="w-full pl-10 p-2 bg-dark-900 border border-dark-700 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 text-gray-200"
+                />
+              </div>
+              <button
+                onClick={() => { setEditingClient(null); setShowNewOrEditClientModal(true); }}
+                className="w-full sm:w-auto px-6 py-2 bg-primary-600 text-white rounded-lg shadow-elegant-dark hover:bg-primary-700 transition-colors flex items-center gap-2"
+              >
+                <UserPlus size={18} />
+                Agregar cliente
+              </button>
+            </div>
+            
+            <button
+              disabled={selectedIds.length === 0}
+              onClick={handleEliminarSeleccionados}
+              className={`w-full md:w-auto px-4 py-2 rounded-md shadow-sm transition-colors text-sm flex items-center justify-center gap-2 ${
+                selectedIds.length === 0
+                  ? 'bg-dark-700 text-gray-500 cursor-not-allowed'
+                  : 'bg-error-600 text-white hover:bg-error-700'
+              }`}
+            >
+              <Trash2 size={16} />
+              Eliminar seleccionados ({selectedIds.length})
+            </button>
+          </div>
+
+          <div className="bg-dark-800 shadow-card-dark rounded-lg overflow-hidden border border-dark-700/50">
+            <table className="min-w-full divide-y divide-dark-700">
+              <thead className="bg-dark-900">
+                <tr>
+                  <th className="p-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider w-12">
+                    <div 
+                      onClick={handleSelectTodosClientesVisibles}
+                      className="cursor-pointer text-gray-400 hover:text-gray-200 transition-colors"
+                    >
+                      {clientesPag.length > 0 && selectedIds.length === clientesPag.length ? (
+                        <CheckSquare size={18} className="text-primary-400" />
+                      ) : (
+                        <Square size={18} />
+                      )}
+                    </div>
+                  </th>
+                  <th
+                    className="p-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-200"
+                    onClick={() => handleSort('nombre')}
+                  >
+                    Nombre {sortColumn === 'nombre' && (
+                      <span className="ml-1">{sortDirection === 'asc' ? '▲' : '▼'}</span>
+                    )}
+                  </th>
+                  <th
+                    className="p-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider hidden sm:table-cell cursor-pointer hover:text-gray-200"
+                    onClick={() => handleSort('telefono')}
+                  >
+                    Teléfono {sortColumn === 'telefono' && (
+                      <span className="ml-1">{sortDirection === 'asc' ? '▲' : '▼'}</span>
+                    )}
+                  </th>
+                  <th
+                    className="p-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider hidden md:table-cell cursor-pointer hover:text-gray-200"
+                    onClick={() => handleSort('correo')}
+                  >
+                    Correo {sortColumn === 'correo' && (
+                      <span className="ml-1">{sortDirection === 'asc' ? '▲' : '▼'}</span>
+                    )}
+                  </th>
+                  <th
+                    className="p-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider hidden lg:table-cell cursor-pointer hover:text-gray-200"
+                    onClick={() => handleSort('direccion')}
+                  >
+                    Dirección {sortColumn === 'direccion' && (
+                      <span className="ml-1">{sortDirection === 'asc' ? '▲' : '▼'}</span>
+                    )}
+                  </th>
+                  <th className="p-4 text-center text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                    Acciones
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-dark-800 divide-y divide-dark-700/50">
+                {clientesPag.length === 0 ? (
+                  <tr>
+                    <td colSpan="6" className="p-4 text-center text-gray-500 italic">
+                      No hay clientes para mostrar con los filtros actuales.
+                    </td>
+                  </tr>
+                ) : (
+                  clientesPag.map(cliente => (
+                    <tr key={cliente.id} className="hover:bg-dark-700/50 transition-colors">
+                      <td className="p-4 whitespace-nowrap">
+                        <div 
+                          onClick={() => handleSelectClienteCheckbox(cliente.id)}
+                          className="cursor-pointer text-gray-400 hover:text-gray-200 transition-colors"
+                        >
+                          {selectedIds.includes(cliente.id) ? (
+                            <CheckSquare size={18} className="text-primary-400" />
+                          ) : (
+                            <Square size={18} />
+                          )}
+                        </div>
+                      </td>
+                      <td className="p-4 whitespace-nowrap text-sm font-medium text-gray-200">{cliente.nombre}</td>
+                      <td className="p-4 whitespace-nowrap text-sm text-gray-300 hidden sm:table-cell">{cliente.telefono || 'N/A'}</td>
+                      <td className="p-4 whitespace-nowrap text-sm text-gray-300 hidden md:table-cell">{cliente.correo || 'N/A'}</td>
+                      <td className="p-4 whitespace-nowrap text-sm text-gray-300 hidden lg:table-cell">{cliente.direccion || 'N/A'}</td>
+                      <td className="p-4 whitespace-nowrap text-center text-sm font-medium">
+                        <div className="flex justify-center items-center space-x-2">
+                          <button
+                            onClick={() => { setEditingClient(cliente); setShowNewOrEditClientModal(true); }}
+                            className="px-3 py-1 bg-warning-600 text-white rounded-md shadow-sm hover:bg-warning-700 transition-colors text-xs"
+                            title="Editar Cliente"
+                          >
+                            Editar
+                          </button>
+                          <button
+                            onClick={() => handleVerCompras(cliente)}
+                            className="px-3 py-1 bg-primary-600 text-white rounded-md shadow-sm hover:bg-primary-700 transition-colors text-xs"
+                            title="Ver Ventas del Cliente"
+                          >
+                            Ver Ventas
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
         
-        <ClientesPaginacion
-          pagina={pagina}
-          totalPaginas={totalPaginas}
-          onPaginaAnterior={() => setPagina(p => Math.max(1, p - 1))}
-          onPaginaSiguiente={() => setPagina(p => Math.min(totalPaginas, p + 1))}
-          disabledAnterior={pagina === 1}
-          disabledSiguiente={pagina === totalPaginas || totalPaginas === 0}
-        />
+        <div className="flex justify-end">
+          <div className="flex items-center justify-center md:justify-end gap-2">
+            <button
+              onClick={() => setPagina(p => Math.max(1, p - 1))}
+              disabled={pagina === 1}
+              className="px-3 py-1 bg-dark-800 text-gray-300 rounded-md shadow-sm hover:bg-dark-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm flex items-center gap-1"
+            >
+              <ChevronLeft size={16} />
+              Anterior
+            </button>
+            <span className="text-gray-300 text-sm">
+              Página {pagina} de {totalPaginas || 1}
+            </span>
+            <button
+              onClick={() => setPagina(p => Math.min(totalPaginas, p + 1))}
+              disabled={pagina === totalPaginas || totalPaginas === 0}
+              className="px-3 py-1 bg-dark-800 text-gray-300 rounded-md shadow-sm hover:bg-dark-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm flex items-center gap-1"
+            >
+              Siguiente
+              <ChevronRight size={16} />
+            </button>
+          </div>
+        </div>
 
         <NewClientModal
           isOpen={showNewOrEditClientModal}
           onClose={() => { setShowNewOrEditClientModal(false); setEditingClient(null); }}
-          editingClient={editingClient}
-          onClientSaved={() => { setShowNewOrEditClientModal(false); setEditingClient(null); }}
+          cliente={editingClient}
+          onClientAdded={() => { setShowNewOrEditClientModal(false); setEditingClient(null); }}
         />
 
         {clienteActualParaVentas && (
@@ -620,7 +821,7 @@ export default function Clientes() {
             onClose={() => setClienteActualParaVentas(null)}
             clienteActual={clienteActualParaVentas}
             ventasCliente={ventasDelClienteSeleccionado}
-            onSelectSale={handleSelectSaleForDetail} // Esta función ahora prepara datos para los tickets también
+            onSelectSale={handleSelectSaleForDetail}
             loading={clientSalesLoading}
             formatDateFunction={formatTicketDateTime}
           />
@@ -633,26 +834,20 @@ export default function Clientes() {
               selectedSale={selectedSaleForDetail}
               selectedSaleDetails={selectedSaleDetailsItems}
               detailLoading={detailLoading}
-              clienteInfoTicket={clienteInfoForTicket} // Usar los estados preparados para el ticket
-              vendedorInfoTicket={vendedorInfoForTicket} // Usar los estados preparados para el ticket
-              clienteBalanceTicket={clienteBalanceForTicket} // Usar los estados preparados para el ticket
+              clienteInfoTicket={clienteInfoForTicket}
+              vendedorInfoTicket={vendedorInfoForTicket}
+              clienteBalanceTicket={clienteBalanceForTicket}
               
-              // Pasar las nuevas funciones de ticket
               onShareTicket={handleShareTicketAsPDFFromCliente} 
               onShareTicketAsImage={handleShareTicketAsImageDirectlyFromCliente} 
               onViewTicketImage={handleViewTicketImageAndShowModalFromCliente} 
               
               onCancelSale={handleCancelSaleFromCliente}
               cancelLoading={cancelSaleLoading}
-              logoBase64={logoBase64} // Ya lo tenías, pero asegúrate que se use en PDF
+              logoBase64={logoBase64}
               formatDateFunction={formatTicketDateTime}
           />
         )}
-        
-        {/* Lógica de HtmlTicketDisplay eliminada ya que "Ver Ticket" ahora usa imagen */}
-        {/* {showHtmlTicket && htmlTicketData && (
-            <HtmlTicketDisplay saleData={htmlTicketData} onClose={closeHtmlTicket} />
-        )} */}
       </div>
     </>
   );
