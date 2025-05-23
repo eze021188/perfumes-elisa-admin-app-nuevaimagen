@@ -33,12 +33,12 @@ export default function DashboardLayout() {
   };
 
   return (
-    <div className="min-h-screen bg-dark-950 text-gray-100 flex">
+    <div className="flex h-screen bg-dark-950 text-gray-100">
       {/* Sidebar */}
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-h-screen">
+      <div className="flex-1 flex flex-col overflow-hidden">
         {/* Top Navigation Bar */}
         <header className="h-16 bg-dark-900 border-b border-dark-800 px-4 flex items-center justify-between sticky top-0 z-10">
           {/* Left Section */}
@@ -122,7 +122,7 @@ export default function DashboardLayout() {
         </header>
 
         {/* Main Content */}
-        <main className="flex-1 p-6 bg-gradient-to-br from-dark-950 to-dark-900 overflow-auto">
+        <main className="flex-1 overflow-auto p-6 bg-gradient-to-br from-dark-950 to-dark-900">
           <Outlet />
         </main>
 
