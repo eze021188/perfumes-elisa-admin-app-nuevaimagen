@@ -142,7 +142,7 @@ export default function HtmlTicketDisplay({ saleData, onClose }) {
                 <div className="ticket-content-printable" ref={ticketRef}>
                     <div className="ticket-header">
                         <div className="header-top">
-                            <img src="/images/PERFUMESELISAwhite.jpg" alt="Logo Perfumes Elisa" />
+                            <img src="/images/PERFUMESELISA.png" alt="Logo Perfumes Elisa" />
                             <div className="ticket-title-block">
                                 <h2>Ticket de Venta</h2>
                                 <p>#{saleData?.codigo_venta || 'N/A'}</p>

@@ -1,7 +1,7 @@
 // src/components/ProductosItems.jsx
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../supabase';
-import ModalEditarProducto from './ModalEditarProducto';
+import ModalEditarProducto from './ModalEditarProducto'; 
 import toast from 'react-hot-toast';
 import { 
   Plus, 
@@ -17,11 +17,14 @@ import {
 
 export default function ProductosItems() {
   const [productos, setProductos] = useState([]);
+  const [loading, setLoading] = useState(true); // Añadido para gestionar la carga de productos
   const [busqueda, setBusqueda] = useState('');
   const [modalActivo, setModalActivo] = useState(false);
   const [productoEditando, setProductoEditando] = useState(null);
   const [actualizando, setActualizando] = useState(false);
-  const [seleccionados, setSeleccionados] = useState(new Set());
+  
+  // CORRECCIÓN CRUCIAL AQUÍ: Inicializar useState con un nuevo Set
+  const [seleccionados, setSeleccionados] = useState(new Set()); 
   
   // Estado para el filtro de stock
   const [stockFilter, setStockFilter] = useState('con-stock');
@@ -42,6 +45,7 @@ export default function ProductosItems() {
   }, []);
 
   const cargarProductos = async () => {
+    setLoading(true); // Iniciar carga
     const { data, error } = await supabase.from('productos').select('*');
     if (error) {
       console.error('Error al cargar productos:', error.message);
@@ -49,6 +53,7 @@ export default function ProductosItems() {
     } else {
       setProductos(data || []);
     }
+    setLoading(false); // Finalizar carga
   };
 
   const handleSort = (column) => {
@@ -110,7 +115,7 @@ export default function ProductosItems() {
 
 
   const toggleSeleccionarTodos = () => {
-    if (seleccionados.size === productosFiltradosYOrdenados.length && productosFiltradosYOrdenados.length > 0) {
+    if (Array.from(seleccionados).length === productosFiltradosYOrdenados.length && productosFiltradosYOrdenados.length > 0) {
       setSeleccionados(new Set());
     } else {
       setSeleccionados(new Set(productosFiltradosYOrdenados.map(p => p.id)));
@@ -163,37 +168,37 @@ export default function ProductosItems() {
   };
 
   const handleActualizarPrecios = async () => {
-    setActualizando(true);
-    const updates = productosFiltradosYOrdenados.map(p => ({
-      id: p.id,
-      promocion: parseFloat(p.promocion) || null,
-      precio_normal: parseFloat(p.precio_normal) || null
-    }));
-     const updatesToApply = updates.filter(item => seleccionados.has(item.id));
-     if (updatesToApply.length === 0) {
-         toast.info('No hay productos seleccionados para actualizar precios.');
-         setActualizando(false);
-         return;
-     }
-    const updatePromises = updatesToApply.map(item =>
-        supabase.from('productos')
-            .update({ promocion: item.promocion, precio_normal: item.precio_normal })
-            .eq('id', item.id)
-    );
-    const results = await Promise.all(updatePromises);
-    let hasError = false;
-    results.forEach((result, index) => {
-        if (result.error) {
-            console.error(`Error actualizando producto ${updatesToApply[index].id}:`, result.error.message);
-            toast.error(`Error al actualizar producto ${updatesToApply[index].id}.`);
-            hasError = true;
-        }
-    });
-    if (!hasError) {
-         toast.success(`${updatesToApply.length} precios actualizados exitosamente.`);
-    }
-    setSeleccionados(new Set());
-    setActualizando(false);
+      setActualizando(true);
+      const updates = productosFiltradosYOrdenados.map(p => ({
+        id: p.id,
+        promocion: parseFloat(p.promocion) || null,
+        precio_normal: parseFloat(p.precio_normal) || null
+      }));
+       const updatesToApply = updates.filter(item => seleccionados.has(item.id));
+       if (updatesToApply.length === 0) {
+           toast.info('No hay productos seleccionados para actualizar precios.');
+           setActualizando(false);
+           return;
+       }
+      const updatePromises = updatesToApply.map(item =>
+          supabase.from('productos')
+              .update({ promocion: item.promocion, precio_normal: item.precio_normal })
+              .eq('id', item.id)
+      );
+      const results = await Promise.all(updatePromises);
+      let hasError = false;
+      results.forEach((result, index) => {
+          if (result.error) {
+              console.error(`Error actualizando producto ${updatesToApply[index].id}:`, result.error.message);
+              toast.error(`Error al actualizar producto ${updatesToApply[index].id}.`);
+              hasError = true;
+          }
+      });
+      if (!hasError) {
+           toast.success(`${updatesToApply.length} precios actualizados exitosamente.`);
+      }
+      setSeleccionados(new Set());
+      setActualizando(false);
   };
 
   const abrirModal = producto => {
@@ -322,7 +327,7 @@ export default function ProductosItems() {
             onClick={toggleSeleccionarTodos} 
             className="cursor-pointer text-gray-300 hover:text-gray-100 transition-colors"
           >
-            {productosFiltradosYOrdenados.length > 0 && seleccionados.size === productosFiltradosYOrdenados.length ? (
+            {productosFiltradosYOrdenados.length > 0 && Array.from(seleccionados).length === productosFiltradosYOrdenados.length ? ( 
               <CheckSquare size={18} className="text-primary-400" />
             ) : (
               <Square size={18} />
@@ -370,96 +375,107 @@ export default function ProductosItems() {
         </div>
       </div>
 
-      {/* Encabezados de tabla */}
-      <div className="grid grid-cols-[auto_60px_1fr_auto_auto_auto] gap-2 items-center border border-dark-700 rounded-lg p-2 shadow-card-dark bg-dark-900 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
-          <div className="p-1"></div> 
-          <div className="p-1">Imagen</div>
-          <div className="p-1 cursor-pointer hover:text-gray-200 flex items-center gap-1" onClick={() => handleSort('nombre')}>
-              Nombre {sortColumn === 'nombre' && (<span>{sortDirection === 'asc' ? '▲' : '▼'}</span>)}
-          </div>
-          <div className="p-1 text-right cursor-pointer hover:text-gray-200 flex items-center gap-1 justify-end" onClick={() => handleSort('promocion')}>
-              Promoción {sortColumn === 'promocion' && (<span>{sortDirection === 'asc' ? '▲' : '▼'}</span>)}
-          </div>
-          <div className="p-1 text-right cursor-pointer hover:text-gray-200 flex items-center gap-1 justify-end" onClick={() => handleSort('precio_normal')}>
-              P. Normal {sortColumn === 'precio_normal' && (<span>{sortDirection === 'asc' ? '▲' : '▼'}</span>)}
-          </div>
-          <div className="p-1 text-center">Acciones</div>
-      </div>
+      {/* Contenedor para la tabla de ProductosItems */}
+      <div className="overflow-x-auto rounded-lg shadow-card-dark border border-dark-700/50 bg-dark-800/50">
+        {/* Encabezados de tabla */}
+        {/* MODIFICADO: Columna de Imagen oculta en móviles (hidden) y visible en md:block */}
+        <div className="grid grid-cols-[auto_1fr_auto_auto_auto] md:grid-cols-[auto_60px_1fr_auto_auto_auto] gap-2 items-center border-b border-dark-700 rounded-t-lg p-2 text-xs font-semibold text-gray-400 uppercase tracking-wider bg-dark-900/50 sticky top-0 z-10">
+            <div className="p-1"></div> {/* Celda vacía para el checkbox de selección */}
+            <div className="hidden md:block p-1">Imagen</div> {/* Oculto en móvil, visible en md */}
+            <div className="p-1 cursor-pointer hover:text-gray-200 flex items-center gap-1 whitespace-nowrap" onClick={() => handleSort('nombre')}> 
+                Nombre {sortColumn === 'nombre' && (<span>{sortDirection === 'asc' ? '▲' : '▼'}</span>)}
+            </div>
+            <div className="p-1 text-right cursor-pointer hover:text-gray-200 flex items-center gap-1 justify-end whitespace-nowrap" onClick={() => handleSort('promocion')}> 
+                Promoción {sortColumn === 'promocion' && (<span>{sortDirection === 'asc' ? '▲' : '▼'}</span>)}
+            </div>
+            <div className="p-1 text-right cursor-pointer hover:text-gray-200 flex items-center gap-1 justify-end whitespace-nowrap" onClick={() => handleSort('precio_normal')}> 
+                P. Normal {sortColumn === 'precio_normal' && (<span>{sortDirection === 'asc' ? '▲' : '▼'}</span>)}
+            </div>
+            <div className="p-1 text-center whitespace-nowrap">Acciones</div> 
+        </div>
 
-      {/* Lista de productos */}
-      <div className="space-y-2">
-        {productosFiltradosYOrdenados.map(producto => (
-          <div
-            key={producto.id}
-            className={`grid grid-cols-[auto_60px_1fr_auto_auto_auto] gap-2 items-center border border-dark-700/50 rounded-lg p-2 shadow-card-dark hover:shadow-dropdown-dark transition-shadow bg-dark-800/50 text-xs`}
-          >
-            <div 
-              onClick={() => toggleSeleccionarProducto(producto.id)}
-              className="cursor-pointer text-gray-300 hover:text-gray-100 transition-colors"
-            >
-              {seleccionados.has(producto.id) ? (
-                <CheckSquare size={18} className="text-primary-400" />
-              ) : (
-                <Square size={18} />
-              )}
-            </div>
-            <div className="w-14 h-14 bg-dark-900 rounded-lg overflow-hidden flex items-center justify-center">
-              {producto.imagen_url ? (
-                <img src={producto.imagen_url} alt={producto.nombre || 'Producto sin nombre'} className="object-cover w-full h-full" onError={(e) => { e.target.onerror = null; e.target.src="https://placehold.co/56x56/1f2937/6b7280?text=Sin+Imagen" }} />
-              ) : (
-                <span className="text-gray-600 text-[10px] text-center">Sin imagen</span>
-              )}
-            </div>
-            <div className="whitespace-normal break-words max-w-full">
-              <div className="font-medium text-gray-200">{producto.nombre || 'Producto sin nombre'}</div>
-              <div className="text-gray-400 text-[11px]">{producto.categoria || 'Sin categoría'}</div>
-              <div className={`text-[11px] font-semibold ${parseFloat(producto.stock || 0) <= 0 ? 'text-error-400' : 'text-success-400'}`}>
-                Stock: {producto.stock ?? 0}
-              </div>
-            </div>
-            <div className="flex flex-col items-start">
-              <label className="text-gray-400 mb-1 text-[10px]">Promoción</label>
-              <input
-                type="number" min="0" step="0.01"
-                value={(producto.promocion ?? '').toString()}
-                onChange={e => handleEditarLocal(producto.id, 'promocion', e.target.value)}
-                className="w-20 border border-dark-700 bg-dark-900 px-2 py-1 rounded text-right text-xs text-gray-200 focus:ring-primary-500 focus:border-primary-500"
-                placeholder="0.00"
-              />
-            </div>
-            <div className="flex flex-col items-start">
-              <label className="text-gray-400 mb-1 text-[10px]">P. Normal</label>
-              <input
-                type="number" min="0" step="0.01"
-                value={(producto.precio_normal ?? '').toString()}
-                onChange={e => handleEditarLocal(producto.id, 'precio_normal', e.target.value)}
-                className="w-20 border border-dark-700 bg-dark-900 px-2 py-1 rounded text-right text-xs text-gray-200 focus:ring-primary-500 focus:border-primary-500"
-                placeholder="0.00"
-              />
-            </div>
-            <div>
-              <button 
-                onClick={() => abrirModal(producto)} 
-                className="text-primary-400 hover:text-primary-300 transition-colors flex items-center gap-1"
+        {/* Lista de productos */}
+        {loading ? ( // Mostrar loader si productos están cargando
+          <div className="flex justify-center items-center h-64 bg-dark-800/50 rounded-lg border border-dark-700/50">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-400"></div>
+          </div>
+        ) : (
+          <div className="space-y-2 p-2"> 
+            {productosFiltradosYOrdenados.map(producto => (
+              <div
+                key={producto.id}
+                className={`grid grid-cols-[auto_1fr_auto_auto_auto] md:grid-cols-[auto_60px_1fr_auto_auto_auto] gap-2 items-center border border-dark-700/50 rounded-lg p-2 shadow-card-dark hover:shadow-dropdown-dark transition-shadow bg-dark-800/50 text-xs`}
               >
-                <Edit size={14} />
-                Editar
-              </button>
+                <div 
+                  onClick={() => toggleSeleccionarProducto(producto.id)} 
+                  className="cursor-pointer text-gray-300 hover:text-gray-100 transition-colors"
+                >
+                  {seleccionados.has(producto.id) ? (
+                    <CheckSquare size={18} className="text-primary-400" />
+                  ) : (
+                    <Square size={18} />
+                  )}
+                </div>
+                {/* Columna de Imagen: Oculta en móvil, visible en md */}
+                <div className="hidden md:flex w-14 h-14 bg-dark-900 rounded-lg overflow-hidden items-center justify-center">
+                  {producto.imagen_url ? (
+                    <img src={producto.imagen_url} alt={producto.nombre || 'Producto sin nombre'} className="object-cover w-full h-full" onError={(e) => { e.target.onerror = null; e.target.src="https://placehold.co/56x56/1f2937/6b7280?text=Sin+Imagen" }} />
+                  ) : (
+                    <span className="text-gray-600 text-[10px] text-center">Sin imagen</span>
+                  )}
+                </div>
+                <div className="whitespace-normal break-words max-w-full">
+                  <div className="font-medium text-gray-200">{producto.nombre || 'Producto sin nombre'}</div>
+                  <div className="text-gray-400 text-[11px]">{producto.categoria || 'Sin categoría'}</div>
+                  <div className={`text-[11px] font-semibold ${parseFloat(producto.stock || 0) <= 0 ? 'text-error-400' : 'text-success-400'}`}>
+                    Stock: {producto.stock ?? 0}
+                  </div>
+                </div>
+                <div className="flex flex-col items-start">
+                  <label className="text-gray-400 mb-1 text-[10px]">Promoción</label>
+                  <input
+                    type="number" min="0" step="0.01"
+                    value={(producto.promocion ?? '').toString()}
+                    onChange={e => handleEditarLocal(producto.id, 'promocion', e.target.value)}
+                    className="w-20 border border-dark-700 bg-dark-900 px-2 py-1 rounded text-right text-xs text-gray-200 focus:ring-primary-500 focus:border-primary-500"
+                    placeholder="0.00"
+                  />
+                </div>
+                <div className="flex flex-col items-start">
+                  <label className="text-gray-400 mb-1 text-[10px]">P. Normal</label>
+                  <input
+                    type="number" min="0" step="0.01"
+                    value={(producto.precio_normal ?? '').toString()}
+                    onChange={e => handleEditarLocal(producto.id, 'precio_normal', e.target.value)}
+                    className="w-20 border border-dark-700 bg-dark-900 px-2 py-1 rounded text-right text-xs text-gray-200 focus:ring-primary-500 focus:border-primary-500"
+                    placeholder="0.00"
+                  />
+                </div>
+                <div>
+                  <button 
+                    onClick={() => abrirModal(producto)} 
+                    className="text-primary-400 hover:text-primary-300 transition-colors flex items-center gap-1"
+                  >
+                    <Edit size={14} />
+                    Editar
+                  </button>
+                </div>
+              </div> 
+            ))}
+            {!loading && productosFiltradosYOrdenados.length === 0 && ( // Mostrar mensaje si no hay productos y no está cargando
+              <div className="text-center py-8 bg-dark-800/50 rounded-lg border border-dark-700/50">
+                <Package size={48} className="mx-auto text-gray-600 mb-3" />
+                <p className="text-gray-400">
+                  {busqueda ? 'No se encontraron productos que coincidan con tu búsqueda y filtros.'
+                   : (stockFilter !== 'todos') ? 'No hay productos que coincidan con el filtro de stock actual.'
+                   : 'No hay productos disponibles.'
+                }
+              </p>
             </div>
-          </div>
-        ))}
-        {productosFiltradosYOrdenados.length === 0 && (
-          <div className="text-center py-8 bg-dark-800/50 rounded-lg border border-dark-700/50">
-            <Package size={48} className="mx-auto text-gray-600 mb-3" />
-            <p className="text-gray-400">
-              {busqueda ? 'No se encontraron productos que coincidan con tu búsqueda y filtros.'
-               : (stockFilter !== 'todos') ? 'No hay productos que coincidan con el filtro de stock actual.'
-               : 'No hay productos disponibles.'
-              }
-            </p>
-          </div>
+          )}
+          </div> 
         )}
-      </div>
+      </div> {/* <--- Este es el cierre del div "overflow-x-auto rounded-lg ..." */}
 
       {modalActivo && productoEditando && (
         <ModalEditarProducto
@@ -485,39 +501,39 @@ export default function ProductosItems() {
                   <div className="grid grid-cols-1 gap-4 mb-6">
                       <div>
                           <label htmlFor="nombre" className="block text-sm font-medium text-gray-300 mb-1">Nombre del Producto <span className="text-error-400">*</span></label>
-                          <input type="text" id="nombre" name="nombre" value={newProductForm.nombre} onChange={handleNewProductInputChange} className="w-full border border-dark-700 bg-dark-900 px-3 py-2 rounded-md focus:ring-primary-500 focus:border-primary-500 text-gray-200" required />
+                          <input type="text" id="nombre" name="nombre" value={newProductForm.nombre} onChange={handleNewProductInputChange} className="w-full border border-dark-700 bg-dark-900 px-3 py-2 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-gray-200" required />
                       </div>
                        <div>
                           <label htmlFor="stock" className="block text-sm font-medium text-gray-300 mb-1">Stock Inicial <span className="text-error-400">*</span></label>
-                          <input type="number" id="stock" name="stock" min="0" step="any" value={newProductForm.stock} onChange={handleNewProductInputChange} className="w-full border border-dark-700 bg-dark-900 px-3 py-2 rounded-md focus:ring-primary-500 focus:border-primary-500 text-gray-200" required />
+                          <input type="number" id="stock" name="stock" min="0" step="any" value={newProductForm.stock} onChange={handleNewProductInputChange} className="w-full border border-dark-700 bg-dark-900 px-3 py-2 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-gray-200" required />
                       </div>
                        <div>
                           <label htmlFor="precio_normal" className="block text-sm font-medium text-gray-300 mb-1">Precio de Venta (Normal) <span className="text-error-400">*</span></label>
-                          <input type="number" id="precio_normal" name="precio_normal" min="0" step="0.01" value={newProductForm.precio_normal} onChange={handleNewProductInputChange} className="w-full border border-dark-700 bg-dark-900 px-3 py-2 rounded-md focus:ring-primary-500 focus:border-primary-500 text-gray-200" required />
+                          <input type="number" id="precio_normal" name="precio_normal" min="0" step="0.01" value={newProductForm.precio_normal} onChange={handleNewProductInputChange} className="w-full border border-dark-700 bg-dark-900 px-3 py-2 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-gray-200" required />
                       </div>
                        <div>
                           <label htmlFor="promocion" className="block text-sm font-medium text-gray-300 mb-1">Precio de Venta (Promoción)</label>
-                          <input type="number" id="promocion" name="promocion" min="0" step="0.01" value={newProductForm.promocion} onChange={handleNewProductInputChange} className="w-full border border-dark-700 bg-dark-900 px-3 py-2 rounded-md focus:ring-primary-500 focus:border-primary-500 text-gray-200" />
+                          <input type="number" id="promocion" name="promocion" min="0" step="0.01" value={newProductForm.promocion} onChange={handleNewProductInputChange} className="w-full border border-dark-700 bg-dark-900 px-3 py-2 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-gray-200" />
                       </div>
                        <div>
                           <label htmlFor="costo_final_usd" className="block text-sm font-medium text-gray-300 mb-1">Costo Final (USD)</label>
-                          <input type="number" id="costo_final_usd" name="costo_final_usd" min="0" step="0.01" value={newProductForm.costo_final_usd} onChange={handleNewProductInputChange} className="w-full border border-dark-700 bg-dark-900 px-3 py-2 rounded-md focus:ring-primary-500 focus:border-primary-500 text-gray-200" />
+                          <input type="number" id="costo_final_usd" name="costo_final_usd" min="0" step="0.01" value={newProductForm.costo_final_usd} onChange={handleNewProductInputChange} className="w-full border border-dark-700 bg-dark-900 px-3 py-2 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-gray-200" />
                       </div>
                        <div>
                           <label htmlFor="costo_final_mxn" className="block text-sm font-medium text-gray-300 mb-1">Costo Final (MXN)</label>
-                          <input type="number" id="costo_final_mxn" name="costo_final_mxn" min="0" step="0.01" value={newProductForm.costo_final_mxn} onChange={handleNewProductInputChange} className="w-full border border-dark-700 bg-dark-900 px-3 py-2 rounded-md focus:ring-primary-500 focus:border-primary-500 text-gray-200" />
+                          <input type="number" id="costo_final_mxn" name="costo_final_mxn" min="0" step="0.01" value={newProductForm.costo_final_mxn} onChange={handleNewProductInputChange} className="w-full border border-dark-700 bg-dark-900 px-3 py-2 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-gray-200" />
                       </div>
                        <div>
                           <label htmlFor="codigo" className="block text-sm font-medium text-gray-300 mb-1">Código</label>
-                          <input type="text" id="codigo" name="codigo" value={newProductForm.codigo} onChange={handleNewProductInputChange} className="w-full border border-dark-700 bg-dark-900 px-3 py-2 rounded-md focus:ring-primary-500 focus:border-primary-500 text-gray-200" />
+                          <input type="text" id="codigo" name="codigo" value={newProductForm.codigo} onChange={handleNewProductInputChange} className="w-full border border-dark-700 bg-dark-900 px-3 py-2 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-gray-200" />
                       </div>
                        <div>
                           <label htmlFor="categoria" className="block text-sm font-medium text-gray-300 mb-1">Categoría</label>
-                          <input type="text" id="categoria" name="categoria" value={newProductForm.categoria} onChange={handleNewProductInputChange} className="w-full border border-dark-700 bg-dark-900 px-3 py-2 rounded-md focus:ring-primary-500 focus:border-primary-500 text-gray-200" />
+                          <input type="text" id="categoria" name="categoria" value={newProductForm.categoria} onChange={handleNewProductInputChange} className="w-full border border-dark-700 bg-dark-900 px-3 py-2 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-gray-200" />
                       </div>
                        <div>
                           <label htmlFor="imagen_url" className="block text-sm font-medium text-gray-300 mb-1">URL Imagen</label>
-                          <input type="text" id="imagen_url" name="imagen_url" value={newProductForm.imagen_url} onChange={handleNewProductInputChange} className="w-full border border-dark-700 bg-dark-900 px-3 py-2 rounded-md focus:ring-primary-500 focus:border-primary-500 text-gray-200" />
+                          <input type="text" id="imagen_url" name="imagen_url" value={newProductForm.imagen_url} onChange={handleNewProductInputChange} className="w-full border border-dark-700 bg-dark-900 px-3 py-2 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-gray-200" />
                       </div>
                   </div>
                   <div className="flex justify-end gap-4">

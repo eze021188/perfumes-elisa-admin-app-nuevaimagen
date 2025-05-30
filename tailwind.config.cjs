@@ -4,13 +4,14 @@ module.exports = {
     "./index.html",
     "./src/**/*.{js,jsx,ts,tsx}"
   ],
-  darkMode: 'class',
+  darkMode: 'class', // Esto ya está correcto
   theme: {
     extend: {
       fontFamily: {
         sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
       },
       colors: {
+        // Colores para el tema oscuro (ya definidos por ti)
         dark: {
           50: '#FAFAFA',
           100: '#F5F5F5',
@@ -24,6 +25,21 @@ module.exports = {
           900: '#171717',
           950: '#0A0A0A',
         },
+        // --- NUEVOS COLORES PARA EL TEMA CLARO ---
+        light: {
+          50: '#FFFFFF',   // Blanco puro para fondos muy claros
+          100: '#F9FAFB',  // Muy claro, casi blanco
+          200: '#F3F4F6',  // Gris muy claro
+          300: '#E5E7EB',  // Gris claro
+          400: '#D1D5DB',  // Gris medio claro
+          500: '#9CA3AF',  // Gris
+          600: '#6B7280',  // Gris oscuro
+          700: '#4B5563',  // Gris muy oscuro para texto principal
+          800: '#374151',  // Casi negro
+          900: '#1F2937',  // Negro azulado para texto muy oscuro
+          950: '#111827',  // Fondo muy oscuro (si se necesita un fondo oscuro en light mode)
+        },
+        // ----------------------------------------
         primary: {
           50: '#eef2ff',
           100: '#e0e7ff',

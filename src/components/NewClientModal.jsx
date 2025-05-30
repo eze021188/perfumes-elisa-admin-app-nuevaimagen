@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { X, User, Phone, Mail, MapPin, Save } from 'lucide-react'
 import { supabase } from '../supabase'
+import toast from 'react-hot-toast'; // Asegurarse de que toast esté importado aquí si se usa para mensajes de error internos
 
 export default function NewClientModal({
   isOpen,
@@ -23,6 +24,12 @@ export default function NewClientModal({
     correo: ''
   })
   const [loading, setLoading] = useState(false)
+
+  // Log para verificar si la prop onClientAdded se recibe
+  useEffect(() => {
+    console.log('NewClientModal: onClientAdded prop received:', onClientAdded);
+  }, [onClientAdded]);
+
 
   // Cuando abra el modal, si viene un cliente, precargo el form
   useEffect(() => {
@@ -57,17 +64,24 @@ export default function NewClientModal({
     }
   
     setErrors(errs);
-    return Object.values(errs).every(errorMsg => errorMsg === '');
+    const isValid = Object.values(errs).every(errorMsg => errorMsg === '');
+    console.log('NewClientModal: Form validation result:', isValid, errs); // Log de validación
+    return isValid;
   }
 
   async function handleSave() {
-    if (!validate()) return
+    console.log('NewClientModal: handleSave initiated.'); // Log al inicio de handleSave
+    if (!validate()) {
+      console.log('NewClientModal: Validation failed, not saving.'); // Log si falla la validación
+      return;
+    }
     setLoading(true)
 
     try {
       if (cliente) {
         // edición
-        await supabase
+        console.log('NewClientModal: Attempting to update client:', form); // Log para actualización
+        const { data, error } = await supabase // Capturar data y error para consistencia
           .from('clientes')
           .update({
             nombre: form.nombre,
@@ -76,23 +90,35 @@ export default function NewClientModal({
             direccion: form.direccion
           })
           .eq('id', cliente.id)
-        // notifico al padre con los datos actualizados
-        onClientAdded({ id: cliente.id, ...form })
+          .select() // Añadir .select() para obtener los datos actualizados
+          .single();
+
+        if (error) throw error;
+        
+        console.log('NewClientModal: Client updated successfully. Calling onClientAdded with:', data); // Log antes de llamar al callback
+        onClientAdded(data); // notifico al padre con los datos actualizados
       } else {
         // creación
+        console.log('NewClientModal: Attempting to insert new client:', form); // Log para inserción
         const { data, error } = await supabase
           .from('clientes')
           .insert([form])
-          .single()
-        if (error) throw error
-        onClientAdded(data)
+          .select() // Añadir .select() para obtener los datos insertados
+          .single();
+        if (error) throw error;
+        
+        console.log('NewClientModal: Client inserted successfully. Calling onClientAdded with:', data); // Log antes de llamar al callback
+        onClientAdded(data);
       }
-      onClose()
+      onClose();
+      console.log('NewClientModal: Modal closed after save.'); // Log después de cerrar el modal
     } catch (err) {
-      console.error(err)
-      setErrors(prev => ({ ...prev, nombre: 'Error al guardar' }))
+      console.error('NewClientModal: Error during save operation:', err); // Log de error detallado
+      setErrors(prev => ({ ...prev, nombre: `Error al guardar: ${err.message || 'Desconocido'}` }));
+      toast.error(`Error al guardar cliente: ${err.message || 'Desconocido'}`); // Notificación de error
     } finally {
-      setLoading(false)
+      setLoading(false);
+      console.log('NewClientModal: handleSave finished, loading set to false.'); // Log al final de handleSave
     }
   }
 

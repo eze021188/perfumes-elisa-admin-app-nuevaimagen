@@ -1,8 +1,8 @@
-// src/pages/ProductosStock.jsx
+// src/components/ProductosStock.jsx
 import { useEffect, useState, useMemo } from 'react';
 import { supabase } from '../supabase';
 import toast from 'react-hot-toast';
-import { Search, Package, Activity, Clock, ArrowRight, ArrowLeft } from 'lucide-react';
+import { Search, Package, Activity, Clock, ArrowRight, ArrowLeft, X as IconX, ArrowUp, ArrowDown } from 'lucide-react'; 
 
 export default function ProductosStock() {
   const [productos, setProductos] = useState([]);
@@ -71,6 +71,7 @@ export default function ProductosStock() {
               const aNum = parseFloat(aValue) || 0;
               const bNum = parseFloat(bValue) || 0;
 
+              // Ajuste: usar sortDirection para todas las comparaciones numéricas
               if (sortColumn === 'stock' || sortColumn === 'promocion' || sortColumn === 'precio_normal' || sortColumn === 'costo_final_usd' || sortColumn === 'costo_final_mxn') {
                    if (aNum < bNum) return sortDirection === 'asc' ? -1 : 1;
                    if (aNum > bNum) return sortDirection === 'asc' ? 1 : -1;
@@ -96,8 +97,14 @@ export default function ProductosStock() {
 
 
   const verMovimientos = async (producto) => {
+    // Asegurarse de que el producto es válido antes de intentar mostrar movimientos
+    if (!producto || !producto.id) {
+        toast.error("Producto inválido para ver movimientos.");
+        return;
+    }
+
     setProductoActual(producto);
-    setMovimientos([]);
+    setMovimientos([]); // Limpiar movimientos anteriores para mostrar un estado de carga o vacío
 
     const { data, error } = await supabase
       .from('movimientos_inventario')
@@ -109,42 +116,74 @@ export default function ProductosStock() {
       console.error('Error al cargar movimientos:', error.message);
       toast.error('Error al cargar movimientos.');
       setMovimientos([]);
+      setModalActivo(true); // Aunque haya error, intentar abrir el modal para mostrar el error
       return;
     }
 
     const formateados = (data || []).map((m) => {
       const cantidadMostrada = Math.abs(m.cantidad || 0);
-      let descripcion = 'Unknown movement';
+      let tipoMovimiento = 'Desconocido'; 
+      let cantidadSigno = ''; 
+      let colorTexto = 'text-gray-300';
+      let IconoFlecha = null; 
 
       if (m.tipo === 'SALIDA') {
-        descripcion = `Sales Out: -${cantidadMostrada}`;
+        tipoMovimiento = 'VENTA';
+        cantidadSigno = `-${cantidadMostrada}`;
+        colorTexto = 'text-red-400'; // Rojo para salida
+        IconoFlecha = ArrowDown; // Flecha hacia abajo para salida
       } else if (m.tipo === 'ENTRADA') {
-        if (m.referencia?.toLowerCase().includes('cancelación') || m.referencia?.toLowerCase().includes('cancellation')) {
-          descripcion = `Sales Return: ${cantidadMostrada}`;
+        // Lógica mejorada para distinguir Devolución y Compra en ENTRADA
+        if (m.referencia?.toLowerCase().includes('cancelación') || m.referencia?.toLowerCase().includes('cancellation') || m.motivo === 'devolucion_ventas') {
+          tipoMovimiento = 'DEVOLUCIÓN'; // Cambiado a solo "DEVOLUCIÓN"
+          cantidadSigno = `+${cantidadMostrada}`;
+          colorTexto = 'text-amber-400'; // Color ámbar para devoluciones
+          IconoFlecha = ArrowUp; // Flecha hacia arriba para devoluciones
         } else {
-          descripcion = `Purchases In: ${cantidadMostrada}`;
+          tipoMovimiento = 'COMPRA';
+          cantidadSigno = `+${cantidadMostrada}`;
+          colorTexto = 'text-green-400'; // Verde para entrada por compra
+          IconoFlecha = ArrowUp; // Flecha hacia arriba para entrada por compra
         }
-      } else if (m.tipo === 'DEVOLUCIÓN VENTA') {
-        descripcion = `Return In: ${cantidadMostrada}`;
+      } else { // Para cualquier otro tipo no clasificado explícitamente
+          tipoMovimiento = m.tipo || 'Otro';
+          cantidadSigno = m.cantidad > 0 ? `+${m.cantidad}` : `${m.cantidad}`;
+          // Determinar flecha para "Otro" si la cantidad tiene signo
+          if (m.cantidad > 0) IconoFlecha = ArrowUp;
+          else if (m.cantidad < 0) IconoFlecha = ArrowDown;
       }
 
-      const movimientoFecha = m.fecha ? new Date(m.fecha) : null;
+      // Asegurar que la fecha sea un objeto Date válido
+      let movimientoFecha;
+      try {
+        movimientoFecha = m.fecha ? new Date(m.fecha) : null;
+        if (movimientoFecha && isNaN(movimientoFecha.getTime())) {
+          movimientoFecha = 'Fecha inválida'; 
+        }
+      } catch (e) {
+        movimientoFecha = 'Fecha inválida'; 
+      }
 
       return {
         ...m,
-        fecha: movimientoFecha instanceof Date && !isNaN(movimientoFecha.getTime()) ? movimientoFecha : 'Invalid Date',
-        descripcion,
+        fecha: movimientoFecha, 
+        tipoMovimiento, 
+        cantidadMostrada: cantidadSigno, 
+        colorTexto, 
+        IconoFlecha, 
         referencia: m.referencia || '-',
       };
     });
 
     setMovimientos(formateados);
-    setModalActivo(true);
+    setModalActivo(true); 
   };
 
 
   return (
-    <div className="container mx-auto">
+    // Se elimina "container mx-auto" para que ocupe todo el ancho.
+    // Se añade "w-full" para asegurar que ocupe el 100% del ancho disponible.
+    <div className="w-full p-4 md:p-6 lg:p-8"> {/* Añadido padding interno para el contenido */}
       <h2 className="text-2xl font-bold mb-6 text-gray-100">Gestión de Stock</h2>
       
       {/* Buscador */}
@@ -163,107 +202,113 @@ export default function ProductosStock() {
         </div>
       </div>
 
-      {/* Encabezados de la lista con ordenamiento */}
-      <div className="grid grid-cols-[60px_1fr_minmax(80px,100px)_minmax(80px,100px)] gap-4 items-center border border-dark-700 rounded-lg p-3 shadow-card-dark bg-dark-900 text-sm font-semibold text-gray-400 uppercase tracking-wider mb-2">
-          <div className="p-1">Imagen</div>
-          <div
-              className="p-1 cursor-pointer hover:text-gray-200 flex items-center gap-1"
-              onClick={() => handleSort('nombre')}
-          >
-              Nombre
-              {sortColumn === 'nombre' && (
-                <span className="ml-1">
-                  {sortDirection === 'asc' ? '▲' : '▼'}
-                </span>
-              )}
-          </div>
-          <div
-              className="p-1 text-right cursor-pointer hover:text-gray-200 flex items-center gap-1 justify-end"
-              onClick={() => handleSort('stock')}
-          >
-              Stock
-              {sortColumn === 'stock' && (
-                <span className="ml-1">
-                  {sortDirection === 'asc' ? '▲' : '▼'}
-                </span>
-              )}
-          </div>
-          <div className="p-1 text-center">Movimientos</div>
-      </div>
-
-      {/* Lista de productos con stock */}
-      {loading ? (
-        <div className="flex justify-center items-center h-64 bg-dark-800/50 rounded-lg border border-dark-700/50">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-400"></div>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {productosFiltradosYOrdenados.map((producto) => (
+      {/* Contenedor para la tabla de ProductosStock */}
+      <div className="overflow-x-auto rounded-lg shadow-card-dark border border-dark-700/50 bg-dark-800/50">
+        {/* Encabezados de la lista con ordenamiento */}
+        {/* MODIFICADO: Columna de Imagen oculta en móviles (hidden) y visible en md:table-cell */}
+        <div className="grid grid-cols-[1fr_minmax(80px,100px)_minmax(80px,100px)] md:grid-cols-[60px_1fr_minmax(80px,100px)_minmax(80px,100px)] gap-4 items-center border-b border-dark-700 rounded-t-lg p-3 text-sm font-semibold text-gray-400 uppercase tracking-wider sticky top-0 z-10 bg-dark-900/50">
+            <div className="hidden md:block p-1">Imagen</div> {/* Oculto en móvil, visible en md */}
             <div
-              key={producto.id}
-              className="grid grid-cols-[60px_1fr_minmax(80px,100px)_minmax(80px,100px)] gap-4 items-center border border-dark-700/50 rounded-lg p-3 shadow-card-dark hover:shadow-dropdown-dark transition-all cursor-pointer bg-dark-800/50 text-sm"
-              onClick={() => verMovimientos(producto)}
+                className="p-1 cursor-pointer hover:text-gray-200 flex items-center gap-1 whitespace-nowrap"
+                onClick={() => handleSort('nombre')}
             >
-              {/* Imagen */}
-              <div className="w-14 h-14 bg-dark-900 rounded-lg overflow-hidden flex items-center justify-center flex-shrink-0">
-                {producto.imagen_url ? (
-                  <img
-                    src={producto.imagen_url}
-                    alt={`Imagen de ${producto.nombre || 'producto'}`}
-                    className="object-cover w-full h-full"
-                    onError={(e) => { e.target.onerror = null; e.target.src="https://placehold.co/56x56/1f2937/6b7280?text=Sin+Imagen" }}
-                  />
-                ) : (
-                  <span className="text-gray-600 text-[10px] text-center px-1">Sin imagen</span>
+                Nombre
+                {sortColumn === 'nombre' && (
+                  <span className="ml-1">
+                    {sortDirection === 'asc' ? '▲' : '▼'}
+                  </span>
                 )}
-              </div>
+            </div>
+            <div
+                className="p-1 text-right cursor-pointer hover:text-gray-200 flex items-center gap-1 justify-end whitespace-nowrap"
+                onClick={() => handleSort('stock')}
+            >
+                Stock
+                {sortColumn === 'stock' && (
+                  <span className="ml-1">
+                    {sortDirection === 'asc' ? '▲' : '▼'}
+                  </span>
+                )}
+            </div>
+            <div className="p-1 text-center whitespace-nowrap">Movimientos</div>
+        </div>
 
-              {/* Nombre y Stock */}
-              <div className="whitespace-normal break-words overflow-hidden">
-                <div className="font-medium text-gray-200">{producto.nombre || 'Producto sin nombre'}</div>
-                <div className="text-gray-400 text-xs">
-                  Stock: {producto.stock ?? 0}
+        {/* Lista de productos con stock */}
+        {loading ? (
+          <div className="flex justify-center items-center h-64 bg-dark-800/50 rounded-lg border border-dark-700/50">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-400"></div>
+          </div>
+        ) : (
+          <div className="space-y-2 p-3"> {/* Añadido padding aquí */}
+            {productosFiltradosYOrdenados.map((producto) => (
+              <div
+                key={producto.id}
+                className="grid grid-cols-[1fr_minmax(80px,100px)_minmax(80px,100px)] md:grid-cols-[60px_1fr_minmax(80px,100px)_minmax(80px,100px)] gap-4 items-center border border-dark-700/50 rounded-lg p-3 shadow-card-dark hover:shadow-dropdown-dark transition-all bg-dark-800/50 text-sm"
+              >
+                {/* Columna de Imagen: Oculta en móvil, visible en md */}
+                <div className="hidden md:flex w-14 h-14 bg-dark-900 rounded-lg overflow-hidden items-center justify-center flex-shrink-0">
+                  {producto.imagen_url ? (
+                    <img
+                      src={producto.imagen_url}
+                      alt={`Imagen de ${producto.nombre || 'producto'}`}
+                      className="object-cover w-full h-full"
+                      onError={(e) => { e.target.onerror = null; e.target.src="https://placehold.co/56x56/1f2937/6b7280?text=Sin+Imagen" }}
+                    />
+                  ) : (
+                    <span className="text-gray-600 text-[10px] text-center px-1">Sin imagen</span>
+                  )}
+                </div>
+
+                {/* Nombre y Stock */}
+                <div className="whitespace-normal break-words overflow-hidden">
+                  <div className="font-medium text-gray-200">{producto.nombre || 'Producto sin nombre'}</div>
+                  <div className="text-gray-400 text-xs">
+                    Stock: {producto.stock ?? 0}
+                  </div>
+                </div>
+
+                {/* Stock (columna separada) */}
+                <div className="text-right">
+                  <span className={`font-semibold ${parseFloat(producto.stock || 0) <= 0 ? 'text-red-400' : 'text-green-400'}`}>
+                    {producto.stock ?? 0}
+                  </span>
+                </div>
+
+                {/* Botón de movimientos */}
+                <div className="flex justify-center">
+                  <button 
+                    onClick={() => verMovimientos(producto)} 
+                    className="text-primary-400 hover:text-primary-300 transition-colors flex items-center gap-1 cursor-pointer p-2 rounded-md hover:bg-dark-700/50" 
+                  >
+                    <Activity size={16} /> 
+                    <span>Ver Movimientos</span>
+                  </button>
                 </div>
               </div>
-
-              {/* Stock (columna separada) */}
-              <div className="text-right">
-                <span className={`font-semibold ${parseFloat(producto.stock || 0) <= 0 ? 'text-error-400' : 'text-success-400'}`}>
-                  {producto.stock ?? 0}
-                </span>
-              </div>
-
-              {/* Botón de movimientos */}
-              <div className="flex justify-center">
-                <button className="text-primary-400 hover:text-primary-300 transition-colors flex items-center gap-1">
-                  <Activity size={16} />
-                  <span>Ver Movimientos</span>
-                </button>
-              </div>
-            </div>
-          ))}
-          {!loading && productosFiltradosYOrdenados.length === 0 && (
-              <div className="text-center py-8 bg-dark-800/50 rounded-lg border border-dark-700/50">
-                <Package size={48} className="mx-auto text-gray-600 mb-3" />
-                <p className="text-gray-400">
-                  No se encontraron productos.
-                </p>
-              </div>
-          )}
-        </div>
-      )}
+            ))}
+            {!loading && productosFiltradosYOrdenados.length === 0 && (
+                <div className="text-center py-8 bg-dark-800/50 rounded-lg border border-dark-700/50">
+                  <Package size={48} className="mx-auto text-gray-600 mb-3" />
+                  <p className="text-gray-400">
+                    No se encontraron productos.
+                  </p>
+                </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Modal de movimientos */}
       {modalActivo && (
         <div
-          className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-          onClick={() => setModalActivo(false)}
+          className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[90] p-4" 
+          onClick={() => setModalActivo(false)} 
         >
           <div
-            onClick={(e) => e.stopPropagation()}
-            className="bg-dark-800 w-full max-w-md md:max-w-lg lg:max-w-xl rounded-lg p-6 shadow-dropdown-dark border border-dark-700 max-h-[90vh] overflow-y-auto relative"
+            onClick={(e) => e.stopPropagation()} 
+            className="bg-dark-800 w-full max-w-md md:max-w-lg lg:max-w-xl rounded-lg p-6 shadow-dropdown-dark border border-dark-700 max-h-[90vh] overflow-y-auto relative z-[95]" 
           >
-            {/* Encabezado */}
+            {/* Encabezado del modal */}
             <div className="flex justify-between items-center mb-4 sticky top-0 bg-dark-800 pb-2 border-b border-dark-700">
               <h3 className="text-lg font-semibold text-gray-100">
                 Movimientos de: {productoActual?.nombre || 'Producto desconocido'}
@@ -272,10 +317,11 @@ export default function ProductosStock() {
                 onClick={() => setModalActivo(false)}
                 className="text-gray-400 hover:text-gray-200 transition-colors"
               >
-                <X size={20} />
+                <IconX size={20} /> 
               </button>
             </div>
 
+            {/* Contenido del modal - la tabla de movimientos */}
             {movimientos.length === 0 ? (
                 <div className="text-center py-8">
                     <Clock size={48} className="mx-auto text-gray-600 mb-3" />
@@ -284,32 +330,29 @@ export default function ProductosStock() {
                     </p>
                 </div>
             ) : (
-                <div className="overflow-x-auto text-sm">
+                <div className="overflow-x-auto text-sm"> {/* <-- CORRECCIÓN AQUÍ: overflow-x-auto para la tabla */}
                   <table className="min-w-full border-collapse">
                     <thead className="bg-dark-900">
                       <tr>
-                        <th className="p-2 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Fecha</th>
-                        <th className="p-2 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Movimiento</th>
-                        <th className="p-2 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Referencia</th>
+                        <th className="p-2 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider whitespace-nowrap">Fecha</th> {/* added whitespace-nowrap */}
+                        <th className="p-2 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider whitespace-nowrap">Movimiento</th> {/* added whitespace-nowrap */}
+                        <th className="p-2 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider whitespace-nowrap">Referencia</th> {/* added whitespace-nowrap */}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-dark-700/50">
                       {movimientos.map((m, index) => {
-                        const esDevolucion = m.motivo === 'devolucion_ventas';
-                        const tipoTexto = esDevolucion ? 'Entrada devolución' : m.tipo === 'SALIDA' ? 'VENTA' : 'ENTRADA';
-                        const cantidadTexto = m.tipo === 'SALIDA' ? `-${m.cantidad}` : `+${m.cantidad}`;
-                        const colorTexto = m.tipo === 'SALIDA' ? 'text-error-400' : 'text-success-400';
-                        
+                        const Icon = m.IconoFlecha; 
+
                         return (
                           <tr key={m.id || `mov-${index}`} className="hover:bg-dark-700/50">
                             <td className="p-2 whitespace-nowrap text-gray-300">
                               {m.fecha instanceof Date && !isNaN(m.fecha.getTime()) ? m.fecha.toLocaleString() : 'Fecha inválida'}
                             </td>
-                            <td className={`p-2 font-semibold ${colorTexto} flex items-center gap-1`}>
-                              {m.tipo === 'SALIDA' ? <ArrowRight size={14} /> : <ArrowLeft size={14} />}
-                              {tipoTexto} <span className="font-bold">{cantidadTexto}</span>
+                            <td className={`p-2 font-semibold ${m.colorTexto} flex items-center gap-1 whitespace-nowrap`}> {/* added whitespace-nowrap */}
+                              {Icon && <Icon size={14} className="flex-shrink-0" />} 
+                              {m.tipoMovimiento} <span className="font-bold">{m.cantidadMostrada}</span>
                             </td>
-                            <td className="p-2 text-gray-300">{m.referencia || '-'}</td>
+                            <td className="p-2 text-gray-300 whitespace-nowrap">{m.referencia || '-'}</td> {/* added whitespace-nowrap */}
                           </tr>
                         );
                       })}

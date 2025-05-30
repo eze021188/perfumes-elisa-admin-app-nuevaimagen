@@ -3,7 +3,7 @@ import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabase';
 import toast from 'react-hot-toast';
-import { ArrowLeft, Plus, X } from 'lucide-react';
+import { ArrowLeft, Plus, X, Package, AlertTriangle, DollarSign, Search, Hash } from 'lucide-react'; // Asegúrate de importar Hash
 
 // Importar componentes divididos
 import ComprasFormularioNueva from '../components/compras/ComprasFormularioNueva';
@@ -160,7 +160,8 @@ export default function Compras() {
       items: itemsData.filter(i => i.compra_id === c.id).map(i => ({
           id: i.id, nombreProducto: i.nombre_producto,
           cantidad: parseFloat(i.cantidad) || 0,
-          precioUnitarioUSD: parseFloat(i.precio_unitario_usd) || 0
+          // CORRECCIÓN AQUÍ: Usar i.precio_unitario_usd del DB
+          precioUnitarioUSD: parseFloat(i.precio_unitario_usd) || 0 
       }))
     }));
     setSavedCompras(combined);
@@ -171,6 +172,12 @@ export default function Compras() {
     setExpandedIdx(newExpandedIdx);
     if (newExpandedIdx !== null && savedCompras[newExpandedIdx]) {
         const compraActual = savedCompras[newExpandedIdx];
+        // Log para depuración
+        console.log(`Expandiendo compra: ${compraActual.compra.numero_pedido}`);
+        console.log(`Inventario afectado: ${compraActual.compra.inventario_afectado}`);
+        console.log(`Número de ítems en compraActual.items: ${compraActual.items.length}`);
+        console.log('Ítems:', compraActual.items); // Muestra los ítems para inspeccionar
+
         setEditingPurchaseItems(
             compraActual.items.map(item => ({
                 ...item,

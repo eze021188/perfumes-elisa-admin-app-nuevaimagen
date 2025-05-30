@@ -1,4 +1,3 @@
-// src/pages/CrearPresupuesto.jsx
 import React, { useState, useEffect, useMemo, useRef } from 'react'; // Importar useRef
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
@@ -121,7 +120,7 @@ export default function CrearPresupuesto() {
   useEffect(() => {
     fetchPresupuestosExistentes();
     async function loadLogo() {
-        const logoUrl = '/images/PERFUMESELISAblack.jpg'; // Asegúrate que esta ruta sea correcta y accesible públicamente
+        const logoUrl = '/images/PERFUMESELISA.png'; // Asegúrate que esta ruta sea correcta y accesible públicamente
         const base64 = await getBase64Image(logoUrl);
         setLogoBase64(base64);
     }

@@ -22,15 +22,30 @@ a:hover {
   color: #818cf8;
 }
 
+/* --- INICIO DE CORRECCIÓN --- */
 body {
   margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
+  /* Eliminadas las propiedades flex y place-items de aquí */
+  /* display: flex; */
+  /* place-items: center; */
+  
+  width: 100%; /* Aseguramos que el body ocupe el 100% */
+  min-width: 320px; /* Mantener min-width para responsive */
   min-height: 100vh;
   background-color: #0a0a0a;
   color: #e5e7eb;
+  overflow-x: hidden; /* Añadimos overflow-x-hidden aquí para mayor seguridad global */
 }
+
+/* Asegurar que el elemento raíz de React (#root o donde se monta tu app) también ocupe el 100% */
+#root {
+  width: 100%;
+  height: 100%;
+  /* Las propiedades flex de #root son opcionales aquí, ya que DashboardLayout es flex */
+  /* display: flex; */
+  /* flex-direction: column; */
+}
+/* --- FIN DE CORRECCIÓN --- */
 
 h1 {
   font-size: 3.2em;

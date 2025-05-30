@@ -1,70 +1,82 @@
 import React from 'react';
-import { NavLink } from 'react-router-dom';
-import { 
-  LayoutDashboard, 
-  ShoppingCart, 
-  FileText, 
-  Store, 
-  Users, 
-  PackageSearch, 
-  Receipt, 
-  BarChart3, 
-  Shield, 
-  Wallet
+import { Link, useLocation } from 'react-router-dom';
+import {
+  Home, ShoppingCart, ClipboardList, Package, Users,
+  DollarSign, BarChart3, Settings, Bell, User, X,
+  LayoutDashboard, FileText, Store, PackageSearch, Receipt, Shield, Wallet
 } from 'lucide-react';
 
-export default function Sidebar({ open, onClose }) {
-  const links = [
-    { to: '/', icon: <LayoutDashboard size={20} />, label: 'Inicio' },
-    { to: '/checkout', icon: <ShoppingCart size={20} />, label: 'Checkout' },
-    { to: '/presupuestos/crear', icon: <FileText size={20} />, label: 'Presupuestos' },
-    { to: '/productos', icon: <Store size={20} />, label: 'Productos' },
-    { to: '/clientes', icon: <Users size={20} />, label: 'Clientes' },
-    { to: '/compras', icon: <PackageSearch size={20} />, label: 'Compras' },
-    { to: '/ventas', icon: <Receipt size={20} />, label: 'Ventas' },
-    { to: '/reportes', icon: <BarChart3 size={20} />, label: 'Reportes' },
-    { to: '/usuarios', icon: <Shield size={20} />, label: 'Usuarios' },
-    { to: '/saldos-clientes', icon: <Wallet size={20} />, label: 'Saldos' },
+export default function Sidebar({ isOpen, toggleSidebar }) {
+  const location = useLocation(); // Para resaltar el enlace activo
+
+  const navItems = [
+    { name: 'Inicio', icon: LayoutDashboard, path: '/' },
+    { name: 'Checkout', icon: ShoppingCart, path: '/checkout' },
+    { name: 'Presupuestos', icon: FileText, path: '/presupuestos/crear' },
+    { name: 'Productos', icon: Store, path: '/productos' },
+    { name: 'Clientes', icon: Users, path: '/clientes' },
+    { name: 'Compras', icon: PackageSearch, path: '/compras' },
+    { name: 'Ventas', icon: Receipt, path: '/ventas' },
+    { name: 'Reportes', icon: BarChart3, path: '/reportes' },
+    { name: 'Usuarios', icon: Shield, path: '/usuarios' },
+    { name: 'Saldos Clientes', icon: Wallet, path: '/saldos-clientes' },
+
   ];
 
   return (
-    <nav
-      className={`fixed inset-y-0 left-0 w-64 bg-dark-900 text-gray-100 z-50
-        transform transition-transform duration-200 ease-in-out
-        ${open ? 'translate-x-0' : '-translate-x-full'}
-        lg:translate-x-0 lg:static lg:inset-auto flex-shrink-0
-        border-r border-dark-800`}
-    >
-      <div className="h-full flex flex-col">
-        {/* Logo and Brand */}
-        <div className="p-6 border-b border-dark-800 flex justify-center">
-          <img
-            src="/images/PERFUMESELISA.png"
-            alt="Perfumes Elisa"
-            className="h-24 w-auto object-contain"
-          />
-        </div>
+    <>
+      {isOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-30 lg:hidden"
+          onClick={toggleSidebar}
+        ></div>
+      )}
 
-        {/* Navigation Links */}
-        <div className="flex-1 overflow-y-auto py-6 px-4 space-y-2">
-          {links.map(({ to, icon, label }) => (
-            <NavLink
-              key={to}
-              to={to}
-              end={to === '/'}
-              className={({ isActive }) =>
-                `nav-link-dark group ${isActive ? 'active' : ''}`
-              }
-              onClick={onClose}
-            >
-              <div className="w-10 h-10 flex items-center justify-center rounded-lg bg-dark-800 group-hover:bg-primary-900/50 transition-colors">
-                {icon}
-              </div>
-              <span>{label}</span>
-            </NavLink>
-          ))}
+      <aside className={`
+        fixed inset-y-0 left-0 w-64 p-5 flex-col shadow-lg z-40
+        bg-dark-900 text-gray-100 light:bg-light-200 light:text-light-800
+        transition-transform duration-300 ease-in-out
+        ${isOpen ? 'translate-x-0' : '-translate-x-full'}
+        ${isOpen ? 'flex' : 'hidden'} flex-col
+        lg:translate-x-0 lg:flex lg:flex-col
+      `}>
+        {/* Contenido del Sidebar */}
+        <div className="flex flex-col items-center justify-center mb-8 h-24"> {/* Centrado y altura para el logo */}
+            <Link to="/" className="flex flex-col items-center justify-center h-full" onClick={toggleSidebar}> {/* Centrado */}
+                {/* Logo de la empresa - Más grande y centrado */}
+                <img
+                    src="/images/PERFUMESELISA.png"
+                    alt="Perfumes Elisa Logo"
+                    className="h-40 w-auto object-contain" // Ajustado para ser más grande y centrado
+                />
+                {/* El texto "Perfumes Elisa" y el comentario han sido eliminados */}
+                {/* <span className="text-base font-bold md:text-lg lg:text-xl text-gray-100 light:text-light-800">Perfumes Elisa</span> */}
+            </Link>
+            {/* Botón de cerrar sidebar en móvil (solo visible en móvil) */}
+            <button onClick={toggleSidebar} className="absolute top-4 right-4 lg:hidden text-gray-400 hover:text-gray-100 light:text-light-600 light:hover:text-light-800"> {/* Posición absoluta para botón de cerrar */}
+                <X size={24} />
+            </button>
         </div>
-      </div>
-    </nav>
+        <nav className="flex-grow">
+            {navItems.map(item => (
+                <Link
+                    key={item.name}
+                    to={item.path}
+                    onClick={toggleSidebar}
+                    className={`nav-link-dark group flex items-center space-x-3 px-4 py-2 my-1 rounded-lg transition-colors
+                      ${location.pathname === item.path
+                        ? 'active'
+                        : ''
+                      }`}
+                >
+                    <div className="w-10 h-10 flex items-center justify-center rounded-lg bg-dark-800 group-hover:bg-primary-900/50 transition-colors light:bg-light-100 light:group-hover:bg-primary-200">
+                        {item.icon && <item.icon size={20} />}
+                    </div>
+                    <span className="text-base">{item.name}</span>
+                </Link>
+            ))}
+        </nav>
+      </aside>
+    </>
   );
 }

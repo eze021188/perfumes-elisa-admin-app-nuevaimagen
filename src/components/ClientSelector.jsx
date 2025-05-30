@@ -1,6 +1,6 @@
 // src/components/ClientSelector.jsx
 import React, { useState, useRef, useEffect } from 'react';
-import { Search, UserPlus, User } from 'lucide-react';
+import { Search, UserPlus, User, X } from 'lucide-react'; // X ha sido añadido aquí
 
 export default function ClientSelector({
   clientes,
@@ -50,7 +50,7 @@ export default function ClientSelector({
           placeholder="Buscar cliente..."
           onChange={e => {
             setQuery(e.target.value);
-            onSelect(null);
+            onSelect(null); // Deseleccionar cliente al escribir
           }}
           onKeyDown={e => {
             if (e.key === 'ArrowDown') {
@@ -59,7 +59,7 @@ export default function ClientSelector({
             if (e.key === 'ArrowUp') {
               setActivo(i => Math.max(i - 1, 0));
             }
-            if (e.key === 'Enter' && activo >= 0) {
+            if (e.key === 'Enter' && activo >= 0 && sugerencias[activo]) { // Añadida comprobación para sugerencias[activo]
               onSelect(sugerencias[activo]);
               setQuery(sugerencias[activo].nombre);
               setSugerencias([]);
@@ -68,8 +68,9 @@ export default function ClientSelector({
         />
       </div>
       
-      {query && sugerencias.length === 0 && (
+      {query && sugerencias.length === 0 && !clienteSeleccionado && ( // Solo mostrar si no hay cliente seleccionado
         <button
+          type="button" // Es buena práctica añadir type="button"
           className="flex items-center mt-2 text-primary-400 hover:text-primary-300 transition-colors"
           onClick={onCreateNew}
         >
@@ -108,12 +109,14 @@ export default function ClientSelector({
               <p className="text-gray-400 text-sm">Tel: {clienteSeleccionado.telefono}</p>
             )}
           </div>
-          <button 
+          <button
+            type="button" // Es buena práctica añadir type="button"
             onClick={() => {
               onSelect(null);
               setQuery('');
             }}
             className="text-gray-400 hover:text-error-400 transition-colors"
+            aria-label="Deseleccionar cliente" // Añadir aria-label por accesibilidad
           >
             <X size={18} />
           </button>

@@ -1,6 +1,6 @@
 // src/pages/UsersPermissions.jsx
 import React, { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom' // CORRECCIÓN: Asegurarse de que esta línea esté limpia y correcta
 import { supabase } from '../supabase'
 import toast from 'react-hot-toast'
 import InviteUserModal from '../components/InviteUserModal'
@@ -121,36 +121,45 @@ export default function UsersPermissions() {
             <table className="min-w-full divide-y divide-dark-700">
               <thead className="bg-dark-900">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Nombre</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Email</th>
-                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider">Acciones</th>
+                  {/* Ajuste de anchos para pantallas pequeñas (móvil) */}
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider w-1/4 sm:w-auto">Nombre</th> 
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider w-1/2 sm:w-auto">Email</th> 
+                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider w-1/4 sm:w-auto whitespace-nowrap">Acciones</th> 
                 </tr>
               </thead>
               <tbody className="bg-dark-800/30 divide-y divide-dark-700/50">
                 {users.map(u => (
                   <tr key={u.id} className="hover:bg-dark-700/50 transition-colors">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <div className="flex-shrink-0 h-10 w-10 rounded-full bg-primary-900/50 flex items-center justify-center text-primary-400 font-medium">
+                    <td className="px-6 py-4"> 
+                      {/* Flexbox para apilar en móvil, en fila en sm+ */}
+                      <div className="flex flex-col sm:flex-row items-center sm:items-center"> 
+                        <div className="flex-shrink-0 h-10 w-10 rounded-full bg-primary-900/50 flex items-center justify-center text-primary-400 font-medium mb-1 sm:mb-0 sm:mr-4">
                           {u.nombre ? u.nombre[0].toUpperCase() : u.email[0].toUpperCase()}
                         </div>
-                        <div className="ml-4">
-                          <div className="text-sm font-medium text-gray-200">{u.nombre || '—'}</div>
+                        <div className="min-w-0 text-center sm:text-left"> 
+                          <div className="text-sm font-medium text-gray-200 break-all">{u.nombre || '—'}</div> 
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-6 py-4"> 
                       <div className="flex items-center text-sm text-gray-300">
-                        <Mail size={14} className="mr-2 text-gray-400" />
-                        {u.email}
+                        <Mail size={14} className="mr-2 text-gray-400 flex-shrink-0" />
+                        {/* Contenedor del email: Oculta el overflow, fuerza el salto de palabra */}
+                        {/* Se divide el email para forzar el salto de línea después del @ si es necesario */}
+                        <div className="min-w-0 flex-1 overflow-hidden">
+                          <span className="block break-all text-xs">{u.email.split('@')[0]}</span>
+                          {u.email.includes('@') && (
+                            <span className="block text-xs">{`@${u.email.split('@')[1]}`}</span>
+                          )}
+                        </div>
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-center">
                       <button
                         onClick={() => openPermissions(u)}
-                        className="px-3 py-1 bg-primary-600 text-white rounded-md hover:bg-primary-700 transition-colors flex items-center gap-1 mx-auto"
+                        className="px-2 py-1 bg-primary-600 text-white rounded-md hover:bg-primary-700 transition-colors flex items-center gap-1 mx-auto text-xs" 
                       >
-                        <Shield size={14} />
+                        <Shield size={12} className="flex-shrink-0" /> 
                         Permisos
                       </button>
                     </td>

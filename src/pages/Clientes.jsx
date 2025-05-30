@@ -1,5 +1,5 @@
 // src/pages/Clientes.jsx
-import React, { useEffect, useState, useMemo, useRef } from 'react';
+import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { supabase } from '../supabase';
 import { useNavigate } from 'react-router-dom';
 import { useClientes } from '../contexts/ClientesContext';
@@ -233,9 +233,21 @@ export default function Clientes() {
   const [sortColumn, setSortColumn] = useState('nombre');
   const [sortDirection, setSortDirection] = useState('asc');
 
+  // Mover useCallback al nivel superior del componente
+  const handleClientAddedCallback = useCallback((newOrUpdatedClient) => {
+    console.log("NewClientModal: Cliente guardado, onClientAdded callback ejecutado.", newOrUpdatedClient); 
+    if (newOrUpdatedClient) {
+      toast.success(`Cliente ${newOrUpdatedClient.nombre} guardado exitosamente.`);
+    } else {
+      console.warn('onClientAdded: newOrUpdatedClient is null/undefined');
+    }
+    setShowNewOrEditClientModal(false); 
+    setEditingClient(null); 
+  }, []); // Dependencias vacías porque los setters de estado son estables
+
   useEffect(() => {
       async function loadLogoImg() {
-          const base64 = await getBase64Image('/images/PERFUMESELISAwhite.jpg');
+          const base64 = await getBase64Image('/images/PERFUMESELISA.png');
           setLogoBase64(base64);
       }
       loadLogoImg();
@@ -423,7 +435,7 @@ export default function Clientes() {
       doc.setFontSize(infoValueFontSize); doc.setFont(undefined, 'normal'); doc.text(formatTicketDateTime(selectedSaleForDetail.fecha || selectedSaleForDetail.created_at), margin + doc.getTextWidth('FECHA:') + 5, yOffset);
       yOffset += infoLineHeight;
       doc.setFontSize(infoLabelFontSize); doc.setFont(undefined, 'bold'); doc.text('VENDEDOR:', margin, yOffset);
-      doc.setFontSize(infoValueFontSize); doc.setFont(undefined, 'normal'); doc.text(vendedorInfoForTicket?.nombre || 'N/A', margin + doc.getTextWidth('VENDEDOR:') + 5, yOffset); yOffset += infoLineHeight * 2;
+      doc.setFontSize(infoValueFontSize); doc.setFont(undefined, 'normal'); doc.text(vendedorInfoTicket?.nombre || 'N/A', margin + doc.getTextWidth('VENDEDOR:') + 5, yOffset); yOffset += infoLineHeight * 2;
       const productsHead = [['Producto', 'Cant.', 'P. Unitario', 'Total Item']];
       const productsRows = selectedSaleDetailsItems.map(p => [ p.nombreProducto || p.nombre || '–', (parseFloat(p.cantidad ?? 0)).toString(), formatCurrency(p.precio_unitario ?? 0), formatCurrency(p.total_parcial ?? 0) ]);
       doc.autoTable({ head: productsHead, body: productsRows, startY: yOffset, theme: 'striped', styles: { fontSize: 9, cellPadding: 3 }, headStyles: { fillColor: [220,220,220], textColor: 0, fontStyle: 'bold'}, columnStyles: {0:{cellWidth:80},1:{cellWidth:15,halign:'center'},2:{cellWidth:25,halign:'right'},3:{cellWidth:30,halign:'right'}}, margin:{left:margin,right:margin}, didDrawPage:(data)=>{doc.setFontSize(8);doc.text('Página '+data.pageNumber,doc.internal.pageSize.getWidth()-margin,doc.internal.pageSize.getHeight()-margin,{align:'right'});}});
@@ -450,22 +462,20 @@ export default function Clientes() {
       doc.text('¡Gracias por tu compra!',margin,yOffset); yOffset+=footLineHeight; doc.text('Visítanos de nuevo pronto.',margin,yOffset);
       
       try {
-          const pdfBlob = doc.output('blob');
-          const pdfFile = new File([pdfBlob], `Ticket_${selectedSaleForDetail.codigo_venta || 'venta'}.pdf`, { type: 'application/pdf' });
-          if (navigator.share && navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
-              await navigator.share({
-                  title: `Ticket de Venta ${selectedSaleForDetail.codigo_venta || ''}`,
-                  text: `Adjunto: Ticket de Venta ${selectedSaleForDetail.codigo_venta || ''}.`,
-                  files: [pdfFile],
-              });
-              toast.success('Ticket PDF compartido.');
-          } else {
-              toast.info('Compartir no disponible. Abriendo PDF.');
-              doc.output('dataurlnewwindow'); 
-          }
+          const pdfBlob = doc.output('blob'); // CAMBIO: Obtener como Blob
+          const blobUrl = URL.createObjectURL(pdfBlob); // Crear URL de Blob
+
+          window.open(blobUrl, '_blank'); // Abrir en una nueva pestaña
+          
+          // Revocar la URL de Blob después de un corto tiempo para liberar memoria
+          setTimeout(() => URL.revokeObjectURL(blobUrl), 10000); 
+
+          toast.success('Ticket PDF generado en una nueva pestaña.');
       } catch (error) {
-          if (error.name === 'AbortError') { toast('Compartir PDF cancelado.'); } 
-          else { toast.error(`Error al compartir PDF: ${error.message}`); console.error("Error PDF:", error); }
+          console.error("Error al abrir PDF en nueva pestaña (Blob URL):", error);
+          toast.error(`Error al abrir PDF: ${error.message}. Se descargará.`);
+          // Fallback a descarga si la apertura en nueva pestaña falla
+          doc.save(`Ticket_${selectedSaleForDetail.codigo_venta || 'venta'}.pdf`);
       }
   };
 
@@ -624,7 +634,7 @@ export default function Clientes() {
         </div>
 
         <div className="bg-dark-800 p-6 rounded-lg shadow-card-dark border border-dark-700/50 mb-6">
-          <div className="flex flex-col md:flex-row items-center justify-between mb-6 gap-4">
+          <div className="flex flex-col sm:flex-row items-center justify-between mb-6 gap-4">
             <div className="flex items-center gap-2 w-full md:w-auto">
               <label htmlFor="items-per-page" className="text-gray-300 text-sm whitespace-nowrap">
                 Mostrar:
@@ -812,7 +822,7 @@ export default function Clientes() {
           isOpen={showNewOrEditClientModal}
           onClose={() => { setShowNewOrEditClientModal(false); setEditingClient(null); }}
           cliente={editingClient}
-          onClientAdded={() => { setShowNewOrEditClientModal(false); setEditingClient(null); }}
+          onClientAdded={handleClientAddedCallback} /* Usando la función movida */
         />
 
         {clienteActualParaVentas && (

@@ -16,7 +16,8 @@ import {
   Package, 
   Users, 
   Wallet, 
-  CreditCard 
+  CreditCard,
+  X as IconX // Importar el icono X para cerrar modal
 } from 'lucide-react';
 
 // Helper para formatear moneda
@@ -27,7 +28,7 @@ const formatCurrency = (amount) => {
      }
      return numericAmount.toLocaleString('en-US', {
         style: 'currency',
-        currency: 'USD',
+        currency: 'USD', // Asegúrate de que esto sea correcto, o cambia a 'MXN' si es necesario
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
     });
@@ -81,11 +82,15 @@ export default function Reportes() {
   // Estado para almacenar la imagen del logo en Base64 para el PDF
   const [logoBase64, setLogoBase64] = useState(null);
 
+  // Eliminamos los estados del modal de previsualización de PDF
+  // const [showPdfPreviewModal, setShowPdfPreviewModal] = useState(false);
+  // const [pdfDataUrl, setPdfDataUrl] = useState('');
+
 
   // Cargar logo al iniciar para el PDF
   useEffect(() => {
       async function loadLogo() {
-          const logoUrl = '/images/PERFUMESELISAwhite.jpg';
+          const logoUrl = '/images/PERFUMESELISA.png';
           const base64 = await getBase64Image(logoUrl);
           setLogoBase64(base64);
       }
@@ -122,17 +127,10 @@ export default function Reportes() {
           break;
 
         case 'stock_actual':
-             console.log("Attempting to fetch stock data...");
              ({ data, error } = await supabase
                  .from('productos')
                  .select('nombre, stock')
                  .order('nombre', { ascending: true }));
-
-             if (error) {
-                 console.error("Error fetching stock data:", error.message);
-             } else {
-                 console.log("Successfully fetched stock data:", data);
-             }
              break;
 
          case 'saldos_clientes':
@@ -176,7 +174,6 @@ export default function Reportes() {
 
              if (clientesError) {
                  error = clientesError;
-                 console.error("Error fetching clients for Ventas por Cliente:", clientesError.message);
              } else {
                  // Obtener todas las ventas para sumar los totales actuales
                  const { data: ventasData, error: ventasError } = await supabase
@@ -185,7 +182,6 @@ export default function Reportes() {
 
                  if (ventasError) {
                      error = ventasError;
-                     console.error("Error fetching sales for Ventas por Cliente:", ventasError.message);
                  } else {
                       // Crear un mapa para sumar las ventas actuales por cliente_id
                       const ventasActualesPorCliente = {};
@@ -232,7 +228,6 @@ export default function Reportes() {
         toast.error(`Error al cargar reporte: ${error.message}`);
       } else {
         setReportData(data || []);
-        console.log("reportData set to:", data || []);
         setReportError(null);
          if ((data || []).length === 0) {
              toast('No se encontraron datos para este reporte con los filtros seleccionados.', { icon: 'ℹ️' });
@@ -253,6 +248,7 @@ export default function Reportes() {
 
   // Función para exportar a PDF (Abrir en nueva pestaña)
   const handleExportPDF = () => {
+    try {
       if (!reportData || reportData.length === 0) {
           toast('No hay datos para exportar a PDF.', { icon: 'ℹ️' });
           return;
@@ -404,9 +400,20 @@ export default function Reportes() {
           }
       });
 
-      // Abrir en una nueva ventana en lugar de descargar
-      doc.output('dataurlnewwindow');
+      // --- CAMBIO CLAVE AQUÍ: Usar Blob URL para abrir en nueva pestaña ---
+      const pdfBlob = doc.output('blob'); // Obtener el PDF como un Blob
+      const blobUrl = URL.createObjectURL(pdfBlob); // Crear una URL de objeto para el Blob
+
+      window.open(blobUrl, '_blank'); // Abrir la URL de Blob en una nueva pestaña
+      
+      // Liberar la URL de Blob después de un corto tiempo para evitar fugas de memoria
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 10000); // 10 segundos
+
       toast.success('Reporte PDF generado en una nueva pestaña.');
+    } catch (error) {
+      console.error("Error fatal en handleExportPDF:", error);
+      toast.error(`Error al generar el PDF: ${error.message || 'Desconocido'}. Revisa la consola.`);
+    }
   };
 
   // Función para exportar a CSV (Descarga directa)

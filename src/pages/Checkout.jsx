@@ -76,6 +76,7 @@ export default function Checkout() {
 
     const [clienteSeleccionado, setClienteSeleccionado] = useState(null);
     const [currentUser, setCurrentUser] = useState(null);
+    const [loadingUserLocal, setLoadingUserLocal] = useState(true); 
     const [vendedorInfo, setVendedorInfo] = useState(null);
 
     const [infoClienteConSaldo, setInfoClienteConSaldo] = useState(null);
@@ -99,15 +100,17 @@ export default function Checkout() {
     const [showHtmlTicket, setShowHtmlTicket] = useState(false);
     const [htmlTicketData, setHtmlTicketData] = useState(null);
 
+    // useEffect 1: Carga inicial de datos (usuarios, clientes, productos)
     useEffect(() => {
         async function loadData() {
+            setLoadingUserLocal(true); 
             const { data: { user }, error: authError } = await supabase.auth.getUser();
-            if (authError) console.error("Error getting auth user:", authError);
+            if (authError) console.error("Error getting auth user in Checkout:", authError); 
             if (user) {
                 setCurrentUser(user);
                 const { data: vendedorData, error: vendedorError } = await supabase.from('usuarios').select('nombre').eq('id', user.id).single();
                 if (vendedorError) {
-                    console.error("Error loading vendedor info:", vendedorError);
+                    console.error("Error loading vendedor info in Checkout:", vendedorError); 
                     setVendedorInfo({ nombre: user.email });
                 } else {
                     setVendedorInfo(vendedorData);
@@ -115,6 +118,8 @@ export default function Checkout() {
             } else {
                 setCurrentUser(null); setVendedorInfo(null);
             }
+            setLoadingUserLocal(false); 
+
             const { data: cli, error: cliErr } = await supabase.from('clientes').select('id, nombre, telefono');
             if (cliErr) toast.error("Error al cargar clientes."); else setClientes(cli || []);
             
@@ -135,11 +140,14 @@ export default function Checkout() {
         loadData();
     }, []);
 
+    // useEffect 2: Carga de saldo del cliente cuando clienteSeleccionado cambia
     useEffect(() => {
         if (clienteSeleccionado && clienteSeleccionado.id) {
             const fetchClienteConSaldo = async () => {
                 setLoadingSaldoCliente(true);
-                setInfoClienteConSaldo(null); setUsarSaldoFavor(false); setMontoAplicadoDelSaldoFavor(0);
+                setInfoClienteConSaldo(null); 
+                setUsarSaldoFavor(false); 
+                setMontoAplicadoDelSaldoFavor(0);
                 try {
                     const { data, error } = await supabase.rpc('get_cliente_con_saldo', { p_cliente_id: clienteSeleccionado.id });
                     if (error) throw error;
@@ -152,25 +160,37 @@ export default function Checkout() {
             };
             fetchClienteConSaldo();
         } else {
-            setInfoClienteConSaldo(null); setUsarSaldoFavor(false); setMontoAplicadoDelSaldoFavor(0);
+            setInfoClienteConSaldo(null); 
+            setUsarSaldoFavor(false); 
+            setMontoAplicadoDelSaldoFavor(0);
         }
     }, [clienteSeleccionado]);
 
+    // useEffect 3: Procesa los datos del presupuesto desde location.state y asigna estados
+    // Depende de `productos` para mapear los nombres de los productos correctamente
     useEffect(() => {
-        if (location.state && location.state.budgetData) {
-            const budget = location.state.budgetData;
-            if (budget.clientes) setClienteSeleccionado(budget.clientes);
-            else { toast.warn("Presupuesto sin cliente."); return; }
+        const budget = location.state?.budgetData; 
+        // Solo procesar si hay budgetData Y la lista de productos ya está cargada
+        if (budget && productos.length > 0) { 
+            // Asigna el cliente y los productos de venta del presupuesto
+            if (budget.clientes) {
+                setClienteSeleccionado(budget.clientes);
+            } else {
+                toast.error("Presupuesto sin cliente válido.");
+            }
 
-            if (budget.presupuesto_items && budget.presupuesto_items.length > 0) {
+            if (budget.presupuesto_items?.length) {
                 const itemsFromBudget = budget.presupuesto_items.map(item => {
-                    const fullProductInfo = productos.find(p => p.id === item.producto_id);
+                    // `productos` ya debería tener datos aquí
+                    const fullProductInfo = productos.find(p => p.id === item.producto_id); 
                     return {
                         id: item.producto_id,
-                        nombre: item.productos?.nombre || item.descripcion || 'Producto Desconocido',
+                        // PRIORIZAR el nombre de productos de la base de datos si se encontró,
+                        // sino el del presupuesto, sino la descripción.
+                        nombre: fullProductInfo?.nombre || item.productos?.nombre || item.descripcion || 'Producto Desconocido',
                         cantidad: parseFloat(item.cantidad) || 0,
-                        promocion: parseFloat(item.precio_unitario) || 0,
-                        total: parseFloat(item.subtotal_item) || 0,
+                        promocion: parseFloat(item.precio_unitario) || 0, // Usar directamente el precio unitario del presupuesto
+                        total: parseFloat(item.subtotal_item) || ((parseFloat(item.cantidad) || 0) * (parseFloat(item.precio_unitario) || 0)), // Recalcular total_item si subtotal_item no está claro
                         stock: fullProductInfo ? (parseFloat(fullProductInfo.stock) || 0) : 0,
                         imagenUrl: fullProductInfo?.imagenUrl || ''
                     };
@@ -179,19 +199,56 @@ export default function Checkout() {
                 if (validItems.length !== itemsFromBudget.length) toast.warn("Productos del presupuesto con cantidad cero omitidos.");
                 setProductosVenta(validItems);
             } else {
-                setProductosVenta([]); toast.warn("El presupuesto no contiene productos.");
+                toast.warn("El presupuesto no contiene productos válidos.");
+                setProductosVenta([]);
             }
+            
             setDiscountType(budget.tipo_descuento || 'Sin descuento');
             setDiscountValue(parseFloat(budget.valor_descuento) || 0);
             setGastosEnvio(parseFloat(budget.gastos_envio) || 0);
             setPaymentType(budget.forma_pago || '');
             setBudgetSourceId(budget.id);
-            setTimeout(() => {
-                if (budget.clientes && budget.presupuesto_items?.length > 0) openSaleModal();
-                else toast.error("No se pudo abrir modal de venta desde presupuesto.");
-            }, 100);
-        } else { setBudgetSourceId(null); }
-    }, [location.state, productos]);
+
+            // Importante: Limpiar el estado de la locación después de procesarlo para evitar re-procesamientos
+            // y para que si se navega de nuevo a Checkout sin budgetData, no se re-carguen.
+            if (location.state?.budgetData) {
+              navigate(location.pathname, { replace: true, state: {} });
+            }
+
+        } else if (location.state?.budgetData && productos.length === 0) {
+            // Depuración: Si hay budgetData pero los productos aún no cargan, esperamos.
+            // console.log("Checkout: Datos de presupuesto presentes, pero productos aún cargando. Esperando..."); // Depuración eliminada
+            // debugger; // Depurador eliminado
+        } else if (!location.state?.budgetData && budgetSourceId !== null) { 
+            // Limpiar budgetSourceId si ya no hay datos de presupuesto en location.state
+            setBudgetSourceId(null);
+        }
+    }, [location.state, productos, navigate, location.pathname, budgetSourceId]); 
+
+    // NUEVO useEffect 4: Lógica para abrir el modal de venta una vez que todos los datos necesarios estén cargados
+    useEffect(() => {
+        // console.log("Depuración de apertura de modal. budgetSourceId:", budgetSourceId, "loadingUserLocal:", loadingUserLocal, "currentUser:", currentUser?.id, "loadingSaldoCliente:", loadingSaldoCliente, "infoClienteConSaldo:", infoClienteConSaldo?.client_id, "productosVenta.length:", productosVenta.length); // Depuración eliminada
+        // debugger; // Depurador eliminado
+        // console.trace("Pila de llamadas para la apertura del modal"); // Depuración eliminada
+
+        // Solo intenta abrir el modal si hay un budgetSourceId (viene de un presupuesto)
+        // Y si el usuario local ya cargó (currentUser y no loadingUserLocal)
+        // Y si el saldo del cliente ya cargó (infoClienteConSaldo y no loadingSaldoCliente)
+        // Y si tenemos productos en el carrito (productosVenta)
+        if (budgetSourceId && 
+            !loadingUserLocal && currentUser && currentUser.id && 
+            !loadingSaldoCliente && infoClienteConSaldo && infoClienteConSaldo.client_id &&
+            productosVenta.length > 0) {
+            
+            // Si el modal no está ya visible, ábrelo
+            if (!showSaleModal) { 
+                setTimeout(() => {
+                    // console.log("Intentando abrir el modal de venta automáticamente..."); // Depuración eliminada
+                    openSaleModal(); 
+                }, 50); 
+            }
+        }
+    }, [budgetSourceId, loadingUserLocal, currentUser, loadingSaldoCliente, infoClienteConSaldo, productosVenta, showSaleModal]); 
 
     const productosFiltrados = useMemo(() => {
         return productos.filter(p =>
@@ -233,7 +290,9 @@ export default function Checkout() {
         }
     }, [usarSaldoFavor, saldoAFavorDisponible, totalAntesDeCredito]);
 
-    const totalFinalAPagar = useMemo(() => totalAntesDeCredito - montoAplicadoDelSaldoFavor, [totalAntesDeCredito, montoAplicadoDelSaldoFavor]);
+    // RENOMBRAMOS totalFinalAPagar a montoRestanteAPagarPorCliente para mayor claridad
+    // Y la variable 'total' en ventaData ahora usará totalAntesDeCredito
+    const montoRestanteAPagarPorCliente = useMemo(() => totalAntesDeCredito - montoAplicadoDelSaldoFavor, [totalAntesDeCredito, montoAplicadoDelSaldoFavor]);
 
     const onAddToCart = producto => {
         if ((parseFloat(producto.stock) || 0) <= 0) { toast.error('Producto sin stock.'); return; }
@@ -267,8 +326,21 @@ export default function Checkout() {
     };
 
     const openSaleModal = () => {
-        if (!currentUser) { toast.error("Inicia sesión para vender."); return; }
-        if (!infoClienteConSaldo?.client_id) { toast.error('Selecciona un cliente.'); return; }
+        // Verificar aquí que el usuario ha terminado de cargar Y que es un usuario válido.
+        if (loadingUserLocal) {
+            toast.error("Cargando información de usuario, por favor espera.");
+            return;
+        }
+        if (!currentUser || !currentUser.id) { 
+            toast.error("Inicia sesión para vender."); 
+            return; 
+        }
+        // Verificar aquí que el cliente ha terminado de cargar Y que es un cliente válido.
+        if (loadingSaldoCliente) {
+            toast.error("Cargando saldo del cliente, por favor espera.");
+            return;
+        }
+        if (!infoClienteConSaldo?.client_id) { toast.error('Selecciona un cliente.'); return; } 
         if (productosVenta.length === 0) { toast.error('Agrega productos.'); return; }
         setShowSaleModal(true);
     };
@@ -276,7 +348,7 @@ export default function Checkout() {
     const handleFinalize = async () => {
         setProcessing(true);
         // Validaciones
-        if (!currentUser?.id || !infoClienteConSaldo?.client_id || productosVenta.length === 0 || (totalFinalAPagar > 0 && !paymentType)) {
+        if (!currentUser?.id || !infoClienteConSaldo?.client_id || productosVenta.length === 0 || (montoRestanteAPagarPorCliente > 0 && !paymentType)) { // Usar montoRestanteAPagarPorCliente
             toast.error('Faltan datos para finalizar la venta.'); setProcessing(false); return;
         }
 
@@ -301,10 +373,10 @@ export default function Checkout() {
                 vendedor_id: currentUser.id,
                 fecha: now.toISOString(),
                 subtotal: originalSubtotal,
-                forma_pago: totalFinalAPagar === 0 && montoAplicadoDelSaldoFavor > 0 ? 'SALDO_A_FAVOR' : paymentType,
+                forma_pago: montoRestanteAPagarPorCliente === 0 && montoAplicadoDelSaldoFavor > 0 ? 'SALDO_A_FAVOR' : paymentType, // Usar montoRestanteAPagarPorCliente
                 tipo_descuento: discountType,
                 valor_descuento: discountAmount,
-                total: totalFinalAPagar,
+                total: totalAntesDeCredito, // ¡CORREGIDO: Ahora usa el total real de la compra!
                 monto_credito_aplicado: montoAplicadoDelSaldoFavor,
                 enganche: parseFloat(enganche) || 0,
                 gastos_envio: parseFloat(gastosEnvio) || 0,
@@ -324,7 +396,7 @@ export default function Checkout() {
             }
 
             if (paymentType === 'Crédito cliente') {
-                const montoACredito = totalFinalAPagar - (parseFloat(enganche) || 0);
+                const montoACredito = montoRestanteAPagarPorCliente - (parseFloat(enganche) || 0); // Usar montoRestanteAPagarPorCliente
                 const movimientosCuenta = [];
                 if (montoACredito > 0) movimientosCuenta.push({ cliente_id: infoClienteConSaldo.client_id, tipo_movimiento: 'CARGO_VENTA', monto: montoACredito, referencia_venta_id: ventaId, descripcion: `Venta ${codigo}` });
                 if ((parseFloat(enganche) || 0) > 0) movimientosCuenta.push({ cliente_id: infoClienteConSaldo.client_id, tipo_movimiento: 'ABONO_ENGANCHE', monto: -(parseFloat(enganche) || 0), referencia_venta_id: ventaId, descripcion: `Enganche Venta ${codigo}` });
@@ -354,7 +426,7 @@ export default function Checkout() {
             let balanceFinalClienteParaTicket = infoClienteConSaldo?.balance !== undefined ? infoClienteConSaldo.balance : 0;
             if (usarSaldoFavor && montoAplicadoDelSaldoFavor > 0) balanceFinalClienteParaTicket += montoAplicadoDelSaldoFavor;
             if (paymentType === 'Crédito cliente') {
-                const montoACredito = totalFinalAPagar - (parseFloat(enganche) || 0);
+                const montoACredito = montoRestanteAPagarPorCliente - (parseFloat(enganche) || 0); // Usar montoRestanteAPagarPorCliente
                 if (montoACredito > 0) balanceFinalClienteParaTicket += montoACredito;
                 if ((parseFloat(enganche) || 0) > 0) balanceFinalClienteParaTicket -= (parseFloat(enganche) || 0);
             }
@@ -366,8 +438,8 @@ export default function Checkout() {
                 fecha: ticketFormattedDate,
                 productosVenta: productosVenta.map(p => ({ ...p })),
                 originalSubtotal, discountAmount,
-                forma_pago: totalFinalAPagar === 0 && montoAplicadoDelSaldoFavor > 0 ? 'SALDO_A_FAVOR' : paymentType,
-                enganche: parseFloat(enganche) || 0, gastos_envio: parseFloat(gastosEnvio) || 0, total_final: totalFinalAPagar,
+                forma_pago: montoRestanteAPagarPorCliente === 0 && montoAplicadoDelSaldoFavor > 0 ? 'SALDO_A_FAVOR' : paymentType, // Usar montoRestanteAPagarPorCliente
+                enganche: parseFloat(enganche) || 0, gastos_envio: parseFloat(gastosEnvio) || 0, total_final: montoRestanteAPagarPorCliente, // ¡CORREGIDO: total_final para el ticket es el monto pagado!
                 monto_credito_aplicado: montoAplicadoDelSaldoFavor,
                 balance_cuenta: balanceFinalClienteParaTicket,
             };
@@ -458,18 +530,18 @@ export default function Checkout() {
             {/* Footer Fijo */}
             <div
                 className={`fixed bottom-0 left-0 right-0 p-4 text-center rounded-t-xl shadow-lg flex justify-between items-center transition-colors ${
-                    productosVenta.length === 0 || !infoClienteConSaldo?.client_id || processing 
+                    productosVenta.length === 0 || !infoClienteConSaldo?.client_id || processing || loadingUserLocal 
                     ? 'bg-dark-700 text-gray-500 cursor-not-allowed' 
                     : 'bg-primary-600 text-white cursor-pointer hover:bg-primary-700'
                 }`}
                 onClick={openSaleModal}
-                aria-disabled={productosVenta.length === 0 || !infoClienteConSaldo?.client_id || processing}
+                aria-disabled={productosVenta.length === 0 || !infoClienteConSaldo?.client_id || processing || loadingUserLocal} 
             >
                 <div className="flex-1 text-left">
                     <span className="font-semibold text-lg">{totalItems} item{totalItems !== 1 ? 's' : ''}</span>
                     {infoClienteConSaldo?.client_name && <span className="ml-4 text-sm text-gray-300">Cliente: {infoClienteConSaldo.client_name}</span>}
                 </div>
-                <div className="flex-1 text-right"><span className="font-bold text-xl">{formatCurrency(totalFinalAPagar)}</span></div>
+                <div className="flex-1 text-right"><span className="font-bold text-xl">{formatCurrency(montoRestanteAPagarPorCliente)}</span></div> {/* CORREGIDO: Usar montoRestanteAPagarPorCliente */}
                 {processing && <div className="ml-4 text-sm font-semibold">Procesando…</div>}
                 <div className="ml-4"><ChevronRight className="w-6 h-6" /></div>
             </div>
@@ -484,7 +556,7 @@ export default function Checkout() {
                         <>
                             <button onClick={() => setShowSaleModal(false)} className="px-4 py-2 bg-dark-700 text-gray-300 rounded-md hover:bg-dark-600" disabled={processing}>Cancelar</button>
                             <button onClick={handleFinalize}
-                                disabled={processing || (totalFinalAPagar > 0 && !paymentType) || (paymentType === 'Crédito cliente' && (totalFinalAPagar - (parseFloat(enganche) || 0)) < 0 && totalFinalAPagar !==0)}
+                                disabled={processing || (montoRestanteAPagarPorCliente > 0 && !paymentType) || (paymentType === 'Crédito cliente' && (montoRestanteAPagarPorCliente - (parseFloat(enganche) || 0)) < 0 && montoRestanteAPagarPorCliente !==0) || !currentUser || loadingUserLocal} /* CORREGIDO: Usar montoRestanteAPagarPorCliente */
                                 className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 disabled:opacity-50">
                                 {processing ? 'Confirmando…' : 'Confirmar Venta'}
                             </button>
@@ -509,7 +581,7 @@ export default function Checkout() {
                         usarSaldoFavor={usarSaldoFavor}
                         setUsarSaldoFavor={setUsarSaldoFavor}
                         montoAplicadoDelSaldoFavor={montoAplicadoDelSaldoFavor}
-                        totalFinalAPagar={totalFinalAPagar}
+                        totalFinalAPagar={montoRestanteAPagarPorCliente} // CORREGIDO: Pasar montoRestanteAPagarPorCliente al componente de pago
                         paymentType={paymentType}
                         setPaymentType={setPaymentType}
                         discountType={discountType}

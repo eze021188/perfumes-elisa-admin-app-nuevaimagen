@@ -1,30 +1,25 @@
+// src/components/home/KpiCard.jsx
 import React from 'react';
+// Asegúrate de que esta ruta sea correcta para tu archivo formatters.js/ts
+import { formatCurrency } from '../../utils/formatters'; 
 
-interface KpiCardProps {
-  title: string;
-  value: number;
-  prefix?: string;
-  suffix?: string;
-  icon?: React.ReactNode;
-  change?: {
-    value: number;
-    isPositive: boolean;
-  };
-  className?: string;
-}
-
-const KpiCard: React.FC<KpiCardProps> = ({
-  title,
-  value,
-  prefix = '',
-  suffix = '',
-  icon,
-  change,
-  className = '',
+const KpiCard = ({ 
+  title, 
+  value, 
+  prefix = '', 
+  suffix = '', 
+  icon, 
+  change, 
+  className = '', 
 }) => {
-  const formattedValue = typeof value === 'number' 
-    ? value.toLocaleString('es-MX')
-    : value;
+  // --- INICIO DE LA CORRECCIÓN CLAVE ---
+  // Decidir cómo formatear el valor:
+  // Si el prefix es '$', significa que es un valor monetario, y usaremos formatCurrency.
+  // De lo contrario (si es un número de pedidos, clientes, etc.), usaremos toLocaleString simple.
+  const formattedValue = prefix === '$' 
+    ? formatCurrency(value)
+    : value.toLocaleString('es-MX'); // Para números sin formato de moneda (ej. Pedidos Totales)
+  // --- FIN DE LAREVISIÓN ---
 
   return (
     <div className={`stat-card hover-lift ${className}`}>
@@ -37,7 +32,9 @@ const KpiCard: React.FC<KpiCardProps> = ({
         )}
       </div>
       <p className="stat-value">
-        {prefix}{formattedValue}{suffix}
+        {/* Aquí mostramos el valor ya formateado por formatCurrency o toLocaleString.
+            El prefix original SOLO se añade si no es un valor monetario (donde formatCurrency ya puso el '$'). */}
+        {prefix !== '$' ? prefix : ''}{formattedValue}{suffix} 
       </p>
       {change && (
         <div className="mt-2 flex items-center">

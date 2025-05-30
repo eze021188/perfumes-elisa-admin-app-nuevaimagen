@@ -59,7 +59,7 @@ export default function ModalCliente({
     fetchDetalle();
 
     async function loadLogo() {
-        const logoUrl = '/images/PERFUMESELISAwhite.jpg';
+        const logoUrl = '/images/PERFUMESELISA.png';
         const base64 = await getBase64Image(logoUrl);
         setLogoBase64(base64);
     }

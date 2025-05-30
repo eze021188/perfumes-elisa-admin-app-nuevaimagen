@@ -1,3 +1,4 @@
+// src/pages/SaldosClientes.jsx
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { supabase } from '../supabase';
 import { useNavigate } from 'react-router-dom';
@@ -252,7 +253,7 @@ export default function SaldosClientes() {
   useEffect(() => {
     fetchClientsData();
     async function loadLogo() {
-        const base64 = await getBase64Image('/images/PERFUMESELISAwhite.jpg'); 
+        const base64 = await getBase64Image('/images/PERFUMESELISA.png'); 
         setLogoBase64(base64);
     }
     loadLogo();
@@ -567,28 +568,36 @@ export default function SaldosClientes() {
                     <table className="min-w-full divide-y divide-dark-700">
                         <thead className="bg-dark-900">
                             <tr>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Cliente</th>
-                                <th className="px-3 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider">Días sin pagar</th>
-                                <th className="px-3 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider">Días desde compra</th>
-                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">Saldo</th>
-                                <th className="px-6 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider">Acciones</th>
+                                {/* Ajuste de anchos para pantallas pequeñas (móvil) */}
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider w-3/10 sm:w-1/4">Cliente</th> {/* Reducido a 3/10 (30%) o 1/4 (25%) */}
+                                <th className="hidden md:table-cell px-3 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider whitespace-nowrap">Días sin pagar</th>
+                                <th className="hidden md:table-cell px-3 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider whitespace-nowrap">Días desde compra</th>
+                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider w-3/10 sm:w-1/4">Saldo</th> {/* Ajustado a 3/10 (30%) o 1/4 (25%) */}
+                                <th className="px-6 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider w-4/10 sm:w-1/4">Acciones</th> {/* Aumentado a 4/10 (40%) o 1/4 (25%) */}
                             </tr>
                         </thead>
                         <tbody className="bg-dark-800 divide-y divide-dark-700/50">
                             {filteredAndSearchedClients.map(cliente => (
                                 <tr key={cliente.client_id} className="hover:bg-dark-700/50 transition-colors cursor-pointer" onClick={() => openEstadoCuentaModal(cliente)}>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-200">{cliente.client_name}</td>
+                                    <td className="px-6 py-4 text-sm font-medium text-gray-200">
+                                        <div className="block md:hidden font-bold break-words">{cliente.client_name}</div> {/* Nombre en negrita, rompe palabras */}
+                                        {/* Ocultar N/A si no hay teléfono */}
+                                        {cliente.telefono && (
+                                            <div className="block md:hidden text-xs text-gray-400">{cliente.telefono}</div>
+                                        )}
+                                        <span className="hidden md:inline">{cliente.client_name}</span> {/* Nombre en línea para escritorio */}
+                                    </td>
                                     {cliente.balance <= 0 ? (
-                                        <td className="px-3 py-4 text-sm text-center text-gray-400" colSpan="2">Sin adeudo</td>
+                                        <td className="hidden md:table-cell px-3 py-4 text-sm text-center text-gray-400" colSpan="2">Sin adeudo</td>
                                     ) : (
                                         <>
-                                            <td className="px-3 py-4 text-sm text-center text-gray-300">
+                                            <td className="hidden md:table-cell px-3 py-4 text-sm text-center text-gray-300">
                                                 <div className="flex items-center justify-center gap-1">
                                                     <Clock size={14} className="text-gray-400" />
                                                     {cliente.daysSinceLastPayment !== null ? `${cliente.daysSinceLastPayment} días` : '-'}
                                                 </div>
                                             </td>
-                                            <td className="px-3 py-4 text-sm text-center text-gray-300">
+                                            <td className="hidden md:table-cell px-3 py-4 text-sm text-center text-gray-300">
                                                 <div className="flex items-center justify-center gap-1">
                                                     <Clock size={14} className="text-gray-400" />
                                                     {cliente.daysSinceFirstPurchase !== null ? `${cliente.daysSinceFirstPurchase} días` : '-'}
@@ -599,18 +608,18 @@ export default function SaldosClientes() {
                                     <td className={`px-6 py-4 whitespace-nowrap text-sm text-right font-semibold ${cliente.balance > 0 ? 'text-error-400' : cliente.balance < 0 ? 'text-success-400' : 'text-gray-300'}`}>
                                         {formatSaldoDisplay(cliente.balance)}
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
-                                        <div className="flex justify-center space-x-2">
+                                    <td className="px-6 py-4 text-sm text-center">
+                                        <div className="flex flex-col md:flex-row justify-center space-y-2 md:space-y-0 md:space-x-2"> {/* Botones apilados en móvil, en fila en md+ */}
                                             <button 
                                                 onClick={(e) => { e.stopPropagation(); openAbonoModal(cliente); }} 
-                                                className="px-3 py-1 bg-primary-600 text-white rounded-md shadow-sm hover:bg-primary-700 transition-colors text-xs flex items-center gap-1"
+                                                className="px-3 py-1 bg-primary-600 text-white rounded-md shadow-sm hover:bg-primary-700 transition-colors text-xs flex items-center justify-center gap-1"
                                             >
                                                 <DollarSign size={14} />
                                                 Abonar
                                             </button>
                                             <button 
                                                 onClick={(e) => { e.stopPropagation(); openSaldoFavorModal(cliente); }} 
-                                                className="px-3 py-1 bg-success-600 text-white rounded-md shadow-sm hover:bg-success-700 transition-colors text-xs flex items-center gap-1"
+                                                className="px-3 py-1 bg-success-600 text-white rounded-md shadow-sm hover:bg-success-700 transition-colors text-xs flex items-center justify-center gap-1"
                                             >
                                                 <PlusCircle size={14} />
                                                 Saldo Favor

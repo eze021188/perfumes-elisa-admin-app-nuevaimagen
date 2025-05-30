@@ -27,6 +27,7 @@ export default function ClientesTabla({
       <table className="min-w-full divide-y divide-dark-700">
         <thead className="bg-dark-900">
           <tr>
+            {/* Columna de selección */}
             <th className="p-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider w-12">
               <div 
                 onClick={onSelectTodosClientes}
@@ -39,12 +40,14 @@ export default function ClientesTabla({
                 )}
               </div>
             </th>
+            {/* Columna Nombre: Ancho reducido en móvil, texto salta de línea */}
             <th
-              className="p-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-200"
+              className="p-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-200 w-[90px] sm:w-auto" // Ancho reducido para móvil (90px)
               onClick={() => onSort('nombre')}
             >
               Nombre {renderSortArrow('nombre')}
             </th>
+            {/* Otras columnas (ocultas en ciertos tamaños de pantalla) */}
             <th
               className="p-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider hidden sm:table-cell cursor-pointer hover:text-gray-200"
               onClick={() => onSort('telefono')}
@@ -63,22 +66,23 @@ export default function ClientesTabla({
             >
               Dirección {renderSortArrow('direccion')}
             </th>
-            <th className="p-4 text-center text-xs font-semibold text-gray-400 uppercase tracking-wider">
-              Acciones
-            </th>
+            {/* Columna Acciones: Ancho reducido en móvil */}
+            <th className="p-4 text-center text-xs font-semibold text-gray-400 uppercase tracking-wider w-[80px] sm:w-auto">Acciones</th>
           </tr>
         </thead>
         <tbody className="bg-dark-800 divide-y divide-dark-700/50">
           {clientesPag.length === 0 ? (
             <tr>
-              <td colSpan="6" className="p-4 text-center text-gray-500 italic">
+              {/* Celda de mensaje sin clientes, con altura aumentada */}
+              <td colSpan="6" className="py-4 text-center text-gray-500 italic">
                 No hay clientes para mostrar con los filtros actuales.
               </td>
             </tr>
           ) : (
             clientesPag.map(cliente => (
               <tr key={cliente.id} className="hover:bg-dark-700/50 transition-colors">
-                <td className="p-4 whitespace-nowrap">
+                {/* Celda de selección, con altura y padding ajustados */}
+                <td className="py-4 px-2 whitespace-nowrap">
                   <div 
                     onClick={() => onSelectCliente(cliente.id)}
                     className="cursor-pointer text-gray-400 hover:text-gray-200 transition-colors"
@@ -90,27 +94,33 @@ export default function ClientesTabla({
                     )}
                   </div>
                 </td>
-                <td className="p-4 whitespace-nowrap text-sm font-medium text-gray-200">{cliente.nombre}</td>
-                <td className="p-4 whitespace-nowrap text-sm text-gray-300 hidden sm:table-cell">{cliente.telefono || 'N/A'}</td>
-                <td className="p-4 whitespace-nowrap text-sm text-gray-300 hidden md:table-cell">{cliente.correo || 'N/A'}</td>
-                <td className="p-4 whitespace-nowrap text-sm text-gray-300 hidden lg:table-cell">{cliente.direccion || 'N/A'}</td>
-                <td className="p-4 whitespace-nowrap text-center text-sm font-medium">
-                  <div className="flex justify-center items-center space-x-2">
+                {/* Celda del nombre: Altura, padding, ancho reducido y salto de línea. ¡TEXTO DE PRUEBA! */}
+                <td className="py-4 px-2 text-sm font-medium text-red-500 break-words w-[90px] sm:w-auto">
+                    ¡PRUEBA FINAL! - {cliente.nombre} {/* Texto de prueba para verificar */}
+                </td>
+                {/* Otras celdas (ocultas en ciertos tamaños de pantalla), con altura y padding ajustados */}
+                <td className="py-4 px-2 whitespace-nowrap text-sm text-gray-300 hidden sm:table-cell">{cliente.telefono || 'N/A'}</td>
+                <td className="py-4 px-2 whitespace-nowrap text-sm text-gray-300 hidden md:table-cell">{cliente.correo || 'N/A'}</td>
+                <td className="py-4 px-2 whitespace-nowrap text-sm text-gray-300 hidden lg:table-cell">{cliente.direccion || 'N/A'}</td>
+                {/* Celda de Acciones: Altura, padding, ancho y disposición de botones apilados en móvil */}
+                <td className="py-4 px-2 text-center text-sm font-medium w-[80px] sm:w-auto">
+                  {/* Contenedor de botones: Apilados en móvil, en fila en sm+ */}
+                  <div className="flex flex-col items-center justify-center space-y-1 sm:flex-row sm:space-x-1 sm:space-y-0">
                     <button
                       onClick={() => onAbrirEditar(cliente)}
-                      className="px-3 py-1 bg-warning-600 text-white rounded-md shadow-sm hover:bg-warning-700 transition-colors text-xs flex items-center gap-1"
+                      className="px-2 py-1 bg-purple-600 text-white rounded-md shadow-sm hover:bg-purple-700 transition-colors text-xs flex items-center gap-1 w-full justify-center"
                       title="Editar Cliente"
                     >
-                      <Edit size={14} />
-                      Editar
+                      <Edit size={12} /> {/* Icono más pequeño */}
+                      ¡EDITAR AHORA! {/* Texto de prueba para verificar */}
                     </button>
                     <button
                       onClick={() => onHandleVerCompras(cliente)}
-                      className="px-3 py-1 bg-primary-600 text-white rounded-md shadow-sm hover:bg-primary-700 transition-colors text-xs flex items-center gap-1"
+                      className="px-2 py-1 bg-cyan-600 text-white rounded-md shadow-sm hover:bg-cyan-700 transition-colors text-xs flex items-center gap-1 w-full justify-center"
                       title="Ver Ventas del Cliente"
                     >
-                      <Eye size={14} />
-                      Ver Ventas
+                      <Eye size={12} /> {/* Icono más pequeño */}
+                      ¡VER VENTAS AHORA! {/* Texto de prueba para verificar */}
                     </button>
                   </div>
                 </td>

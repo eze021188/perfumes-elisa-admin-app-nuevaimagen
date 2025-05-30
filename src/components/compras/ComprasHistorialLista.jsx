@@ -1,6 +1,6 @@
 // src/components/compras/ComprasHistorialLista.jsx
-import React from 'react';
-import { ChevronUp, ChevronDown, Trash2, Plus, Save, DollarSign, Search, Package, AlertTriangle } from 'lucide-react';
+import React, { useEffect } from 'react'; // Importar useEffect para depuración
+import { ChevronUp, ChevronDown, Trash2, Plus, Save, DollarSign, Search, Package, AlertTriangle, Hash } from 'lucide-react'; // Asegúrate de importar Hash
 
 // Helper para formatear moneda
 const formatCurrency = (amount, currency = 'USD') => {
@@ -40,6 +40,16 @@ export default function ComprasHistorialLista({
   formatDisplayDate
 }) {
 
+  // Log para depuración: Ver el estado de editingPurchaseItems cuando cambia
+  useEffect(() => {
+    console.log('ComprasHistorialLista - editingPurchaseItems:', editingPurchaseItems);
+    console.log('ComprasHistorialLista - expandedIdx:', expandedIdx);
+    if (expandedIdx !== null && savedCompras[expandedIdx]) {
+      console.log('ComprasHistorialLista - Compra actual en expandedIdx:', savedCompras[expandedIdx]);
+    }
+  }, [editingPurchaseItems, expandedIdx, savedCompras]);
+
+
   if (!savedCompras || savedCompras.length === 0) {
     return (
       <div className="text-center py-12 bg-dark-800/50 rounded-lg border border-dark-700/50">
@@ -55,7 +65,15 @@ export default function ComprasHistorialLista({
         <div key={compraData.compra.id} className="border border-dark-700/50 rounded-lg shadow-card-dark bg-dark-800/50">
           <div 
             className={`flex justify-between items-center p-4 cursor-pointer ${compraData.compra.inventario_afectado ? 'bg-success-900/20 hover:bg-success-900/30' : 'bg-dark-900/50 hover:bg-dark-800'} transition-colors rounded-t-lg`}
-            onClick={() => onToggleExpand(index)}
+            onClick={(e) => {
+              // Nuevo log para verificar si el clic se registra en este componente
+              console.log('¡Clic registrado en ComprasHistorialLista!', {
+                numeroPedido: compraData.compra.numero_pedido,
+                index: index,
+                inventarioAfectado: compraData.compra.inventario_afectado
+              });
+              onToggleExpand(index);
+            }}
           >
             <div>
               <div className="font-semibold text-gray-100">Pedido: {compraData.compra.numero_pedido}</div>
@@ -70,7 +88,7 @@ export default function ComprasHistorialLista({
                 </span>
                 <button
                     onClick={(e) => { 
-                        e.stopPropagation(); 
+                        e.stopPropagation(); // Detener la propagación para que no se dispare onToggleExpand
                         onEliminarCompra(compraData.compra.id, compraData.compra.inventario_afectado); 
                     }}
                     className="px-3 py-1 bg-error-600 text-white text-xs rounded-md hover:bg-error-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
@@ -89,47 +107,54 @@ export default function ComprasHistorialLista({
             <div className="p-4 border-t border-dark-700/50">
               <h3 className="text-md font-semibold text-gray-200 mb-3">Ítems de la Compra (Pedido: {compraData.compra.numero_pedido})</h3>
               <div className="space-y-3 mb-4 max-h-60 overflow-y-auto pr-2">
-                {editingPurchaseItems.map((item) => (
-                  <div 
-                    key={item.id} 
-                    className={`grid grid-cols-1 md:grid-cols-5 gap-3 items-center p-2 rounded-md ${item.isNew ? 'bg-primary-900/20 border border-primary-800/50' : 'bg-dark-900/50 border border-dark-700/50'}`}
-                  >
-                    <div className="md:col-span-2 font-medium text-sm text-gray-200 truncate">{item.nombreProducto}</div>
-                    <div>
-                      <label htmlFor={`qty-${item.id}`} className="block text-xs text-gray-400 mb-0.5">Cantidad</label>
-                      <input 
-                        id={`qty-${item.id}`}
-                        type="number" 
-                        value={item.cantidad}
-                        disabled={compraData.compra.inventario_afectado}
-                        onChange={(e) => onEditingItemChange(item.id, 'cantidad', e.target.value)}
-                        className="w-full border border-dark-700 bg-dark-900 p-1.5 rounded text-sm text-right focus:ring-1 focus:ring-primary-500 focus:border-primary-500 text-gray-200 disabled:opacity-60 disabled:cursor-not-allowed" 
-                      />
-                    </div>
-                    <div>
-                      <label htmlFor={`price-${item.id}`} className="block text-xs text-gray-400 mb-0.5">Precio USD</label>
-                      <input 
-                        id={`price-${item.id}`}
-                        type="text" 
-                        inputMode="decimal"
-                        value={item.precioUnitarioUSD}
-                        disabled={compraData.compra.inventario_afectado}
-                        onChange={(e) => onEditingItemChange(item.id, 'precioUnitarioUSD', e.target.value)}
-                        onBlur={() => onEditingItemBlur(item.id, 'precioUnitarioUSD')}
-                        className="w-full border border-dark-700 bg-dark-900 p-1.5 rounded text-sm text-right focus:ring-1 focus:ring-primary-500 focus:border-primary-500 text-gray-200 disabled:opacity-60 disabled:cursor-not-allowed" 
-                      />
-                    </div>
-                    {!compraData.compra.inventario_afectado && (
-                       <button 
-                            onClick={() => onEliminarItemDeCompraEditandose(item.id)} 
-                            className="text-error-400 hover:text-error-300 text-xs p-1 self-end mb-1 md:mb-0 md:ml-auto transition-colors"
-                            title="Eliminar este ítem de la compra"
-                        >
-                         <Trash2 size={16} />
-                       </button>
-                    )}
+                {/* Condición para mostrar mensaje si no hay ítems en editingPurchaseItems */}
+                {editingPurchaseItems.length === 0 ? (
+                  <div className="text-center py-4 text-gray-400">
+                    <p>No hay ítems para esta compra o no se pudieron cargar.</p>
                   </div>
-                ))}
+                ) : (
+                  editingPurchaseItems.map((item) => (
+                    <div 
+                      key={item.id} 
+                      className={`grid grid-cols-1 md:grid-cols-5 gap-3 items-center p-2 rounded-md ${item.isNew ? 'bg-primary-900/20 border border-primary-800/50' : 'bg-dark-900/50 border border-dark-700/50'}`}
+                    >
+                      <div className="md:col-span-2 font-medium text-sm text-gray-200 truncate">{item.nombreProducto}</div>
+                      <div>
+                        <label htmlFor={`qty-${item.id}`} className="block text-xs text-gray-400 mb-0.5">Cantidad</label>
+                        <input 
+                          id={`qty-${item.id}`}
+                          type="number" 
+                          value={item.cantidad}
+                          disabled={compraData.compra.inventario_afectado}
+                          onChange={(e) => onEditingItemChange(item.id, 'cantidad', e.target.value)}
+                          className="w-full border border-dark-700 bg-dark-900 p-1.5 rounded text-sm text-right focus:ring-1 focus:ring-primary-500 focus:border-primary-500 text-gray-200 disabled:opacity-60 disabled:cursor-not-allowed" 
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor={`price-${item.id}`} className="block text-xs text-gray-400 mb-0.5">Precio USD</label>
+                        <input 
+                          id={`price-${item.id}`}
+                          type="text" 
+                          inputMode="decimal"
+                          value={item.precioUnitarioUSD}
+                          disabled={compraData.compra.inventario_afectado} // Corregido: 'inventario_afectado'
+                          onChange={(e) => onEditingItemChange(item.id, 'precioUnitarioUSD', e.target.value)}
+                          onBlur={() => onEditingItemBlur(item.id, 'precioUnitarioUSD')}
+                          className="w-full border border-dark-700 bg-dark-900 p-1.5 rounded text-sm text-right focus:ring-1 focus:ring-primary-500 focus:border-primary-500 text-gray-200 disabled:opacity-60 disabled:cursor-not-allowed" 
+                        />
+                      </div>
+                      {!compraData.compra.inventario_afectado && (
+                         <button 
+                              onClick={() => onEliminarItemDeCompraEditandose(item.id)} 
+                              className="text-error-400 hover:text-error-300 text-xs p-1 self-end mb-1 md:mb-0 md:ml-auto transition-colors"
+                              title="Eliminar este ítem de la compra"
+                          >
+                           <Trash2 size={16} />
+                         </button>
+                      )}
+                    </div>
+                  ))
+                )}
               </div>
 
               {!compraData.compra.inventario_afectado && (

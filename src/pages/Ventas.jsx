@@ -436,7 +436,7 @@ export default function Ventas() {
 
   useEffect(() => {
     async function loadLogoImg() {
-        const base64 = await getBase64Image('/images/PERFUMESELISAwhite.jpg');
+        const base64 = await getBase64Image('/images/PERFUMESELISA.png');
         setLogoBase64(base64);
     }
     loadLogoImg();
