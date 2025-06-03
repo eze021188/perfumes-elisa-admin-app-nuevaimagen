@@ -104,7 +104,7 @@ const TicketParaImagen = React.forwardRef(({ venta, cliente, vendedor, logoSrc, 
         textAlign: 'center', // Centrado debajo del logo y título
         fontSize: '10px',
         color: '#6c757d',
-        margin: '5px 0 12px 0', // Espacio después del contacto
+        margin: '5px 0 12px 0',
     };
 
 
@@ -162,7 +162,7 @@ const TicketParaImagen = React.forwardRef(({ venta, cliente, vendedor, logoSrc, 
     };
     const productQuantityPriceStyles = {
         textAlign: 'right',
-        minWidth: '80px', 
+        minWidth: '80px',
         whiteSpace: 'nowrap',
         color: '#495057',
     };
@@ -197,6 +197,14 @@ const TicketParaImagen = React.forwardRef(({ venta, cliente, vendedor, logoSrc, 
     const saldoAplicadoStyles = {
         color: '#007bff', // Azul para saldo aplicado
         fontWeight: '500',
+    };
+    // NUEVO ESTILO PARA NOTA DE CRÉDITO
+    const creditNoteStyles = {
+        fontSize: '10px',
+        color: '#dc3545', // Color para indicar deuda (rojo)
+        textAlign: 'right',
+        marginTop: '5px',
+        fontStyle: 'italic',
     };
     
     const hrMinimalistStyle = {
@@ -284,6 +292,17 @@ const TicketParaImagen = React.forwardRef(({ venta, cliente, vendedor, logoSrc, 
                     <span style={grandTotalLabelStyles}>Total Pagado:</span>
                     <span style={grandTotalValueStyles}>{currencyFormatter(venta.total ?? 0)}</span>
                 </div>
+                {/* INICIO DE CAMBIOS PARA FORMA DE PAGO Y NOTA DE CRÉDITO */}
+                <div style={{...totalRowStyles, marginTop: '5px', paddingTop: '5px'}}>
+                    <span style={totalLabelStyles}>Forma de Pago:</span>
+                    <span style={{...totalValueStyles, fontWeight: 'bold'}}>{venta.forma_pago || 'Desconocida'}</span>
+                </div>
+                {venta.forma_pago === 'Crédito cliente' && (
+                    <p style={creditNoteStyles}>
+                        *Venta a crédito. El monto {currencyFormatter(venta.total ?? 0)} está pendiente de pago.
+                    </p>
+                )}
+                {/* FIN DE CAMBIOS */}
             </div>
 
             <div style={footerStyles}>
@@ -397,8 +416,8 @@ export default function Ventas() {
   
   const [isImageActionModalOpen, setIsImageActionModalOpen] = useState(false);
   const [generatedImageDataUrl, setGeneratedImageDataUrl] = useState(null);
-  const [generatedImageFile, setGeneratedImageFile] = useState(null); 
-  const [isProcessingImage, setIsProcessingImage] = useState(false); 
+  const [generatedImageFile, setGeneratedImageFile] = useState(null);
+  const [isProcessingImage, setIsProcessingImage] = useState(false);
 
 
   const navigate = useNavigate();
@@ -469,7 +488,7 @@ export default function Ventas() {
             setClienteInfoTicket(clienteData || { id: venta.cliente_id, nombre: venta.display_cliente_nombre });
             console.log("handleSelectSale: clienteInfoTicket seteado", clienteData || { id: venta.cliente_id, nombre: venta.display_cliente_nombre });
         } else { 
-            setClienteInfoTicket({ id: null, nombre: venta.display_cliente_nombre }); 
+            setClienteInfoTicket({ id: null, nombre: venta.display_cliente_nombre });
             console.log("handleSelectSale: clienteInfoTicket seteado (Público General)", { id: null, nombre: venta.display_cliente_nombre });
         }
         if (venta.vendedor_id) {
@@ -478,7 +497,7 @@ export default function Ventas() {
             setVendedorInfoTicket(vendData || { nombre: currentUser?.email || 'N/A' });
             console.log("handleSelectSale: vendedorInfoTicket seteado", vendData || { nombre: currentUser?.email || 'N/A' });
         } else { 
-            setVendedorInfoTicket({ nombre: currentUser?.email || 'N/A' }); 
+            setVendedorInfoTicket({ nombre: currentUser?.email || 'N/A' });
             console.log("handleSelectSale: vendedorInfoTicket seteado (N/A)", { nombre: currentUser?.email || 'N/A' });
         }
         if (venta.cliente_id) {
@@ -493,7 +512,7 @@ export default function Ventas() {
         console.error("handleSelectSale: Error cargando detalles", error);
         setVentaSeleccionada(null);
     } finally { 
-        setDetailLoading(false); 
+        setDetailLoading(false);
         console.log("handleSelectSale: Finalizado. detailLoading: false");
     }
   };
@@ -521,7 +540,7 @@ export default function Ventas() {
   const handleShareTicketAsPDF = async () => {
       console.log("handleShareTicketAsPDF: Iniciando");
       if (!ventaSeleccionada || !ventaSeleccionada.productos || !clienteInfoTicket || !vendedorInfoTicket) {
-          toast.error("Datos incompletos para generar el PDF."); 
+          toast.error("Datos incompletos para generar el PDF.");
           console.log("handleShareTicketAsPDF: Datos incompletos", {ventaSeleccionada, clienteInfoTicket, vendedorInfoTicket});
           return;
       }
@@ -560,7 +579,11 @@ export default function Ventas() {
       if ((ventaSeleccionada.gastos_envio ?? 0) > 0) { doc.text('Gastos de Envío:', totalsValueStartX - totalsLabelWidth, yOffset, { align: 'right' }); doc.text(formatCurrency(ventaSeleccionada.gastos_envio ?? 0), totalsValueStartX, yOffset, { align: 'right' }); yOffset += totalsLineHeight; }
       if ((ventaSeleccionada.monto_credito_aplicado ?? 0) > 0) { doc.text('Saldo a Favor Aplicado:', totalsValueStartX - totalsLabelWidth, yOffset, { align: 'right' }); doc.setTextColor(40,167,69); doc.text(`- ${formatCurrency(ventaSeleccionada.monto_credito_aplicado ?? 0)}`, totalsValueStartX, yOffset, { align: 'right' }); doc.setTextColor(0,0,0); yOffset += totalsLineHeight; }
       if (ventaSeleccionada.forma_pago === 'Crédito cliente' && (ventaSeleccionada.enganche ?? 0) > 0) { doc.text('Enganche Pagado:', totalsValueStartX - totalsLabelWidth, yOffset, { align: 'right' }); doc.text(formatCurrency(ventaSeleccionada.enganche ?? 0), totalsValueStartX, yOffset, { align: 'right' }); yOffset += totalsLineHeight; }
-      doc.text('Forma de Pago:', totalsValueStartX - totalsLabelWidth, yOffset, { align: 'right' }); doc.text(ventaSeleccionada.forma_pago || 'Desconocida', totalsValueStartX, yOffset, { align: 'right' }); yOffset += totalsLineHeight * 1.5;
+      // INICIO DE CAMBIOS PARA FORMA DE PAGO EN PDF
+      doc.text('Forma de Pago:', totalsValueStartX - totalsLabelWidth, yOffset, { align: 'right' });
+      doc.text(ventaSeleccionada.forma_pago || 'Desconocida', totalsValueStartX, yOffset, { align: 'right' });
+      yOffset += totalsLineHeight * 1.5; // Espacio extra antes del total
+      // FIN DE CAMBIOS
       doc.setFontSize(finalTotalFontSize); doc.setFont(undefined, 'bold'); doc.text('TOTAL PAGADO:', totalsValueStartX - totalsLabelWidth, yOffset, { align: 'right' }); doc.setTextColor(40,167,69); doc.text(formatCurrency(ventaSeleccionada.total ?? 0), totalsValueStartX, yOffset, { align: 'right' }); doc.setTextColor(0,0,0); yOffset += finalTotalFontSize + 5;
        if (ventaSeleccionada.forma_pago === 'Crédito cliente') {
            const balFontSize=10, balValFontSize=12, balNoteSize=8, balLineHeight=5; const curBal=(clienteBalanceTicket??0);
@@ -583,8 +606,15 @@ export default function Ventas() {
               });
               toast.success('Ticket PDF compartido.');
           } else {
-              toast.info('Compartir no disponible. Abriendo PDF.');
-              doc.output('dataurlnewwindow'); 
+              // Fallback: descargar el PDF si la API de compartir no está disponible o falla
+              const link = document.createElement('a');
+              link.href = URL.createObjectURL(pdfBlob);
+              link.download = `Ticket_${ventaSeleccionada.codigo_venta || 'venta'}.pdf`;
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+              URL.revokeObjectURL(link.href); // Limpiar URL
+              toast.info('Compartir no disponible. PDF descargado.');
           }
       } catch (error) {
           if (error.name === 'AbortError') { toast('Compartir PDF cancelado.'); } 
@@ -626,7 +656,7 @@ export default function Ventas() {
         
         setGeneratedImageDataUrl(dataUrl);
         setGeneratedImageFile(imageFile);
-        setIsImageActionModalOpen(true); 
+        setIsImageActionModalOpen(true);
         console.log("handleViewTicketImageAndShowModal: ImageActionModal debería abrirse.");
         toast.dismiss('processingImageToast');
 
@@ -675,7 +705,7 @@ export default function Ventas() {
             toast.info('No se pudo compartir directamente. Mostrando opciones...', { id: 'sharingDirectlyToast' });
             setGeneratedImageDataUrl(dataUrl);
             setGeneratedImageFile(imageFileToShare);
-            setIsImageActionModalOpen(true); 
+            setIsImageActionModalOpen(true);
         }
     } catch (error) {
         if (error.name === 'AbortError') {
