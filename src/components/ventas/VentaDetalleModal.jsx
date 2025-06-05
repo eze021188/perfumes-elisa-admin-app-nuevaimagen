@@ -41,6 +41,21 @@ export default function VentaDetalleModal({
     ? formatDateFunction(ventaSeleccionada.fecha || ventaSeleccionada.created_at) 
     : new Date(ventaSeleccionada.fecha || ventaSeleccionada.created_at).toLocaleString();
 
+  // Determine the amount to display as "Total Pagado"
+  // If it's a credit sale:
+  //   - If enganche is present and > 0, show enganche.
+  //   - Otherwise (no enganche or enganche is 0), show $0.
+  // For other payment methods, show the total amount of the sale.
+  const displayTotalPagado = 
+    ventaSeleccionada.forma_pago === 'Crédito cliente'
+      ? (ventaSeleccionada.enganche && ventaSeleccionada.enganche > 0 ? ventaSeleccionada.enganche : 0)
+      : ventaSeleccionada.total;
+
+  // Calculate the remaining amount for credit sales
+  const montoPendienteCredito = 
+    ventaSeleccionada.forma_pago === 'Crédito cliente'
+      ? (ventaSeleccionada.total ?? 0) - (ventaSeleccionada.enganche ?? 0)
+      : 0;
 
   return (
     <div 
@@ -125,8 +140,13 @@ export default function VentaDetalleModal({
                     <p className="font-semibold">Enganche Pagado: <span className="text-gray-200">{formatCurrency(ventaSeleccionada.enganche ?? 0)}</span></p>
                 )}
                 <p className="font-bold text-lg text-success-400 mt-2 pt-2 border-t border-dark-700">
-                    Total Pagado: {formatCurrency(ventaSeleccionada.total ?? 0)}
+                    Total Pagado: {formatCurrency(displayTotalPagado)}
                 </p>
+                {ventaSeleccionada.forma_pago === 'Crédito cliente' && montoPendienteCredito > 0 && (
+                  <p className="text-xs text-error-400 italic">
+                    (Monto pendiente: {formatCurrency(montoPendienteCredito)})
+                  </p>
+                )}
             </div>
 
             {ventaSeleccionada.forma_pago === 'Crédito cliente' && (

@@ -221,6 +221,22 @@ const TicketParaImagen = React.forwardRef(({ venta, cliente, vendedor, logoSrc, 
         color: '#6c757d',
     };
 
+    // Determinar el monto a mostrar como "Total Pagado" en el ticket
+    // Si es una venta a crédito:
+    //   - Si enganche está presente y > 0, muestra el enganche.
+    //   - De lo contrario (no enganche o enganche es 0), muestra $0.
+    // Para otros métodos de pago, muestra el total de la venta.
+    const displayTotalPagadoTicket = 
+        venta.forma_pago === 'Crédito cliente'
+            ? (venta.enganche && venta.enganche > 0 ? venta.enganche : 0)
+            : venta.total;
+
+    // Calcular el monto pendiente para la nota de crédito
+    const montoPendienteTicket = 
+        venta.forma_pago === 'Crédito cliente'
+            ? (venta.total ?? 0) - (venta.enganche ?? 0)
+            : 0;
+
     return (
         <div ref={ref} style={ticketStyles}>
             <div style={headerSectionStyles}>
@@ -288,18 +304,24 @@ const TicketParaImagen = React.forwardRef(({ venta, cliente, vendedor, logoSrc, 
                         <span style={{...totalValueStyles, ...saldoAplicadoStyles}}>- {currencyFormatter(venta.monto_credito_aplicado ?? 0)}</span>
                     </div>
                 )}
+                {venta.forma_pago === 'Crédito cliente' && (venta.enganche ?? 0) > 0 && (
+                    <div style={totalRowStyles}>
+                        <span style={totalLabelStyles}>Enganche Pagado:</span>
+                        <span style={totalValueStyles}>{currencyFormatter(venta.enganche ?? 0)}</span>
+                    </div>
+                )}
                  <div style={{...totalRowStyles, marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #dee2e6'}}>
                     <span style={grandTotalLabelStyles}>Total Pagado:</span>
-                    <span style={grandTotalValueStyles}>{currencyFormatter(venta.total ?? 0)}</span>
+                    <span style={grandTotalValueStyles}>{currencyFormatter(displayTotalPagadoTicket)}</span>
                 </div>
                 {/* INICIO DE CAMBIOS PARA FORMA DE PAGO Y NOTA DE CRÉDITO */}
                 <div style={{...totalRowStyles, marginTop: '5px', paddingTop: '5px'}}>
                     <span style={totalLabelStyles}>Forma de Pago:</span>
                     <span style={{...totalValueStyles, fontWeight: 'bold'}}>{venta.forma_pago || 'Desconocida'}</span>
                 </div>
-                {venta.forma_pago === 'Crédito cliente' && (
+                {venta.forma_pago === 'Crédito cliente' && montoPendienteTicket > 0 && (
                     <p style={creditNoteStyles}>
-                        *Venta a crédito. El monto {currencyFormatter(venta.total ?? 0)} está pendiente de pago.
+                        *Venta a crédito. Pendiente: {currencyFormatter(montoPendienteTicket)}.
                     </p>
                 )}
                 {/* FIN DE CAMBIOS */}
@@ -578,20 +600,33 @@ export default function Ventas() {
       if ((ventaSeleccionada.valor_descuento ?? 0) > 0) { doc.text('Descuento:', totalsValueStartX - totalsLabelWidth, yOffset, { align: 'right' }); doc.setTextColor(220,53,69); doc.text(`- ${formatCurrency(ventaSeleccionada.valor_descuento ?? 0)}`, totalsValueStartX, yOffset, { align: 'right' }); doc.setTextColor(0,0,0); yOffset += totalsLineHeight; }
       if ((ventaSeleccionada.gastos_envio ?? 0) > 0) { doc.text('Gastos de Envío:', totalsValueStartX - totalsLabelWidth, yOffset, { align: 'right' }); doc.text(formatCurrency(ventaSeleccionada.gastos_envio ?? 0), totalsValueStartX, yOffset, { align: 'right' }); yOffset += totalsLineHeight; }
       if ((ventaSeleccionada.monto_credito_aplicado ?? 0) > 0) { doc.text('Saldo a Favor Aplicado:', totalsValueStartX - totalsLabelWidth, yOffset, { align: 'right' }); doc.setTextColor(40,167,69); doc.text(`- ${formatCurrency(ventaSeleccionada.monto_credito_aplicado ?? 0)}`, totalsValueStartX, yOffset, { align: 'right' }); doc.setTextColor(0,0,0); yOffset += totalsLineHeight; }
-      if (ventaSeleccionada.forma_pago === 'Crédito cliente' && (ventaSeleccionada.enganche ?? 0) > 0) { doc.text('Enganche Pagado:', totalsValueStartX - totalsLabelWidth, yOffset, { align: 'right' }); doc.text(formatCurrency(ventaSeleccionada.enganche ?? 0), totalsValueStartX, yOffset, { align: 'right' }); yOffset += totalsLineHeight; }
-      // INICIO DE CAMBIOS PARA FORMA DE PAGO EN PDF
+      // Determinar el monto a mostrar como "Total Pagado" en el PDF
+      // Si es una venta a crédito:
+      //   - Si enganche está presente y > 0, muestra el enganche.
+      //   - De lo contrario (no enganche o enganche es 0), muestra $0.
+      // Para otros métodos de pago, muestra el total de la venta.
+      const displayTotalPagadoPdf = 
+        ventaSeleccionada.forma_pago === 'Crédito cliente'
+          ? (ventaSeleccionada.enganche && ventaSeleccionada.enganche > 0 ? ventaSeleccionada.enganche : 0)
+          : ventaSeleccionada.total;
+      
+      if (ventaSeleccionada.forma_pago === 'Crédito cliente' && (ventaSeleccionada.enganche ?? 0) > 0) { 
+        doc.text('Enganche Pagado:', totalsValueStartX - totalsLabelWidth, yOffset, { align: 'right' }); 
+        doc.text(formatCurrency(ventaSeleccionada.enganche ?? 0), totalsValueStartX, yOffset, { align: 'right' }); 
+        yOffset += totalsLineHeight; 
+      }
       doc.text('Forma de Pago:', totalsValueStartX - totalsLabelWidth, yOffset, { align: 'right' });
       doc.text(ventaSeleccionada.forma_pago || 'Desconocida', totalsValueStartX, yOffset, { align: 'right' });
       yOffset += totalsLineHeight * 1.5; // Espacio extra antes del total
-      // FIN DE CAMBIOS
-      doc.setFontSize(finalTotalFontSize); doc.setFont(undefined, 'bold'); doc.text('TOTAL PAGADO:', totalsValueStartX - totalsLabelWidth, yOffset, { align: 'right' }); doc.setTextColor(40,167,69); doc.text(formatCurrency(ventaSeleccionada.total ?? 0), totalsValueStartX, yOffset, { align: 'right' }); doc.setTextColor(0,0,0); yOffset += finalTotalFontSize + 5;
+
+      doc.setFontSize(finalTotalFontSize); doc.setFont(undefined, 'bold'); doc.text('TOTAL PAGADO:', totalsValueStartX - totalsLabelWidth, yOffset, { align: 'right' }); doc.setTextColor(40,167,69); doc.text(formatCurrency(displayTotalPagadoPdf), totalsValueStartX, yOffset, { align: 'right' }); doc.setTextColor(0,0,0); yOffset += finalTotalFontSize + 5;
        if (ventaSeleccionada.forma_pago === 'Crédito cliente') {
            const balFontSize=10, balValFontSize=12, balNoteSize=8, balLineHeight=5; const curBal=(clienteBalanceTicket??0);
            doc.setFontSize(balFontSize); doc.setFont(undefined,'bold'); doc.text('BALANCE DE CUENTA ACTUAL',margin,yOffset); yOffset+=balLineHeight*2;
            doc.setFontSize(balValFontSize+2); doc.setFont(undefined,'bold'); doc.text('Saldo Actual Cliente:',margin+10,yOffset);
            if(curBal > 0) doc.setTextColor(220,53,69); else doc.setTextColor(40,167,69);
            doc.text(formatCurrency(curBal),doc.internal.pageSize.getWidth()-margin,yOffset,{align:'right'}); doc.setTextColor(0,0,0); yOffset+=balLineHeight*2;
-           doc.setFontSize(balNoteSize); doc.setFont(undefined,'normal'); doc.text(curBal>0?'(Saldo positivo indica deuda del cliente)':'(Saldo negativo indica crédito a favor del cliente)',margin,yOffset); yOffset+=balLineHeight*2;
+           doc.setFontSize(balNoteSize); doc.setFont(undefined,'normal'); doc.text(curBal > 0 ? '(Saldo positivo indica deuda del cliente)' : (curBal < 0 ? '(Saldo negativo indica crédito a favor del cliente)' : ''), margin, yOffset); yOffset+=balLineHeight*2;
        }
       const footFontSize=8, footLineHeight=4; doc.setFontSize(footFontSize); doc.setFont(undefined,'normal');
       doc.text('¡Gracias por tu compra!',margin,yOffset); yOffset+=footLineHeight; doc.text('Visítanos de nuevo pronto.',margin,yOffset);

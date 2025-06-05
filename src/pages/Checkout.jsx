@@ -399,12 +399,23 @@ export default function Checkout() {
                 const montoACredito = montoRestanteAPagarPorCliente - (parseFloat(enganche) || 0); // Usar montoRestanteAPagarPorCliente
                 const movimientosCuenta = [];
                 if (montoACredito > 0) movimientosCuenta.push({ cliente_id: infoClienteConSaldo.client_id, tipo_movimiento: 'CARGO_VENTA', monto: montoACredito, referencia_venta_id: ventaId, descripcion: `Venta ${codigo}` });
-                if ((parseFloat(enganche) || 0) > 0) movimientosCuenta.push({ cliente_id: infoClienteConSaldo.client_id, tipo_movimiento: 'ABONO_ENGANCHE', monto: -(parseFloat(enganche) || 0), referencia_venta_id: ventaId, descripcion: `Enganche Venta ${codigo}` });
+                // ELIMINAR EL SIGUIENTE BLOQUE (ABONO_ENGANCHE)
+                // if ((parseFloat(enganche) || 0) > 0) movimientosCuenta.push({ cliente_id: infoClienteConSaldo.client_id, tipo_movimiento: 'ABONO_ENGANCHE', monto: -(parseFloat(enganche) || 0), referencia_venta_id: ventaId, descripcion: `Enganche Venta ${codigo}` });
                 if (movimientosCuenta.length > 0) {
                     const { error: errMovs } = await supabase.from('movimientos_cuenta_clientes').insert(movimientosCuenta);
                     if (errMovs) { await supabase.from('ventas').delete().eq('id', ventaId); throw errMovs; }
                 }
+            } else if (montoRestanteAPagarPorCliente > 0) { // Solo registrar pago si aún queda algo por pagar y no es crédito
+                const { error: errorMovPago } = await supabase.from('movimientos_cuenta_clientes').insert([{
+                    cliente_id: infoClienteConSaldo.client_id,
+                    tipo_movimiento: 'PAGO_VENTA',
+                    monto: -(montoRestanteAPagarPorCliente), // Monto restante a pagar
+                    referencia_venta_id: ventaId,
+                    descripcion: `Pago Venta ${codigo} (${paymentType})`,
+                }]);
+                if (errorMovPago) throw errorMovPago;
             }
+
 
             for (const p of productosVenta) {
                 const { data: prodCheck } = await supabase.from('productos').select('stock').eq('id', p.id).single();
@@ -424,12 +435,27 @@ export default function Checkout() {
             const ticketFormattedDate = formatTicketDateTime(now.toISOString());
 
             let balanceFinalClienteParaTicket = infoClienteConSaldo?.balance !== undefined ? infoClienteConSaldo.balance : 0;
-            if (usarSaldoFavor && montoAplicadoDelSaldoFavor > 0) balanceFinalClienteParaTicket += montoAplicadoDelSaldoFavor;
+            // La actualización del balance del cliente en el ticket debe reflejar el impacto de esta venta
+            // Si hubo uso de saldo a favor, ese monto ya redujo el balance
+            // Si fue a crédito, la deuda aumenta
+            // Si fue un pago, el balance disminuye (si no es a crédito)
+            
+            // Si se usó saldo a favor, el balance inicial del cliente se reducirá por el monto aplicado
+            // Esto ya se reflejará en la próxima consulta al backend, pero para el ticket actual lo ajustamos
+            // NO se necesita ajustar el balanceFinalClienteParaTicket con montoAplicadoDelSaldoFavor aquí si ya se insertó como 'USO_SALDO_VENTA'
+
+            // Para ventas a crédito: la deuda neta se añade al balance del cliente
             if (paymentType === 'Crédito cliente') {
-                const montoACredito = montoRestanteAPagarPorCliente - (parseFloat(enganche) || 0); // Usar montoRestanteAPagarPorCliente
-                if (montoACredito > 0) balanceFinalClienteParaTicket += montoACredito;
-                if ((parseFloat(enganche) || 0) > 0) balanceFinalClienteParaTicket -= (parseFloat(enganche) || 0);
+                const montoACreditoReal = montoRestanteAPagarPorCliente - (parseFloat(enganche) || 0);
+                if (montoACreditoReal > 0) {
+                     // Solo sumamos la deuda pendiente, el enganche ya está implícito en la deuda neta
+                    balanceFinalClienteParaTicket += montoACreditoReal;
+                }
+            } else if (montoRestanteAPagarPorCliente > 0) { // Si es otro tipo de pago y hubo un monto final
+                // Este pago reduce el balance del cliente
+                balanceFinalClienteParaTicket -= montoRestanteAPagarPorCliente;
             }
+
 
             const ticketData = {
                 codigo_venta: codigo,
@@ -438,8 +464,8 @@ export default function Checkout() {
                 fecha: ticketFormattedDate,
                 productosVenta: productosVenta.map(p => ({ ...p })),
                 originalSubtotal, discountAmount,
-                forma_pago: montoRestanteAPagarPorCliente === 0 && montoAplicadoDelSaldoFavor > 0 ? 'SALDO_A_FAVOR' : paymentType, // Usar montoRestanteAPagarPorCliente
-                enganche: parseFloat(enganche) || 0, gastos_envio: parseFloat(gastosEnvio) || 0, total_final: montoRestanteAPagarPorCliente, // ¡CORREGIDO: total_final para el ticket es el monto pagado!
+                forma_pago: montoRestanteAPagarPorCliente === 0 && montoAplicadoDelSaldoFavor > 0 ? 'SALDO_A_FAVOR' : paymentType,
+                enganche: parseFloat(enganche) || 0, gastos_envio: parseFloat(gastosEnvio) || 0, total_final: montoRestanteAPagarPorCliente,
                 monto_credito_aplicado: montoAplicadoDelSaldoFavor,
                 balance_cuenta: balanceFinalClienteParaTicket,
             };
@@ -541,7 +567,7 @@ export default function Checkout() {
                     <span className="font-semibold text-lg">{totalItems} item{totalItems !== 1 ? 's' : ''}</span>
                     {infoClienteConSaldo?.client_name && <span className="ml-4 text-sm text-gray-300">Cliente: {infoClienteConSaldo.client_name}</span>}
                 </div>
-                <div className="flex-1 text-right"><span className="font-bold text-xl">{formatCurrency(montoRestanteAPagarPorCliente)}</span></div> {/* CORREGIDO: Usar montoRestanteAPagarPorCliente */}
+                <div className="flex-1 text-right"><span className="font-bold text-xl">{formatCurrency(montoRestanteAPagarPorCliente)}</span></div>
                 {processing && <div className="ml-4 text-sm font-semibold">Procesando…</div>}
                 <div className="ml-4"><ChevronRight className="w-6 h-6" /></div>
             </div>
@@ -556,7 +582,7 @@ export default function Checkout() {
                         <>
                             <button onClick={() => setShowSaleModal(false)} className="px-4 py-2 bg-dark-700 text-gray-300 rounded-md hover:bg-dark-600" disabled={processing}>Cancelar</button>
                             <button onClick={handleFinalize}
-                                disabled={processing || (montoRestanteAPagarPorCliente > 0 && !paymentType) || (paymentType === 'Crédito cliente' && (montoRestanteAPagarPorCliente - (parseFloat(enganche) || 0)) < 0 && montoRestanteAPagarPorCliente !==0) || !currentUser || loadingUserLocal} /* CORREGIDO: Usar montoRestanteAPagarPorCliente */
+                                disabled={processing || (montoRestanteAPagarPorCliente > 0 && !paymentType) || (paymentType === 'Crédito cliente' && (montoRestanteAPagarPorCliente - (parseFloat(enganche) || 0)) < 0 && montoRestanteAPagarPorCliente !==0) || !currentUser || loadingUserLocal}
                                 className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 disabled:opacity-50">
                                 {processing ? 'Confirmando…' : 'Confirmar Venta'}
                             </button>
@@ -581,7 +607,7 @@ export default function Checkout() {
                         usarSaldoFavor={usarSaldoFavor}
                         setUsarSaldoFavor={setUsarSaldoFavor}
                         montoAplicadoDelSaldoFavor={montoAplicadoDelSaldoFavor}
-                        totalFinalAPagar={montoRestanteAPagarPorCliente} // CORREGIDO: Pasar montoRestanteAPagarPorCliente al componente de pago
+                        totalFinalAPagar={montoRestanteAPagarPorCliente}
                         paymentType={paymentType}
                         setPaymentType={setPaymentType}
                         discountType={discountType}
