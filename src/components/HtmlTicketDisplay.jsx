@@ -1,6 +1,8 @@
 // src/components/HtmlTicketDisplay.jsx
 import React, { useRef } from 'react';
-import { Download, X } from 'lucide-react';
+import { Download, X, Share2 } from 'lucide-react'; // Importar Share2
+import html2canvas from 'html2canvas'; // Importar html2canvas
+import toast from 'react-hot-toast'; // Asegurarse de importar toast si no lo está
 
 // Helper simple para formatear moneda
 const formatCurrency = (amount) => {
@@ -39,195 +41,182 @@ export default function HtmlTicketDisplay({ saleData, onClose }) {
         balance_cuenta
     } = saleData;
 
-    const balanceClass = balance_cuenta > 0 ? 'negative' : 'positive';
-    const balanceNote = balance_cuenta > 0
-        ? '(Saldo positivo indica deuda del cliente)'
-        : '(Saldo negativo indica crédito a favor del cliente)';
+    // Lógica para el "Total Pagado" según los nuevos requisitos
+    const displayTotalPagado =
+        forma_pago === 'Crédito cliente'
+            ? (enganche && enganche > 0 ? enganche : 0)
+            : total_final;
 
-    const handleDownloadTicket = async () => {
+    const handleShareTicket = async () => {
         if (!ticketRef.current) {
-            console.error("Elemento del ticket no encontrado.");
+            console.error("Elemento del ticket no encontrado para compartir.");
+            toast.error("No se pudo preparar el ticket para compartir.");
             return;
         }
 
-        const captureAndDownload = async () => {
-             try {
-                 // Asegurarse que html2canvas esté cargado
-                 if (typeof html2canvas === 'undefined') {
-                     console.error('html2canvas no está cargado.');
-                     alert('Error al intentar descargar: librería no cargada.');
-                     return;
-                 }
+        try {
+            // Asegurarse que html2canvas esté cargado
+            if (typeof html2canvas === 'undefined') {
+                console.error('html2canvas no está cargado.');
+                toast.error('Error al intentar compartir: librería no cargada.');
+                return;
+            }
 
-                 const canvas = await html2canvas(ticketRef.current, {
-                     scale: 2,
-                     logging: true,
-                     useCORS: true
-                 });
-                 const image = canvas.toDataURL('image/jpeg', 0.9);
-                 const link = document.createElement('a');
-                 link.href = image;
-                 link.download = `ticket_venta_${codigo_venta || 'sin_codigo'}.jpg`;
-                 document.body.appendChild(link);
-                 link.click();
-                 document.body.removeChild(link);
-             } catch (error) {
-                 console.error("Error al generar o descargar la imagen del ticket:", error);
-                 alert("No se pudo descargar el ticket como imagen. Intenta de nuevo.");
-             }
-        };
+            const canvas = await html2canvas(ticketRef.current, {
+                scale: 2, // Aumentar escala para mejor resolución
+                logging: false, // Desactivar logging de html2canvas
+                useCORS: true, // Importante si hay imágenes de otra origen
+                backgroundColor: '#ffffff' // ESTO ASEGURA EL FONDO BLANCO EN LA IMAGEN GENERADA
+            });
+            const imageDataUrl = canvas.toDataURL('image/png', 0.9); // Convertir a PNG para mejor calidad y transparencia si aplica
 
-        // Cargar html2canvas dinámicamente si no está disponible globalmente
-        if (typeof html2canvas === 'undefined') {
-             const script = document.createElement('script');
-             script.src = 'https://html2canvas.hertzen.com/dist/html2canvas.min.js';
-             script.async = true;
-             script.onload = () => captureAndDownload();
-             script.onerror = () => {
-                console.error('Error loading html2canvas script.');
-                alert('No se pudo cargar la librería para descargar el ticket.');
-             }
-             document.body.appendChild(script);
-        } else {
-             captureAndDownload();
+            // Convertir Data URL a Blob y luego a File para la API de compartir
+            const blob = await (await fetch(imageDataUrl)).blob();
+            const filename = `ticket_venta_${codigo_venta || 'sin_codigo'}.png`;
+            const file = new File([blob], filename, { type: 'image/png' });
+
+            if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+                await navigator.share({
+                    title: `Ticket de Venta ${codigo_venta || ''}`,
+                    text: `Aquí tienes tu ticket de compra de Perfumes Elisa. Cliente: ${cliente?.nombre || 'N/A'}. Total: ${formatCurrency(displayTotalPagado)}.`,
+                    files: [file],
+                });
+                toast.success('Ticket compartido exitosamente.');
+            } else {
+                toast.info('La función de compartir no está disponible en este dispositivo. Puedes descargarlo.');
+                // Fallback para descargar si no se puede compartir
+                const link = document.createElement('a');
+                link.href = imageDataUrl;
+                link.download = filename;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }
+        } catch (error) {
+            if (error.name === 'AbortError') {
+                toast('Compartir cancelado.');
+            } else {
+                console.error("Error al generar o compartir la imagen del ticket:", error);
+                toast.error("No se pudo compartir el ticket como imagen. Intenta de nuevo.");
+            }
         }
     };
 
     return (
         // Overlay del modal
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[100] p-2" onClick={onClose}>
-            {/* Contenedor principal del modal */}
+            {/* Contenedor principal del modal - Mantiene el estilo oscuro para la UI */}
             <div
                 className="bg-dark-800 rounded-lg shadow-dropdown-dark border border-dark-700 overflow-y-auto max-h-[95vh] w-full"
                 style={{ maxWidth: '400px' }}
                 onClick={(e) => e.stopPropagation()}
             >
-                {/* Estilos CSS para el ticket */}
-                <style>
-                    {`
-                    .ticket-content-printable {
-                        font-family: 'Arial', sans-serif;
-                        color: #e5e7eb;
-                        padding: 20px;
-                        line-height: 1.5;
-                        background-color: #1f2937;
-                    }
-                    .divider { border-top: 1px dashed #4b5563; margin: 12px 0; }
-                    .ticket-header { display: flex; flex-direction: column; align-items: center; margin-bottom: 15px; text-align: center; }
-                    .ticket-header .header-top { display: flex; align-items: center; justify-content: center; margin-bottom: 8px; width:100%;}
-                    .ticket-header img { margin-right: 10px; height: 50px; width: 50px; object-fit: contain; }
-                    .ticket-title-block { text-align: left; }
-                    .ticket-title-block h2 { font-size: 1.1rem; font-weight: bold; margin-bottom: 2px; color: #f9fafb; }
-                    .ticket-title-block p { font-size: 0.8rem; color: #9ca3af; margin-top: 0; }
-                    .contact-info { font-size: 0.8rem; color: #9ca3af; margin-top: 2px; text-align: center; }
-                    .info-grid { display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; font-size: 0.85rem; color: #d1d5db; margin-bottom:10px; }
-                    .info-grid strong { font-weight: bold; color: #f3f4f6; }
-                    .product-list-header { font-weight: bold; font-size: 0.9rem; margin-bottom: 5px; color: #f3f4f6;}
-                    .product-item { display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 5px; padding-bottom:5px; border-bottom: 1px dotted #374151; }
-                    .product-item:last-child { border-bottom: none; margin-bottom: 0; padding-bottom:0;}
-                    .product-item .name { flex-grow: 1; margin-right: 8px; word-break: break-word; }
-                    .product-item .details { white-space: nowrap; }
-                    .totals-section { margin-top:10px; padding-top:10px; border-top: 1px dashed #4b5563;}
-                    .totals-row { display: flex; justify-content: space-between; font-size: 0.85rem; color: #d1d5db; margin-bottom: 5px; }
-                    .totals-row.total-final-amount { font-size: 1.1rem; font-weight: bold; color: #10b981; margin-top: 10px; border-top: 1px solid #4b5563; padding-top: 10px; }
-                    .balance-section { margin-top: 15px; padding-top: 10px; border-top: 1px dashed #4b5563; text-align: center; font-size: 0.85rem; color: #d1d5db; }
-                    .balance-value { font-size: 1.05rem; font-weight: bold; margin-top: 3px; }
-                    .balance-value.positive { color: #10b981; }
-                    .balance-value.negative { color: #ef4444; }
-                    .thank-you { text-align: center; font-size: 0.8rem; color: #9ca3af; margin-top: 15px; padding-top: 10px; border-top: 1px dashed #4b5563; }
-                    .thank-you p { margin: 2px 0; }
-                    `}
-                </style>
-
-                <div className="ticket-content-printable" ref={ticketRef}>
-                    <div className="ticket-header">
-                        <div className="header-top">
-                            <img src="/images/PERFUMESELISA.png" alt="Logo Perfumes Elisa" />
-                            <div className="ticket-title-block">
-                                <h2>Ticket de Venta</h2>
-                                <p>#{saleData?.codigo_venta || 'N/A'}</p>
+                {/* El contenido del ticket se renderiza con estilos que serán óptimos para el fondo BLANCO de la imagen capturada */}
+                {/* Los estilos inline y las clases aquí son para el contenido que html2canvas verá */}
+                <div className="ticket-content-printable" ref={ticketRef} style={{
+                    fontFamily: 'Arial, sans-serif',
+                    color: '#212529', /* Texto oscuro para fondo blanco */
+                    padding: '20px',
+                    lineHeight: '1.5',
+                    backgroundColor: '#ffffff' /* Asegura el fondo blanco para el contenido a capturar */
+                }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '15px', textAlign: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '8px', width: '100%' }}>
+                            <img src="/images/PERFUMESELISA.png" alt="Logo Perfumes Elisa" style={{ marginRight: '10px', height: '50px', width: '50px', objectFit: 'contain' }} />
+                            <div style={{ textAlign: 'left' }}>
+                                <h2 style={{ fontSize: '1.1rem', fontWeight: 'bold', margin: '0', color: '#000' }}>Ticket de Venta</h2>
+                                <p style={{ fontSize: '0.8rem', color: '#6c757d', margin: '0' }}>#{saleData?.codigo_venta || 'N/A'}</p>
                             </div>
                         </div>
-                        <p className="contact-info">81 3080 4010 - Ciudad Apodaca, N.L.</p>
+                        <p style={{ fontSize: '0.8rem', color: '#6c757d', marginTop: '2px', textAlign: 'center' }}>81 3080 4010 - Ciudad Apodaca, N.L.</p>
                     </div>
-                    <div className="divider"></div>
-                    <div className="info-grid">
+                    <div style={{ borderTop: '1px dashed #adb5bd', margin: '12px 0' }}></div> {/* Divisor */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '2px 8px', fontSize: '0.85rem', color: '#343a40', marginBottom: '10px' }}>
                         <p><strong>Cliente:</strong></p><p>{saleData?.cliente?.nombre || 'N/A'}</p>
                         {saleData?.cliente?.telefono && saleData.cliente.telefono !== 'N/A' && <> <p><strong>Teléfono:</strong></p><p>{saleData.cliente.telefono}</p> </>}
                         <p><strong>Vendedor:</strong></p><p>{saleData?.vendedor?.nombre || 'N/A'}</p>
                         <p><strong>Fecha:</strong></p><p>{fecha || 'N/A'}</p>
                     </div>
-                    <div className="divider"></div>
-                    <div className="mb-4">
-                        <h3 className="product-list-header">Detalle de Venta:</h3>
+                    <div style={{ borderTop: '1px dashed #adb5bd', margin: '12px 0' }}></div> {/* Divisor */}
+                    <div style={{ marginBottom: '4px' }}>
+                        <h3 style={{ fontWeight: 'bold', fontSize: '0.9rem', marginBottom: '5px', color: '#000' }}>Detalle de Venta:</h3>
                         {saleData?.productosVenta && saleData.productosVenta.length > 0 ? (
                             saleData.productosVenta.map(p => (
-                                <div className="product-item" key={p.id || p.producto_id}>
-                                    <span className="name">{p.nombre || p.nombreProducto}</span>
-                                    <span className="details">{p.cantidad} x {formatCurrency(p.precio_unitario)} = {formatCurrency(p.total_parcial)}</span>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '5px', paddingBottom: '5px', borderBottom: '1px dotted #adb5bd' }} key={p.id || p.producto_id}>
+                                    {/* Mostrar el valor del producto correctamente */}
+                                    <span style={{ flexGrow: 1, marginRight: '8px', wordBreak: 'break-word' }}>{p.nombre || p.nombreProducto}</span>
+                                    <span style={{ whiteSpace: 'nowrap' }}>{p.cantidad} x {formatCurrency(p.precio_unitario)} = {formatCurrency(p.total_parcial)}</span>
                                 </div>
                             ))
                         ) : (
-                            <p className="text-gray-400 text-center">No hay productos en la venta.</p>
+                            <p style={{ color: '#6c757d', textAlign: 'center' }}>No hay productos en la venta.</p>
                         )}
                     </div>
-                    <div className="divider"></div>
-                    <div className="text-right totals-section">
-                        <div className="totals-row">
+                    <div style={{ borderTop: '1px dashed #adb5bd', margin: '12px 0' }}></div> {/* Divisor */}
+                    <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px dashed #adb5bd', textAlign: 'right' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: '#343a40', marginBottom: '5px' }}>
                             <span>Subtotal:</span>
                             <span>{formatCurrency(saleData?.originalSubtotal || 0)}</span>
                         </div>
                         {(saleData?.discountAmount || 0) > 0 && (
-                            <div className="totals-row" style={{color: '#ef4444'}}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: '#dc3545', marginBottom: '5px' }}>
                                  <span>Descuento:</span>
                                  <span>- {formatCurrency(saleData?.discountAmount || 0)}</span>
                             </div>
                         )}
                          {(saleData?.gastos_envio || 0) > 0 && (
-                             <div className="totals-row">
+                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: '#343a40', marginBottom: '5px' }}>
                                  <span>Gastos de Envío:</span>
                                  <span>{formatCurrency(saleData?.gastos_envio || 0)}</span>
                              </div>
                          )}
                         {(saleData?.monto_credito_aplicado || 0) > 0 && (
-                            <div className="totals-row" style={{ color: '#60a5fa' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: '#007bff', marginBottom: '5px' }}>
                                 <span>Saldo a Favor Aplicado:</span>
                                 <span>- {formatCurrency(saleData.monto_credito_aplicado)}</span>
                             </div>
                         )}
-                         {saleData?.forma_pago === 'Crédito cliente' && (saleData?.enganche || 0) > 0 && (
-                             <div className="totals-row">
+                         {/* Enganche siempre se muestra si es pago a crédito y enganche > 0 */}
+                         {forma_pago === 'Crédito cliente' && (saleData?.enganche || 0) > 0 && (
+                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: '#343a40', marginBottom: '5px' }}>
                                  <span>Enganche Pagado:</span>
                                  <span>{formatCurrency(saleData?.enganche || 0)}</span>
                              </div>
                          )}
-                        <div className="totals-row total-final-amount">
+                        {/* TOTAL PAGADO - Modificado según los requisitos */}
+                        <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#28a745', marginTop: '10px', borderTop: '1px solid #adb5bd', paddingTop: '10px', display: 'flex', justifyContent: 'space-between' }}>
                              <span>TOTAL PAGADO:</span>
-                             <span>{formatCurrency(saleData?.total_final || 0)}</span>
+                             <span>{formatCurrency(displayTotalPagado)}</span>
+                        </div>
+                        {/* FORMA DE PAGO siempre visible */}
+                        <div style={{ fontWeight: 'bold', color: '#000', marginTop: '5px', paddingTop: '5px', display: 'flex', justifyContent: 'space-between' }}>
+                             <span>Forma de Pago:</span>
+                             <span>{forma_pago || 'N/A'}</span>
                         </div>
                     </div>
 
                     {saleData?.forma_pago === 'Crédito cliente' && (
-                         <div className="balance-section">
-                            <p><strong>Balance de Cuenta Actual:</strong></p>
-                            <p className={`balance-value ${balanceClass}`}>
-                                {formatCurrency(saleData.balance_cuenta)}
+                         <div style={{ marginTop: '15px', paddingTop: '10px', borderTop: '1px dashed #adb5bd', textAlign: 'center', fontSize: '0.85rem', color: '#343a40' }}>
+                            <p><strong>Por pagar:</strong></p>
+                            <p style={{ fontSize: '1.05rem', fontWeight: 'bold', marginTop: '3px', color: balance_cuenta > 0 ? '#dc3545' : '#28a745' }}>
+                                {formatCurrency(balance_cuenta)}
                             </p>
-                            <p className="text-xs text-gray-500 mt-1">{balanceNote}</p>
+                            {/* Mensaje de saldo quitado según los requisitos */}
                         </div>
                     )}
-                    <div className="thank-you">
-                        <p>¡Gracias por tu compra!</p>
-                        <p>Visítanos de nuevo pronto.</p>
+                    <div style={{ textAlign: 'center', fontSize: '0.8rem', color: '#6c757d', marginTop: '15px', paddingTop: '10px', borderTop: '1px dashed #adb5bd' }}>
+                        <p style={{ margin: '2px 0' }}>¡Gracias por tu compra!</p>
+                        <p style={{ margin: '2px 0' }}>Visítanos de nuevo pronto.</p>
                     </div>
                 </div>
+                {/* Los botones de compartir/cerrar se mantienen en el estilo oscuro del modal */}
                 <div className="p-4 text-center flex justify-center space-x-4 border-t border-dark-700 mt-2">
                     <button
-                        onClick={handleDownloadTicket}
-                        className="px-6 py-2 bg-success-600 text-white rounded-md hover:bg-success-700 transition-colors flex items-center"
+                        onClick={handleShareTicket} // Usar la nueva función para compartir
+                        className="px-6 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 transition-colors flex items-center"
                     >
-                        <Download size={18} className="mr-1.5" />
-                        Descargar Ticket
+                        <Share2 size={18} className="mr-1.5" />
+                        Compartir Ticket
                     </button>
                     <button
                         onClick={onClose}
