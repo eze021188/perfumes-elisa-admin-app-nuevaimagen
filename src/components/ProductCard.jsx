@@ -53,8 +53,9 @@ export default function ProductCard({ producto, onClick, showStock = false, isRe
 
       {/* Información principal (nombre, categoría, stock) - Crece para ocupar espacio */}
       <div className="flex-1 min-w-0 mr-3">
-        {/* Nombre del producto: Truncar a una línea, altura fija para estabilidad */}
-        <p className="font-medium text-gray-200 truncate h-4 overflow-hidden">{producto.nombre || 'Producto sin nombre'}</p> 
+        {/* CAMBIO CLAVE AQUÍ: Reducir el ancho de la columna de nombre al 50% y permitir segunda línea */}
+        {/* Se usa 'w-1/2' para el 50% del ancho disponible para flex-grow y se permite que el texto se envuelva ('whitespace-normal'). */}
+        <p className="font-medium text-gray-200 w-1/2 overflow-hidden" style={{ minHeight: '2.5em', maxHeight: '2.5em', whiteSpace: 'normal', lineHeight: '1.2em' }}>{producto.nombre || 'Producto sin nombre'}</p> 
         {/* Categoría: Truncar a una línea, altura fija */}
         <p className="text-gray-400 text-[11px] truncate h-3.5 overflow-hidden">{producto.categoria || 'Sin categoría'}</p>
         {/* Stock: Altura fija, colores condicionales */}
