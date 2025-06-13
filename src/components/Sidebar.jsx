@@ -3,17 +3,20 @@ import { Link, useLocation } from 'react-router-dom';
 import {
   Home, ShoppingCart, ClipboardList, Package, Users,
   DollarSign, BarChart3, Settings, Bell, User, X,
-  LayoutDashboard, FileText, Store, PackageSearch, Receipt, Shield, Wallet
+  LayoutDashboard, FileText, Store, PackageSearch, Receipt, Shield, Wallet,
+  Coins // <-- ¡NUEVO ÍCONO SUGERIDO PARA GESTIÓN DE PRECIOS!
 } from 'lucide-react';
 
 export default function Sidebar({ isOpen, toggleSidebar }) {
-  const location = useLocation(); // Para resaltar el enlace activo
+  const location = useLocation();
 
   const navItems = [
     { name: 'Inicio', icon: LayoutDashboard, path: '/' },
     { name: 'Checkout', icon: ShoppingCart, path: '/checkout' },
     { name: 'Presupuestos', icon: FileText, path: '/presupuestos/crear' },
     { name: 'Productos', icon: Store, path: '/productos' },
+    // NUEVO ELEMENTO EN EL SIDEBAR:
+    { name: 'Gestión Precios', icon: Coins, path: '/gestion-precios' }, // <-- ¡NUEVO ENLACE!
     { name: 'Clientes', icon: Users, path: '/clientes' },
     { name: 'Compras', icon: PackageSearch, path: '/compras' },
     { name: 'Ventas', icon: Receipt, path: '/ventas' },
@@ -41,19 +44,15 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
         lg:translate-x-0 lg:flex lg:flex-col
       `}>
         {/* Contenido del Sidebar */}
-        <div className="flex flex-col items-center justify-center mb-8 h-24"> {/* Centrado y altura para el logo */}
-            <Link to="/" className="flex flex-col items-center justify-center h-full" onClick={toggleSidebar}> {/* Centrado */}
-                {/* Logo de la empresa - Más grande y centrado */}
+        <div className="flex flex-col items-center justify-center mb-8 h-24">
+            <Link to="/" className="flex flex-col items-center justify-center h-full" onClick={toggleSidebar}>
                 <img
                     src="/images/PERFUMESELISA.png"
                     alt="Perfumes Elisa Logo"
-                    className="h-40 w-auto object-contain" // Ajustado para ser más grande y centrado
+                    className="h-40 w-auto object-contain"
                 />
-                {/* El texto "Perfumes Elisa" y el comentario han sido eliminados */}
-                {/* <span className="text-base font-bold md:text-lg lg:text-xl text-gray-100 light:text-light-800">Perfumes Elisa</span> */}
             </Link>
-            {/* Botón de cerrar sidebar en móvil (solo visible en móvil) */}
-            <button onClick={toggleSidebar} className="absolute top-4 right-4 lg:hidden text-gray-400 hover:text-gray-100 light:text-light-600 light:hover:text-light-800"> {/* Posición absoluta para botón de cerrar */}
+            <button onClick={toggleSidebar} className="absolute top-4 right-4 lg:hidden text-gray-400 hover:text-gray-100 light:text-light-600 light:hover:text-light-800">
                 <X size={24} />
             </button>
         </div>

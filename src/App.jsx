@@ -5,10 +5,10 @@ import { Toaster } from 'react-hot-toast';
 
 // Importa tus Contextos
 import { ClientesProvider } from './contexts/ClientesContext';
-import { ProductosProvider } from './contexts/ProductosContext'; // Asegúrate de que el archivo sea ProductosContext.jsx
-import { ComprasProvider } from './contexts/ComprasContext'; // <-- Nombre de archivo corregido
+import { ProductosProvider } from './contexts/ProductosContext';
+import { ComprasProvider } from './contexts/ComprasContext';
 // >>> Importa tu nuevo AuthProvider y useAuth <<<
-import { AuthProvider, useAuth } from './contexts/AuthContext'; // Asegúrate de que la ruta sea correcta
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 
 // Importa la nueva página de Crear Presupuesto
 import CrearPresupuesto from './pages/CrearPresupuesto';
@@ -21,7 +21,7 @@ import ResetPasswordCallback from './pages/ResetPasswordCallback';
 import InviteCallback from './pages/InviteCallback';
 
 // Layout y páginas protegidas (importadas del directorio pages)
-import DashboardLayout from './layouts/DashboardLayout.jsx'; // Tu layout principal
+import DashboardLayout from './layouts/DashboardLayout.jsx';
 import Home from './pages/Home';
 import Checkout from './pages/Checkout';
 import Productos from './pages/Productos';
@@ -32,13 +32,16 @@ import Reportes from './pages/Reportes';
 import UsersPermissions from './pages/UsersPermissions';
 import SaldosClientes from './pages/SaldosClientes';
 import Perfil from './pages/Perfil';
-import Settings from './pages/Settings'; // Ya importado para las notificaciones
+import Settings from './pages/Settings';
 
 // Importa el componente de la página de Notificaciones
 import Notifications from './pages/Notifications';
 
 // !!! Importa el componente de la NUEVA página de Configuración de Usuario !!!
-import UserSettings from './pages/UserSettings'; // <-- ¡NUEVA IMPORTACIÓN!
+import UserSettings from './pages/UserSettings';
+
+// Importa el componente de la NUEVA página de Gestión de Precios
+import GestionPrecios from './pages/GestionPrecios'; // <-- ¡NUEVA IMPORTACIÓN!
 
 
 // >>> Componente para proteger rutas usando el contexto de Auth <<<
@@ -152,11 +155,15 @@ export default function App() {
                   <Route path="saldos-clientes" element={<SaldosClientes />} />
                   <Route path="presupuestos/crear" element={<CrearPresupuesto />} />
                   <Route path="perfil" element={<Perfil />} />
-                  <Route path="settings" element={<Settings />} /> {/* Para las configuraciones de Notificaciones */}
-                  <Route path="notifications" element={<Notifications />} /> {/* Para la página de todas las notificaciones */}
+                  <Route path="settings" element={<Settings />} />
+                  <Route path="notifications" element={<Notifications />} />
+
+                  {/* !!! NUEVA RUTA PARA GESTIÓN DE PRECIOS !!! */}
+                  <Route path="gestion-precios" element={<GestionPrecios />} /> {/* <-- ¡NUEVA RUTA! */}
+                  {/* !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! */}
 
                   {/* !!! NUEVA RUTA PARA CONFIGURACIÓN DE USUARIO (Idioma, Tema, Zona Horaria) !!! */}
-                  <Route path="user-settings" element={<UserSettings />} /> {/* <-- ¡NUEVA RUTA! */}
+                  <Route path="user-settings" element={<UserSettings />} />
                   {/* !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! */}
 
 
