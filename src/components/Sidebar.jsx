@@ -1,29 +1,28 @@
+// src/components/Sidebar.jsx
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
   Home, ShoppingCart, ClipboardList, Package, Users,
   DollarSign, BarChart3, Settings, Bell, User, X,
   LayoutDashboard, FileText, Store, PackageSearch, Receipt, Shield, Wallet,
-  Coins // <-- ¡NUEVO ÍCONO SUGERIDO PARA GESTIÓN DE PRECIOS!
+  Coins // Asegúrate de que este ícono esté importado si lo usas en navItems
 } from 'lucide-react';
 
 export default function Sidebar({ isOpen, toggleSidebar }) {
-  const location = useLocation();
+  const location = useLocation(); // Para resaltar el enlace activo
 
   const navItems = [
     { name: 'Inicio', icon: LayoutDashboard, path: '/' },
     { name: 'Checkout', icon: ShoppingCart, path: '/checkout' },
     { name: 'Presupuestos', icon: FileText, path: '/presupuestos/crear' },
     { name: 'Productos', icon: Store, path: '/productos' },
-    // NUEVO ELEMENTO EN EL SIDEBAR:
-    { name: 'Gestión Precios', icon: Coins, path: '/gestion-precios' }, // <-- ¡NUEVO ENLACE!
+    { name: 'Gestión Precios', icon: Coins, path: '/gestion-precios' }, // Asegúrate de que este ítem esté en tu navItems actual
     { name: 'Clientes', icon: Users, path: '/clientes' },
     { name: 'Compras', icon: PackageSearch, path: '/compras' },
     { name: 'Ventas', icon: Receipt, path: '/ventas' },
     { name: 'Reportes', icon: BarChart3, path: '/reportes' },
     { name: 'Usuarios', icon: Shield, path: '/usuarios' },
     { name: 'Saldos Clientes', icon: Wallet, path: '/saldos-clientes' },
-
   ];
 
   return (
@@ -42,6 +41,8 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
         ${isOpen ? 'translate-x-0' : '-translate-x-full'}
         ${isOpen ? 'flex' : 'hidden'} flex-col
         lg:translate-x-0 lg:flex lg:flex-col
+        
+        max-h-screen overflow-y-auto  /* CAMBIO CLAVE AQUÍ: Permite el desplazamiento vertical */
       `}>
         {/* Contenido del Sidebar */}
         <div className="flex flex-col items-center justify-center mb-8 h-24">
