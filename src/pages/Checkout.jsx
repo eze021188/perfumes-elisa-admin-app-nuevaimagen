@@ -1,9 +1,10 @@
 // src/pages/Checkout.jsx
-import React, { useEffect, useState, useMemo } from 'react';
+// CAMBIO CLAVE: Importar useRef de React
+import React, { useEffect, useState, useMemo, useRef } from 'react'; 
 import { supabase } from '../supabase';
 import { useNavigate, useLocation } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { ChevronRight, Eye, EyeOff, ArrowLeft } from 'lucide-react';
+import { ChevronRight, Eye, EyeOff, ArrowLeft, Share2 } from 'lucide-react'; // Importar Share2 si no está ya
 
 // Components
 import QuickEntryBar from '../components/QuickEntryBar';
@@ -41,7 +42,7 @@ const formatDateTimeForCode = (date) => {
     const hours = String(date.getHours()).padStart(2, '0');
     const minutes = String(date.getMinutes()).padStart(2, '0');
     const seconds = String(date.getSeconds()).padStart(2, '0');
-    return `${year}${month}${day}${hours}${minutes}${seconds}`;
+    return `<span class="math-inline">\{year\}</span>{month}<span class="math-inline">\{day\}</span>{hours}<span class="math-inline">\{minutes\}</span>{seconds}`;
 };
 
 // Helper para formatear fecha para el ticket en zona horaria específica
@@ -99,6 +100,9 @@ export default function Checkout() {
     const [budgetSourceId, setBudgetSourceId] = useState(null);
     const [showHtmlTicket, setShowHtmlTicket] = useState(false);
     const [htmlTicketData, setHtmlTicketData] = useState(null);
+
+    // Ref para la función de compartir ticket de HtmlTicketDisplay
+    const shareTicketRef = useRef(null); // La línea que causaba el error
 
     // useEffect 1: Carga inicial de datos (usuarios, clientes, productos)
     useEffect(() => {
@@ -349,7 +353,7 @@ export default function Checkout() {
     };
 
     const onQuickSaleAdd = ({ nombre, promocion, cantidad, total }) => {
-        const tempId = `quick-${Date.now()}-${Math.random()}`;
+        const tempId = `quick-<span class="math-inline">\{Date\.now\(\)\}\-</span>{Math.random()}`;
         // Para venta rápida, el "promocion" que llega ya es el precio de venta.
         const precioVenta = promocion; 
 
@@ -464,8 +468,8 @@ export default function Checkout() {
                     venta_id: ventaId,
                     producto_id: String(p.id).startsWith('quick-') ? null : p.id,
                     cantidad: p.cantidad,
-                    precio_unitario: p.precio_unitario,
-                    total_parcial: p.total_parcial
+                    precio_unitario: p.precio_unitario, // Ya debe ser el precio final según la jerarquía
+                    total_parcial: p.total_parcial // Ya debe ser el total parcial calculado
                 }]);
             }
 
@@ -490,8 +494,8 @@ export default function Checkout() {
                 fecha: ticketFormattedDate,
                 productosVenta: productosVenta.map(p => ({
                     ...p,
-                    precio_unitario: p.precio_unitario,
-                    total_parcial: p.total_parcial
+                    precio_unitario: p.precio_unitario, // Ya es el precio final
+                    total_parcial: p.total_parcial // Ya es el total parcial
                 })),
                 originalSubtotal,
                 discountAmount,
@@ -525,9 +529,6 @@ export default function Checkout() {
         if (!clienteSeleccionado) return clientes;
         return clientes.filter(c => c.id !== clienteSeleccionado.id);
     }, [clientes, clienteSeleccionado]);
-
-    // Ref para la función de compartir ticket de HtmlTicketDisplay
-    const shareTicketRef = useRef(null);
 
     return (
         <div className="min-h-screen bg-dark-900 p-4 md:p-8 lg:p-12">
