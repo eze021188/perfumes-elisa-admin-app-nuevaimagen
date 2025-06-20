@@ -1,5 +1,5 @@
 // src/pages/Checkout.jsx
-import React, { useEffect, useState, useMemo, useRef } from 'react'; 
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { supabase } from '../supabase';
 import { useNavigate, useLocation } from 'react-router-dom';
 import toast from 'react-hot-toast';
@@ -33,7 +33,7 @@ const formatCurrency = (amount) => {
     });
 };
 
-// Asegurarse que formatDateTimeForCode solo retorne una cadena de texto sin tags HTML ni interpolación
+// Helper para formatear fecha y hora para el código de venta
 const formatDateTimeForCode = (date) => {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -41,7 +41,6 @@ const formatDateTimeForCode = (date) => {
     const hours = String(date.getHours()).padStart(2, '0');
     const minutes = String(date.getMinutes()).padStart(2, '0');
     const seconds = String(date.getSeconds()).padStart(2, '0');
-    // Retorna la cadena directamente, sin ningún envoltorio de JSX o MathJax
     return `${year}${month}${day}${hours}${minutes}${seconds}`;
 };
 
@@ -184,16 +183,17 @@ export default function Checkout() {
             if (budget.presupuesto_items?.length) {
                 const itemsFromBudget = budget.presupuesto_items.map(item => {
                     const fullProductInfo = productos.find(p => p.id === item.producto_id);
-                    // Obtener precio de venta efectivo del presupuesto para que Checkout lo use como precio_unitario
-                    let precioVentaEfectivoPresupuesto = parseFloat(item.precio_unitario) || 0;
+                    // CAMBIO CLAVE: Obtener precio de venta efectivo del presupuesto para que Checkout lo use como precio_unitario
+                    let precioVentaEfectivoPresupuesto = parseFloat(item.precio_unitario) || 0; // Usar el precio unitario del presupuesto directamente
 
                     return {
                         id: item.producto_id,
                         nombre: fullProductInfo?.nombre || item.productos?.nombre || item.descripcion || 'Producto Desconocido',
                         cantidad: parseFloat(item.cantidad) || 0,
-                        promocion: fullProductInfo?.promocion || 0,
-                        precio_normal: fullProductInfo?.precio_normal || 0,
-                        descuento_lote: fullProductInfo?.descuento_lote || 0,
+                        promocion: fullProductInfo?.promocion || 0, // Mantener la promoción original del producto si existe
+                        precio_normal: fullProductInfo?.precio_normal || 0, // Mantener precio_normal original
+                        descuento_lote: fullProductInfo?.descuento_lote || 0, // Asegurarse de tener descuento_lote
+                        // Asignar el precio efectivo del presupuesto a precio_unitario y total_parcial
                         precio_unitario: precioVentaEfectivoPresupuesto,
                         total_parcial: (parseFloat(item.cantidad) || 0) * precioVentaEfectivoPresupuesto,
                         stock: fullProductInfo ? (parseFloat(fullProductInfo.stock) || 0) : 0,
@@ -211,6 +211,8 @@ export default function Checkout() {
             setDiscountType(budget.tipo_descuento || 'Sin descuento');
             setDiscountValue(parseFloat(budget.valor_descuento) || 0);
             setGastosEnvio(parseFloat(budget.gastos_envio) || 0);
+            // La forma de pago del presupuesto no se pasa directamente al modal, pero se puede setear aquí si es un valor predefinido
+            // setPaymentType(budget.forma_pago || ''); // Esto podría ser un problema si el presupuesto tiene forma_pago 'Crédito cliente' y el modal no la gestiona bien al inicio. Se mantiene en blanco para que el usuario la elija.
             setBudgetSourceId(budget.id);
 
             if (location.state?.budgetData) {
@@ -420,7 +422,9 @@ export default function Checkout() {
                 forma_pago: montoRestanteAPagarPorCliente === 0 && montoAplicadoDelSaldoFavor > 0 ? 'SALDO_A_FAVOR' : paymentType,
                 tipo_descuento: discountType,
                 valor_descuento: discountAmount,
-                total: totalAntesDeCredito,
+                // CAMBIO CLAVE AQUÍ: El 'total' de la venta debe ser el monto que el cliente realmente paga o debe,
+                // después de aplicar descuentos y saldo a favor.
+                total: montoRestanteAPagarPorCliente, // Usa el monto que queda por pagar al final
                 monto_credito_aplicado: montoAplicadoDelSaldoFavor,
                 enganche: parseFloat(enganche) || 0,
                 gastos_envio: parseFloat(gastosEnvio) || 0,
@@ -440,16 +444,16 @@ export default function Checkout() {
             }
 
             // CAMBIO CLAVE AQUÍ: Modificación para registro de movimientos de cuenta por forma de pago
-            // Solo CARGO_VENTA para crédito cliente
-            if (paymentType === 'Crédito cliente') {
-                const montoACredito = montoRestanteAPagarPorCliente - (parseFloat(enganche) || 0);
-                if (montoACredito > 0) {
+            // Solo CARGO_VENTA para crédito cliente. Otros pagos no generan movimientos de cuenta aquí.
+            if (paymentType === 'Crédito cliente' && montoRestanteAPagarPorCliente > 0) { // Si hay un monto a crédito pendiente
+                const montoACredito = montoRestanteAPagarPorCliente - (parseFloat(enganche) || 0); // Esto ya es el balance de la venta.
+                if (montoACredito > 0) { // Solo si realmente queda un monto por cargar a crédito
                     const { error: errMovs } = await supabase.from('movimientos_cuenta_clientes').insert([{ cliente_id: infoClienteConSaldo.client_id, tipo_movimiento: 'CARGO_VENTA', monto: montoACredito, referencia_venta_id: ventaId, descripcion: `Venta ${codigo}` }]);
                     if (errMovs) { await supabase.from('ventas').delete().eq('id', ventaId); throw errMovs; }
                 }
             }
-            // Eliminado el bloque `else if (montoRestanteAPagarPorCliente > 0)` para PAGO_VENTA,
-            // ya que transferencias, efectivo, etc. no deben generar movimientos de "saldo a favor".
+            // NO se registra `PAGO_VENTA` para efectivo/transferencia/tarjeta si no hubo crédito pendiente.
+            // Esos ya son pagos directos de la venta y no afectan el "saldo a favor" del cliente.
 
             for (const p of productosVenta) {
                 if (!String(p.id).startsWith('quick-')) {
@@ -465,8 +469,8 @@ export default function Checkout() {
                     venta_id: ventaId,
                     producto_id: String(p.id).startsWith('quick-') ? null : p.id,
                     cantidad: p.cantidad,
-                    precio_unitario: p.precio_unitario, // Ya debe ser el precio final según la jerarquía
-                    total_parcial: p.total_parcial // Ya debe ser el total parcial calculado
+                    precio_unitario: p.precio_unitario,
+                    total_parcial: p.total_parcial
                 }]);
             }
 
@@ -476,23 +480,26 @@ export default function Checkout() {
             
             const ticketFormattedDate = formatTicketDateTime(now.toISOString());
 
-            let balanceFinalClienteParaTicket = infoClienteConSaldo?.balance !== undefined ? infoClienteConSaldo.balance : 0;
-            if (paymentType === 'Crédito cliente') {
-                const montoACreditoReal = montoRestanteAPagarPorCliente - (parseFloat(enganche) || 0);
-                if (montoACreditoReal > 0) {
-                    balanceFinalClienteParaTicket += montoACreditoReal;
+            // CAMBIO CLAVE AQUÍ: Calcular balanceFinalClienteParaTicket para el ticket
+            // Debemos obtener el balance más actualizado DESPUÉS de todos los movimientos de esta venta
+            // Para esto, haremos una nueva RPC o una consulta directa si la RPC no es instantánea.
+            let balanceFinalClienteParaTicket = 0;
+            if (infoClienteConSaldo?.client_id) {
+                const { data: updatedBalanceData, error: updatedBalanceError } = await supabase.rpc('get_cliente_con_saldo', { p_cliente_id: infoClienteConSaldo.client_id });
+                if (updatedBalanceError) {
+                    console.error("Error al obtener balance actualizado para ticket:", updatedBalanceError);
+                    balanceFinalClienteParaTicket = infoClienteConSaldo.balance; // Fallback al balance inicial
+                } else {
+                    balanceFinalClienteParaTicket = updatedBalanceData && updatedBalanceData.length > 0 ? updatedBalanceData[0].balance : 0;
                 }
-            } // No se resta el balance para otros tipos de pago, ya que no son deudas/créditos.
+            } else {
+                balanceFinalClienteParaTicket = 0; // Cliente no seleccionado o público general
+            }
+
 
             const ticketData = {
-                codigo_venta: codigo, // Aquí se asigna el código de venta
-                // CORRECCIÓN CLAVE: Asegurarse de asignar el nombre del cliente correctamente.
-                // Usaremos infoClienteConSaldo.client_name directamente.
-                cliente: {
-                    id: infoClienteConSaldo.client_id,
-                    nombre: infoClienteConSaldo.client_name, // <-- CORRECCIÓN: Asignar el nombre del cliente
-                    telefono: infoClienteConSaldo.telefono || 'N/A'
-                },
+                codigo_venta: codigo,
+                cliente: { id: infoClienteConSaldo.client_id, nombre: infoClienteConSaldo.client_name, telefono: infoClienteConSaldo.telefono || 'N/A' },
                 vendedor: { nombre: vendedorInfo?.nombre || currentUser?.email || 'N/A' },
                 fecha: ticketFormattedDate,
                 productosVenta: productosVenta.map(p => ({
@@ -505,9 +512,9 @@ export default function Checkout() {
                 forma_pago: montoRestanteAPagarPorCliente === 0 && montoAplicadoDelSaldoFavor > 0 ? 'SALDO_A_FAVOR' : paymentType,
                 enganche: parseFloat(enganche) || 0,
                 gastos_envio: parseFloat(gastosEnvio) || 0,
-                total_final: montoRestanteAPagarPorCliente,
+                total_final: montoRestanteAPagarPorCliente, // Total que el cliente realmente pagó o debe por esta venta
                 monto_credito_aplicado: montoAplicadoDelSaldoFavor,
-                balance_cuenta: balanceFinalClienteParaTicket,
+                balance_cuenta: balanceFinalClienteParaTicket, // Balance actualizado del cliente
             };
             setHtmlTicketData(ticketData);
             setShowHtmlTicket(true);
@@ -621,10 +628,9 @@ export default function Checkout() {
                     footer={
                         <>
                             <button onClick={() => setShowSaleModal(false)} className="px-4 py-2 bg-dark-700 text-gray-300 rounded-md hover:bg-dark-600" disabled={processing}>Cancelar</button>
-                            {/* CAMBIO CLAVE: Botón "Compartir Ticket" en el footer de ModalCheckout */}
-                            {htmlTicketData && ( // Solo si ya hay datos de ticket
+                            {htmlTicketData && ( 
                                 <button
-                                    onClick={() => shareTicketRef.current && shareTicketRef.current()} // Llama a la función de HtmlTicketDisplay a través de la ref
+                                    onClick={() => shareTicketRef.current && shareTicketRef.current()}
                                     className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 transition-colors flex items-center"
                                     disabled={processing}
                                 >
@@ -671,7 +677,6 @@ export default function Checkout() {
                     />
                 </ModalCheckout>
             )}
-            {/* CAMBIO CLAVE: Pasar la ref a HtmlTicketDisplay */}
             {showHtmlTicket && htmlTicketData && (<HtmlTicketDisplay saleData={htmlTicketData} onClose={closeHtmlTicket} onShareClick={shareTicketRef} />)}
         </div>
     );
