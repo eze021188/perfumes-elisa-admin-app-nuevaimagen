@@ -438,25 +438,17 @@ export default function Checkout() {
                     .match({ cliente_id: infoClienteConSaldo.client_id, tipo_movimiento: 'USO_SALDO_VENTA', monto: montoAplicadoDelSaldoFavor, descripcion: `Aplicación saldo en Venta ${codigo}` });
             }
 
+            // CAMBIO CLAVE AQUÍ: Modificación para registro de movimientos de cuenta por forma de pago
+            // Solo CARGO_VENTA para crédito cliente
             if (paymentType === 'Crédito cliente') {
                 const montoACredito = montoRestanteAPagarPorCliente - (parseFloat(enganche) || 0);
-                const movimientosCuenta = [];
-                if (montoACredito > 0) movimientosCuenta.push({ cliente_id: infoClienteConSaldo.client_id, tipo_movimiento: 'CARGO_VENTA', monto: montoACredito, referencia_venta_id: ventaId, descripcion: `Venta ${codigo}` });
-                if (movimientosCuenta.length > 0) {
-                    const { error: errMovs } = await supabase.from('movimientos_cuenta_clientes').insert(movimientosCuenta);
+                if (montoACredito > 0) {
+                    const { error: errMovs } = await supabase.from('movimientos_cuenta_clientes').insert([{ cliente_id: infoClienteConSaldo.client_id, tipo_movimiento: 'CARGO_VENTA', monto: montoACredito, referencia_venta_id: ventaId, descripcion: `Venta ${codigo}` }]);
                     if (errMovs) { await supabase.from('ventas').delete().eq('id', ventaId); throw errMovs; }
                 }
-            } else if (montoRestanteAPagarPorCliente > 0) {
-                const { error: errorMovPago } = await supabase.from('movimientos_cuenta_clientes').insert([{
-                    cliente_id: infoClienteConSaldo.client_id,
-                    tipo_movimiento: 'PAGO_VENTA',
-                    monto: -(montoRestanteAPagarPorCliente),
-                    referencia_venta_id: ventaId,
-                    descripcion: `Pago Venta ${codigo} (${paymentType})`,
-                }]);
-                if (errorMovPago) throw errorMovPago;
             }
-
+            // Eliminado el bloque `else if (montoRestanteAPagarPorCliente > 0)` para PAGO_VENTA,
+            // ya que transferencias, efectivo, etc. no deben generar movimientos de "saldo a favor".
 
             for (const p of productosVenta) {
                 if (!String(p.id).startsWith('quick-')) {
@@ -472,8 +464,8 @@ export default function Checkout() {
                     venta_id: ventaId,
                     producto_id: String(p.id).startsWith('quick-') ? null : p.id,
                     cantidad: p.cantidad,
-                    precio_unitario: p.precio_unitario, // Ya debe ser el precio final según la jerarquía
-                    total_parcial: p.total_parcial // Ya debe ser el total parcial calculado
+                    precio_unitario: p.precio_unitario,
+                    total_parcial: p.total_parcial
                 }]);
             }
 
@@ -489,21 +481,17 @@ export default function Checkout() {
                 if (montoACreditoReal > 0) {
                     balanceFinalClienteParaTicket += montoACreditoReal;
                 }
-            } else if (montoRestanteAPagarPorCliente > 0) {
-                balanceFinalClienteParaTicket -= montoRestanteAPagarPorCliente;
-            }
+            } // No se resta el balance para otros tipos de pago, ya que no son deudas/créditos.
 
             const ticketData = {
                 codigo_venta: codigo,
                 cliente: { id: infoClienteConSaldo.client_id, nombre: infoClienteConSaldo.client_name, telefono: infoClienteConSaldo.telefono || 'N/A' },
                 vendedor: { nombre: vendedorInfo?.nombre || currentUser?.email || 'N/A' },
                 fecha: ticketFormattedDate,
-                // CAMBIO CLAVE: Asegurar que productosVenta se mapea con las propiedades que HtmlTicketDisplay espera
-                // precio_unitario y total_parcial ya deben contener el precio final de venta.
                 productosVenta: productosVenta.map(p => ({
                     ...p,
-                    precio_unitario: p.precio_unitario, // Ya es el precio final
-                    total_parcial: p.total_parcial // Ya es el total parcial
+                    precio_unitario: p.precio_unitario,
+                    total_parcial: p.total_parcial
                 })),
                 originalSubtotal,
                 discountAmount,
@@ -537,6 +525,9 @@ export default function Checkout() {
         if (!clienteSeleccionado) return clientes;
         return clientes.filter(c => c.id !== clienteSeleccionado.id);
     }, [clientes, clienteSeleccionado]);
+
+    // Ref para la función de compartir ticket de HtmlTicketDisplay
+    const shareTicketRef = useRef(null);
 
     return (
         <div className="min-h-screen bg-dark-900 p-4 md:p-8 lg:p-12">
@@ -626,6 +617,17 @@ export default function Checkout() {
                     footer={
                         <>
                             <button onClick={() => setShowSaleModal(false)} className="px-4 py-2 bg-dark-700 text-gray-300 rounded-md hover:bg-dark-600" disabled={processing}>Cancelar</button>
+                            {/* CAMBIO CLAVE: Botón "Compartir Ticket" en el footer de ModalCheckout */}
+                            {htmlTicketData && ( // Solo si ya hay datos de ticket
+                                <button
+                                    onClick={() => shareTicketRef.current && shareTicketRef.current()} // Llama a la función de HtmlTicketDisplay a través de la ref
+                                    className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 transition-colors flex items-center"
+                                    disabled={processing}
+                                >
+                                    <Share2 size={18} className="mr-1.5" />
+                                    Compartir Ticket
+                                </button>
+                            )}
                             <button onClick={handleFinalize}
                                 disabled={processing || (montoRestanteAPagarPorCliente > 0 && !paymentType) || (paymentType === 'Crédito cliente' && (montoRestanteAPagarPorCliente - (parseFloat(enganche) || 0)) < 0 && montoRestanteAPagarPorCliente !==0) || !currentUser || loadingUserLocal}
                                 className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 disabled:opacity-50">
@@ -665,7 +667,8 @@ export default function Checkout() {
                     />
                 </ModalCheckout>
             )}
-            {showHtmlTicket && htmlTicketData && (<HtmlTicketDisplay saleData={htmlTicketData} onClose={closeHtmlTicket} />)}
+            {/* CAMBIO CLAVE: Pasar la ref a HtmlTicketDisplay */}
+            {showHtmlTicket && htmlTicketData && (<HtmlTicketDisplay saleData={htmlTicketData} onClose={closeHtmlTicket} onShareClick={shareTicketRef} />)}
         </div>
     );
 }
