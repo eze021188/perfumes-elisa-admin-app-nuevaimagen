@@ -8,7 +8,11 @@ export default function ModalEditarProducto({ producto, onClose, onGuardado }) {
   const [nombre, setNombre] = useState(producto.nombre || '');
   const [costoFinalUSD, setCostoFinalUSD] = useState(producto.costo_final_usd ?? '');
   const [costoFinalMXN, setCostoFinalMXN] = useState(producto.costo_final_mxn ?? '');
-  const [precioUnitarioUSD, setPrecioUnitarioUSD] = useState(producto.precio_unitario_usd ?? '');
+  // CAMBIO CLAVE: Cambiar 'precioUnitarioUSD' para que refleje y edite 'descuento_lote'
+  const [precioDescuentoLote, setPrecioDescuentoLote] = useState(producto.descuento_lote ?? ''); // NUEVO ESTADO para descuento_lote
+  const [precioNormal, setPrecioNormal] = useState(producto.precio_normal ?? ''); // Mantener precio normal
+  const [promocionOriginal, setPromocionOriginal] = useState(producto.promocion ?? ''); // Mantener promoción original como lectura
+
   const [stock, setStock] = useState(producto.stock ?? '');
   const [imagenURL, setImagenURL] = useState(producto.imagen_url || '');
   const [categoria, setCategoria] = useState(producto.categoria || '');
@@ -19,7 +23,9 @@ export default function ModalEditarProducto({ producto, onClose, onGuardado }) {
     setNombre(producto.nombre || '');
     setCostoFinalUSD(producto.costo_final_usd ?? '');
     setCostoFinalMXN(producto.costo_final_mxn ?? '');
-    setPrecioUnitarioUSD(producto.precio_unitario_usd ?? '');
+    setPrecioNormal(producto.precio_normal ?? ''); // Cargar precio_normal
+    setPromocionOriginal(producto.promocion ?? ''); // Cargar promocion original
+    setPrecioDescuentoLote(producto.descuento_lote ?? ''); // Cargar descuento_lote
     setStock(producto.stock ?? '');
     setImagenURL(producto.imagen_url || '');
     setCategoria(producto.categoria || '');
@@ -32,7 +38,10 @@ export default function ModalEditarProducto({ producto, onClose, onGuardado }) {
       nombre,
       costo_final_usd: parseFloat(costoFinalUSD) || null,
       costo_final_mxn: parseFloat(costoFinalMXN) || null,
-      precio_unitario_usd: parseFloat(precioUnitarioUSD) || null,
+      precio_normal: parseFloat(precioNormal) || null, // Guardar precio_normal
+      descuento_lote: parseFloat(precioDescuentoLote) || null, // CAMBIO CLAVE: Guardar descuento_lote
+      // 'precio_unitario_usd' y 'promocion' ya no se actualizan directamente desde aquí,
+      // 'promocion' se mantiene como referencia o se actualiza desde Gestión de Precios.
       stock: Number(stock) || 0,
       imagen_url: imagenURL.trim() || null,
       categoria: categoria.trim() || null,
@@ -49,7 +58,7 @@ export default function ModalEditarProducto({ producto, onClose, onGuardado }) {
       console.error('Error al guardar producto:', error.message);
       alert(`Ocurrió un error al guardar los cambios: ${error.message}`);
     } else {
-      onGuardado();
+      onGuardado(); // Llama a onGuardado que recarga los productos en ProductosItems.jsx
     }
   };
 
@@ -76,7 +85,8 @@ export default function ModalEditarProducto({ producto, onClose, onGuardado }) {
         
         <div className="space-y-4">
           <div>
-            <label htmlFor="edit-nombre" className="block text-sm font-medium text-gray-300 mb-1 flex items-center gap-1">
+            {/* CORRECCIÓN: Eliminar 'block' si ya tienes 'flex' */}
+            <label htmlFor="edit-nombre" className="text-sm font-medium text-gray-300 mb-1 flex items-center gap-1">
               <Tag size={16} />
               Nombre
             </label>
@@ -90,7 +100,8 @@ export default function ModalEditarProducto({ producto, onClose, onGuardado }) {
           </div>
 
           <div>
-            <label htmlFor="edit-categoria" className="block text-sm font-medium text-gray-300 mb-1 flex items-center gap-1">
+            {/* CORRECCIÓN: Eliminar 'block' si ya tienes 'flex' */}
+            <label htmlFor="edit-categoria" className="text-sm font-medium text-gray-300 mb-1 flex items-center gap-1">
               <Layers size={16} />
               Categoría
             </label>
@@ -105,7 +116,8 @@ export default function ModalEditarProducto({ producto, onClose, onGuardado }) {
           </div>
 
           <div>
-            <label htmlFor="edit-costoFinalUSD" className="block text-sm font-medium text-gray-300 mb-1 flex items-center gap-1">
+            {/* CORRECCIÓN: Eliminar 'block' si ya tienes 'flex' */}
+            <label htmlFor="edit-costoFinalUSD" className="text-sm font-medium text-gray-300 mb-1 flex items-center gap-1">
               <DollarSign size={16} />
               Costo final x unidad (USD)
             </label>
@@ -121,7 +133,8 @@ export default function ModalEditarProducto({ producto, onClose, onGuardado }) {
           </div>
 
           <div>
-            <label htmlFor="edit-costoFinalMXN" className="block text-sm font-medium text-gray-300 mb-1 flex items-center gap-1">
+            {/* CORRECCIÓN: Eliminar 'block' si ya tienes 'flex' */}
+            <label htmlFor="edit-costoFinalMXN" className="text-sm font-medium text-gray-300 mb-1 flex items-center gap-1">
               <DollarSign size={16} />
               Costo final x unidad (MXN)
             </label>
@@ -136,24 +149,62 @@ export default function ModalEditarProducto({ producto, onClose, onGuardado }) {
             />
           </div>
 
+          {/* CAMBIO CLAVE: Campo para editar el precio normal */}
           <div>
-            <label htmlFor="edit-precioUnitarioUSD" className="block text-sm font-medium text-gray-300 mb-1 flex items-center gap-1">
+            {/* CORRECCIÓN: Eliminar 'block' si ya tienes 'flex' */}
+            <label htmlFor="edit-precioNormal" className="text-sm font-medium text-gray-300 mb-1 flex items-center gap-1">
               <DollarSign size={16} />
-              Precio por unidad (USD)
+              Precio Venta (Normal)
             </label>
             <input
               type="number"
-              id="edit-precioUnitarioUSD"
+              id="edit-precioNormal"
               min="0"
               step="0.01"
-              value={precioUnitarioUSD}
-              onChange={(e) => setPrecioUnitarioUSD(e.target.value)}
+              value={precioNormal}
+              onChange={(e) => setPrecioNormal(e.target.value)}
               className="w-full border border-dark-700 bg-dark-900 px-3 py-2 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 text-gray-200"
             />
           </div>
 
+          {/* CAMBIO CLAVE: Campo para editar el descuento_lote */}
           <div>
-            <label htmlFor="edit-stock" className="block text-sm font-medium text-gray-300 mb-1 flex items-center gap-1">
+            {/* CORRECCIÓN: Eliminar 'block' si ya tienes 'flex' */}
+            <label htmlFor="edit-precioDescuentoLote" className="text-sm font-medium text-gray-300 mb-1 flex items-center gap-1">
+              <DollarSign size={16} />
+              Precio Venta (Dscto. Lote)
+            </label>
+            <input
+              type="number"
+              id="edit-precioDescuentoLote"
+              min="0"
+              step="0.01"
+              value={precioDescuentoLote}
+              onChange={(e) => setPrecioDescuentoLote(e.target.value)}
+              className="w-full border border-dark-700 bg-dark-900 px-3 py-2 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 text-gray-200"
+            />
+          </div>
+          
+          {/* CAMBIO: Campo de Promoción original, ahora de solo lectura */}
+          <div>
+            {/* CORRECCIÓN: Eliminar 'block' si ya tienes 'flex' */}
+            <label htmlFor="view-promocionOriginal" className="text-sm font-medium text-gray-300 mb-1 flex items-center gap-1">
+              <DollarSign size={16} />
+              Promoción (Original)
+            </label>
+            <input
+              type="text" // Solo texto para ser de solo lectura
+              id="view-promocionOriginal"
+              value={(promocionOriginal ?? '').toString()} // Muestra el valor original
+              className="w-full border border-dark-700 bg-dark-900 px-3 py-2 rounded-md text-gray-400 cursor-not-allowed"
+              disabled // Deshabilitar para que sea de solo lectura
+            />
+          </div>
+
+
+          <div>
+            {/* CORRECCIÓN: Eliminar 'block' si ya tienes 'flex' */}
+            <label htmlFor="edit-stock" className="text-sm font-medium text-gray-300 mb-1 flex items-center gap-1">
               <Package size={16} />
               Stock disponible
             </label>
@@ -168,7 +219,8 @@ export default function ModalEditarProducto({ producto, onClose, onGuardado }) {
           </div>
 
           <div>
-            <label htmlFor="edit-imagenURL" className="block text-sm font-medium text-gray-300 mb-1 flex items-center gap-1">
+            {/* CORRECCIÓN: Eliminar 'block' si ya tienes 'flex' */}
+            <label htmlFor="edit-imagenURL" className="text-sm font-medium text-gray-300 mb-1 flex items-center gap-1">
               <Image size={16} />
               URL de la imagen del producto
             </label>

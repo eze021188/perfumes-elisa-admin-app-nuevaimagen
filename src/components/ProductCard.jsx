@@ -7,31 +7,36 @@ export default function ProductCard({ producto, onClick, showStock = false, isRe
   // Protege contra props nulos o indefinidos
   if (!producto) return null;
 
+  // CAMBIO CLAVE AQUÍ: Lógica para determinar el precio de venta principal a mostrar
+  let precioVentaDisplay = 0;
+  if (producto.descuento_lote > 0) { // Prioridad 1: descuento_lote
+      precioVentaDisplay = producto.descuento_lote;
+  } else if (producto.promocion > 0) { // Prioridad 2: promocion
+      precioVentaDisplay = producto.promocion;
+  } else { // Prioridad 3: precio_normal
+      precioVentaDisplay = producto.precio_normal;
+  }
+  // Asegura que el precio para mostrar no sea negativo
+  precioVentaDisplay = Math.max(0, precioVentaDisplay);
+
   // Asegura valores numéricos por defecto
-  const promocion = Number(producto.promocion) || 0;
-  // Usamos 'precio_normal' como el "precio original" para el rayado, si existe.
+  const promocion = precioVentaDisplay; // Este será el precio que se muestra como "principal" en la tarjeta
   const precioOriginal = producto.precio_normal != null ? Number(producto.precio_normal) : null; 
   const stock = producto.stock != null ? producto.stock : null;
-  // Usamos 'stock_minimo_level' si existe para el umbral de bajo stock.
   const stockMinimo = producto.stock_minimo_level != null ? producto.stock_minimo_level : 0; 
   
-  const lowStock = stock !== null && stock <= stockMinimo && stock > 0; // Bajo stock es > 0 pero <= minimo
-  const noStock = stock !== null && stock <= 0; // Sin stock es <= 0
+  const lowStock = stock !== null && stock <= stockMinimo && stock > 0;
+  const noStock = stock !== null && stock <= 0;
 
-  // --- NUEVO: Renderizado del modo "fila compacta" para móviles ---
-  // Este layout será visible en pantallas pequeñas (por defecto) y se ocultará a partir de 'md'
+  // --- Renderizado del modo "fila compacta" para móviles ---
   const renderMobileRowMode = () => (
     <div
       onClick={onClick}
-      // Estilo de contenedor para la fila: flexbox para alinear elementos horizontalmente
-      // Se usan los colores y bordes existentes en tu tema oscuro.
       className={`flex items-center p-2 border border-dark-700/50 rounded-lg shadow-card-dark bg-dark-800/50 text-xs transition-colors hover:bg-dark-700/50 ${noStock ? 'opacity-60' : ''}`}
-      // Altura mínima para la fila, para consistencia visual
       style={{ minHeight: '80px' }} 
     >
       {/* Imagen pequeña - Tamaño fijo y cuadrado */}
       <div className="w-14 h-14 flex-shrink-0 bg-dark-900 rounded-md overflow-hidden flex items-center justify-center mr-3">
-        {/* Prioriza producto.imagen_url si existe, sino usa producto.imagen, sino placeholder */}
         {producto.imagen_url ? ( 
           <img
             src={producto.imagen_url}
@@ -53,12 +58,8 @@ export default function ProductCard({ producto, onClick, showStock = false, isRe
 
       {/* Información principal (nombre, categoría, stock) - Crece para ocupar espacio */}
       <div className="flex-1 min-w-0 mr-3">
-        {/* CAMBIO CLAVE AQUÍ: Reducir el ancho de la columna de nombre al 50% y permitir segunda línea */}
-        {/* Se usa 'w-1/2' para el 50% del ancho disponible para flex-grow y se permite que el texto se envuelva ('whitespace-normal'). */}
-        <p className="font-medium text-gray-200 w-1/2 overflow-hidden" style={{ minHeight: '2.5em', maxHeight: '2.5em', whiteSpace: 'normal', lineHeight: '1.2em' }}>{producto.nombre || 'Producto sin nombre'}</p> 
-        {/* Categoría: Truncar a una línea, altura fija */}
+        <p className="font-medium text-gray-200 truncate h-4 overflow-hidden">{producto.nombre || 'Producto sin nombre'}</p> 
         <p className="text-gray-400 text-[11px] truncate h-3.5 overflow-hidden">{producto.categoria || 'Sin categoría'}</p>
-        {/* Stock: Altura fija, colores condicionales */}
         {showStock && stock !== null && (
           <p className={`text-[11px] font-semibold ${noStock ? 'text-error-400' : lowStock ? 'text-warning-400' : 'text-success-400'} h-3.5 overflow-hidden`}>
             Stock: {stock}
@@ -70,9 +71,10 @@ export default function ProductCard({ producto, onClick, showStock = false, isRe
       <div className="flex flex-col items-end flex-shrink-0 space-y-1">
         <div className="flex items-baseline space-x-1">
           <span className="text-white font-semibold whitespace-nowrap">
-            ${promocion.toFixed(2)}
+            ${promocion.toFixed(2)} {/* Usa el precio principal calculado */}
           </span>
-          {precioOriginal !== null && (
+          {/* Muestra precio normal tachado si es diferente del precio de venta principal */}
+          {precioOriginal !== null && precioOriginal !== precioVentaDisplay && (
             <span className="text-gray-500 line-through text-xs whitespace-nowrap">
               ${precioOriginal.toFixed(2)}
             </span>
@@ -86,7 +88,7 @@ export default function ProductCard({ producto, onClick, showStock = false, isRe
           }`}
           disabled={noStock}
           onClick={(e) => {
-            e.stopPropagation(); // Evita que el clic en el botón active el onClick de la tarjeta.
+            e.stopPropagation(); 
             if (!noStock) onClick();
           }}
         >
@@ -98,7 +100,6 @@ export default function ProductCard({ producto, onClick, showStock = false, isRe
   );
 
   // --- ORIGINAL: Renderizado del modo "tarjeta" (desktop) ---
-  // Este es el layout que me proporcionaste originalmente, sin NINGÚN CAMBIO.
   const renderCardMode = () => (
     <div
       onClick={onClick}
@@ -108,7 +109,7 @@ export default function ProductCard({ producto, onClick, showStock = false, isRe
       <div className="absolute inset-0 bg-gradient-to-t from-dark-900 to-transparent opacity-60"></div>
       
       <img
-        src={producto.imagenUrl || producto.imagen || 'https://via.placeholder.com/150?text=Sin+Imagen'}
+        src={producto.imagen_url || producto.imagen || 'https://via.placeholder.com/150?text=Sin+Imagen'}
         alt={producto.nombre || ''}
         className="w-full h-full object-cover"
       />
@@ -127,9 +128,10 @@ export default function ProductCard({ producto, onClick, showStock = false, isRe
         <div className="flex items-baseline justify-between">
           <div className="flex items-baseline space-x-1">
             <span className="text-white font-semibold">
-              ${promocion.toFixed(2)}
+              ${promocion.toFixed(2)} {/* Usa el precio principal calculado */}
             </span>
-            {precioOriginal !== null && (
+            {/* Muestra precio normal tachado si es diferente del precio de venta principal */}
+            {precioOriginal !== null && precioOriginal !== precioVentaDisplay && (
               <span className="text-gray-500 line-through text-xs">
                 ${precioOriginal.toFixed(2)}
               </span>
@@ -152,7 +154,7 @@ export default function ProductCard({ producto, onClick, showStock = false, isRe
           }`}
           disabled={noStock}
           onClick={(e) => {
-            e.stopPropagation(); // Evita que el clic en el botón active el onClick de la tarjeta.
+            e.stopPropagation(); 
             if (!noStock) onClick();
           }}
         >
@@ -164,26 +166,18 @@ export default function ProductCard({ producto, onClick, showStock = false, isRe
   );
 
   // Lógica de renderizado principal:
-  // Si isResponsiveLayout es TRUE, entonces:
-  //   - En pantallas pequeñas (sin prefijo md:), se muestra el modo de fila.
-  //   - En md+ (escritorio/tablet), se oculta el modo de fila y se muestra el modo de tarjeta.
-  // Esto es para que ProductGrid pueda controlar la responsividad.
   if (isResponsiveLayout) {
     return (
       <>
-        {/* Modo fila: Visible en pantallas pequeñas, oculto en md+ */}
         <div className="block md:hidden">
           {renderMobileRowMode()}
         </div>
-        {/* Modo tarjeta: Oculto en pantallas pequeñas, visible en md+ */}
         <div className="hidden md:block">
           {renderCardMode()}
         </div>
       </>
     );
   } else {
-    // Si isResponsiveLayout es FALSE (situación por defecto o si no se pasa la prop),
-    // simplemente renderiza el modo de tarjeta, como era originalmente.
     return renderCardMode();
   }
 }

@@ -17,16 +17,14 @@ import {
 
 export default function ProductosItems() {
   const [productos, setProductos] = useState([]);
-  const [loading, setLoading] = useState(true); // Añadido para gestionar la carga de productos
+  const [loading, setLoading] = useState(true); 
   const [busqueda, setBusqueda] = useState('');
   const [modalActivo, setModalActivo] = useState(false);
   const [productoEditando, setProductoEditando] = useState(null);
   const [actualizando, setActualizando] = useState(false);
   
-  // CORRECCIÓN CRUCIAL AQUÍ: Inicializar useState con un nuevo Set
   const [seleccionados, setSeleccionados] = useState(new Set()); 
   
-  // Estado para el filtro de stock
   const [stockFilter, setStockFilter] = useState('con-stock');
 
   const [sortColumn, setSortColumn] = useState('nombre');
@@ -37,6 +35,7 @@ export default function ProductosItems() {
       nombre: '', stock: '', precio_normal: '', promocion: '',
       costo_final_usd: '', costo_final_mxn: '', codigo: '',
       categoria: '', imagen_url: '',
+      descuento_lote: '' // Asegurarse de que descuento_lote se inicialice
   });
   const [isAddingProduct, setIsAddingProduct] = useState(false);
 
@@ -45,15 +44,15 @@ export default function ProductosItems() {
   }, []);
 
   const cargarProductos = async () => {
-    setLoading(true); // Iniciar carga
-    const { data, error } = await supabase.from('productos').select('*');
+    setLoading(true); 
+    const { data, error } = await supabase.from('productos').select('*, descuento_lote'); // CAMBIO CLAVE: Cargar descuento_lote
     if (error) {
       console.error('Error al cargar productos:', error.message);
       toast.error('Error al cargar productos.');
     } else {
       setProductos(data || []);
     }
-    setLoading(false); // Finalizar carga
+    setLoading(false); 
   };
 
   const handleSort = (column) => {
@@ -94,7 +93,8 @@ export default function ProductosItems() {
               if (aValue == null) return sortDirection === 'asc' ? 1 : -1;
               if (bValue == null) return sortDirection === 'asc' ? -1 : 1;
 
-              const numColumns = ['stock', 'promocion', 'precio_normal', 'costo_final_usd', 'costo_final_mxn'];
+              // Añadir 'descuento_lote' a las columnas numéricas para el ordenamiento
+              const numColumns = ['stock', 'promocion', 'precio_normal', 'costo_final_usd', 'costo_final_mxn', 'descuento_lote'];
               if (numColumns.includes(sortColumn)) {
                    const aNum = parseFloat(aValue) || 0;
                    const bNum = parseFloat(bValue) || 0;
@@ -161,44 +161,66 @@ export default function ProductosItems() {
     await cargarProductos();
   };
 
-  const handleEditarLocal = (id, campo, valor) => {
+  // CAMBIO CLAVE AQUÍ: handleEditarLocal ahora actualizará 'descuento_lote' en lugar de 'promocion'
+  // Si el campo es 'promocion', lo redirigimos a 'descuento_lote'.
+  const handleEditarLocal = async (id, campo, valor) => {
+    const targetField = campo === 'promocion' ? 'descuento_lote' : campo; // Redirigir edición de 'promocion' a 'descuento_lote'
+    const numericValue = parseFloat(valor);
+    const valueToUpdate = isNaN(numericValue) || numericValue < 0 ? null : numericValue.toFixed(2); // Guardar null si no es válido
+
     setProductos(prev =>
-      prev.map(p => (p.id === id ? { ...p, [campo]: valor } : p))
+      prev.map(p => (p.id === id ? { ...p, [targetField]: valueToUpdate } : p))
     );
+
+    // Actualización directa a la base de datos
+    const { error } = await supabase.from('productos')
+      .update({ [targetField]: valueToUpdate })
+      .eq('id', id);
+
+    if (error) {
+      console.error(`Error al actualizar ${targetField} para producto ${id}:`, error.message);
+      toast.error(`Error al actualizar el precio: ${error.message}`);
+      cargarProductos(); // Recargar para revertir si hubo un error en la BD
+    } else {
+      toast.success('Precio actualizado.');
+      cargarProductos(); // Recargar para recalcular márgenes
+    }
   };
 
   const handleActualizarPrecios = async () => {
       setActualizando(true);
-      const updates = productosFiltradosYOrdenados.map(p => ({
-        id: p.id,
-        promocion: parseFloat(p.promocion) || null,
-        precio_normal: parseFloat(p.precio_normal) || null
-      }));
-       const updatesToApply = updates.filter(item => seleccionados.has(item.id));
-       if (updatesToApply.length === 0) {
+      const updates = [];
+
+      productosFiltradosYOrdenados.forEach(p => {
+          if (seleccionados.has(p.id)) {
+              // CAMBIO CLAVE AQUÍ: Solo actualizamos 'descuento_lote' y 'precio_normal' desde esta sección.
+              // 'promocion' ya no es editable directamente en esta vista.
+              updates.push({
+                  id: p.id,
+                  // Asegurarse de enviar los valores como números o null
+                  precio_normal: parseFloat(p.precio_normal) || null,
+                  descuento_lote: parseFloat(p.descuento_lote) || null // Asegurarse de que descuento_lote se envíe
+              });
+          }
+      });
+
+       if (updates.length === 0) {
            toast.info('No hay productos seleccionados para actualizar precios.');
            setActualizando(false);
            return;
        }
-      const updatePromises = updatesToApply.map(item =>
-          supabase.from('productos')
-              .update({ promocion: item.promocion, precio_normal: item.precio_normal })
-              .eq('id', item.id)
-      );
-      const results = await Promise.all(updatePromises);
-      let hasError = false;
-      results.forEach((result, index) => {
-          if (result.error) {
-              console.error(`Error actualizando producto ${updatesToApply[index].id}:`, result.error.message);
-              toast.error(`Error al actualizar producto ${updatesToApply[index].id}.`);
-              hasError = true;
-          }
-      });
-      if (!hasError) {
-           toast.success(`${updatesToApply.length} precios actualizados exitosamente.`);
+      
+      const { error: batchError } = await supabase.from('productos').upsert(updates, { onConflict: 'id' });
+
+      if (batchError) {
+          console.error(`Error al actualizar precios masivamente:`, batchError.message);
+          toast.error(`Error al actualizar precios: ${batchError.message}.`);
+      } else {
+           toast.success(`${updates.length} precios actualizados exitosamente.`);
       }
       setSeleccionados(new Set());
       setActualizando(false);
+      cargarProductos(); // Recargar para reflejar cambios y recalcular márgenes
   };
 
   const abrirModal = producto => {
@@ -221,7 +243,20 @@ export default function ProductosItems() {
   };
 
   const costoTotalStock = useMemo(() => productos.reduce((sum, p) => sum + (parseFloat(p.costo_final_mxn || 0) * parseFloat(p.stock || 0)), 0), [productos]);
-  const totalValorStock = useMemo(() => productos.reduce((sum, p) => sum + (parseFloat(p.promocion || p.precio_normal || 0) * parseFloat(p.stock || 0)), 0), [productos]);
+  
+  // CAMBIO CLAVE AQUÍ: Calcular totalValorStock basado en la jerarquía de precios
+  const totalValorStock = useMemo(() => productos.reduce((sum, p) => {
+      let precioVentaEfectivo = 0;
+      if (p.descuento_lote > 0) { // Prioridad 1: descuento_lote
+          precioVentaEfectivo = p.descuento_lote;
+      } else if (p.promocion > 0) { // Prioridad 2: promocion
+          precioVentaEfectivo = p.promocion;
+      } else { // Prioridad 3: precio_normal
+          precioVentaEfectivo = p.precio_normal;
+      }
+      return sum + (precioVentaEfectivo * parseFloat(p.stock || 0));
+  }, 0), [productos]);
+
   const gananciasProyectadas = totalValorStock - costoTotalStock;
   const totalUnidadesStock = useMemo(() => productos.reduce((sum, p) => sum + (parseFloat(p.stock || 0)), 0), [productos]);
 
@@ -238,21 +273,28 @@ export default function ProductosItems() {
           return;
       }
       const stockNum = parseFloat(newProductForm.stock) || 0;
-      const precioNum = parseFloat(newProductForm.precio_normal) || 0;
+      const precioNormalNum = parseFloat(newProductForm.precio_normal) || 0; // Usar precioNormalNum
       const precioPromocionNum = parseFloat(newProductForm.promocion) || null;
       const costoFinalUsdNum = parseFloat(newProductForm.costo_final_usd) || null;
       const costoFinalMxnNum = parseFloat(newProductForm.costo_final_mxn) || null;
+      const descuentoLoteNum = parseFloat(newProductForm.descuento_lote) || null; // Asegurarse de que se lea descuento_lote
 
-      if (stockNum < 0 || precioNum < 0 || (precioPromocionNum !== null && precioPromocionNum < 0) || (costoFinalUsdNum !== null && costoFinalUsdNum < 0) || (costoFinalMxnNum !== null && costoFinalMxnNum < 0)) {
+      if (stockNum < 0 || precioNormalNum < 0 || (precioPromocionNum !== null && precioPromocionNum < 0) || (costoFinalUsdNum !== null && costoFinalUsdNum < 0) || (costoFinalMxnNum !== null && costoFinalMxnNum < 0) || (descuentoLoteNum !== null && descuentoLoteNum < 0)) {
           toast.error('Los valores numéricos no pueden ser negativos.');
           setIsAddingProduct(false);
           return;
       }
       const productToInsert = {
-          nombre: newProductForm.nombre.trim(), stock: stockNum, precio_normal: precioNum,
-          promocion: precioPromocionNum, costo_final_usd: costoFinalUsdNum, costo_final_mxn: costoFinalMxnNum,
-          codigo: newProductForm.codigo.trim() || null, categoria: newProductForm.categoria.trim() || null,
+          nombre: newProductForm.nombre.trim(),
+          stock: stockNum,
+          precio_normal: precioNormalNum,
+          promocion: precioPromocionNum,
+          costo_final_usd: costoFinalUsdNum,
+          costo_final_mxn: costoFinalMxnNum,
+          codigo: newProductForm.codigo.trim() || null,
+          categoria: newProductForm.categoria.trim() || null,
           imagen_url: newProductForm.imagen_url.trim() || null,
+          descuento_lote: descuentoLoteNum // Incluir descuento_lote en la inserción
       };
       const { error } = await supabase.from('productos').insert([productToInsert]).select().single();
       if (error) {
@@ -262,7 +304,7 @@ export default function ProductosItems() {
           toast.success('Producto agregado exitosamente!');
           setNewProductForm({
               nombre: '', stock: '', precio_normal: '', promocion: '', costo_final_usd: '',
-              costo_final_mxn: '', codigo: '', categoria: '', imagen_url: ''
+              costo_final_mxn: '', codigo: '', categoria: '', imagen_url: '', descuento_lote: ''
           });
           setShowAddProductModal(false);
           cargarProductos();
@@ -274,7 +316,7 @@ export default function ProductosItems() {
       setShowAddProductModal(false);
       setNewProductForm({
           nombre: '', stock: '', precio_normal: '', promocion: '', costo_final_usd: '',
-          costo_final_mxn: '', codigo: '', categoria: '', imagen_url: ''
+          costo_final_mxn: '', codigo: '', categoria: '', imagen_url: '', descuento_lote: ''
       });
   };
 
@@ -385,6 +427,10 @@ export default function ProductosItems() {
             <div className="p-1 cursor-pointer hover:text-gray-200 flex items-center gap-1 whitespace-nowrap" onClick={() => handleSort('nombre')}> 
                 Nombre {sortColumn === 'nombre' && (<span>{sortDirection === 'asc' ? '▲' : '▼'}</span>)}
             </div>
+            {/* CAMBIO: Columna de "Promoción" ahora muestra "Dscto. Lote" editable, y "Promoción" original de solo lectura */}
+            <div className="p-1 text-right cursor-pointer hover:text-gray-200 flex items-center gap-1 justify-end whitespace-nowrap" onClick={() => handleSort('descuento_lote')}> 
+                Dscto. Lote {sortColumn === 'descuento_lote' && (<span>{sortDirection === 'asc' ? '▲' : '▼'}</span>)}
+            </div>
             <div className="p-1 text-right cursor-pointer hover:text-gray-200 flex items-center gap-1 justify-end whitespace-nowrap" onClick={() => handleSort('promocion')}> 
                 Promoción {sortColumn === 'promocion' && (<span>{sortDirection === 'asc' ? '▲' : '▼'}</span>)}
             </div>
@@ -395,7 +441,7 @@ export default function ProductosItems() {
         </div>
 
         {/* Lista de productos */}
-        {loading ? ( // Mostrar loader si productos están cargando
+        {loading ? ( 
           <div className="flex justify-center items-center h-64 bg-dark-800/50 rounded-lg border border-dark-700/50">
             <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-400"></div>
           </div>
@@ -431,16 +477,25 @@ export default function ProductosItems() {
                     Stock: {producto.stock ?? 0}
                   </div>
                 </div>
+                {/* CAMBIO CLAVE: Input para editar descuento_lote */}
                 <div className="flex flex-col items-start">
-                  <label className="text-gray-400 mb-1 text-[10px]">Promoción</label>
+                  <label className="text-gray-400 mb-1 text-[10px]">Dscto. Lote</label>
                   <input
                     type="number" min="0" step="0.01"
-                    value={(producto.promocion ?? '').toString()}
-                    onChange={e => handleEditarLocal(producto.id, 'promocion', e.target.value)}
+                    value={(producto.descuento_lote ?? '').toString()}
+                    onChange={e => handleEditarLocal(producto.id, 'descuento_lote', e.target.value)} // CAMBIO: Actualizar descuento_lote
                     className="w-20 border border-dark-700 bg-dark-900 px-2 py-1 rounded text-right text-xs text-gray-200 focus:ring-primary-500 focus:border-primary-500"
                     placeholder="0.00"
                   />
                 </div>
+                {/* Nueva columna para Promoción (solo lectura) */}
+                <div className="flex flex-col items-start">
+                  <label className="text-gray-400 mb-1 text-[10px]">Promoción</label>
+                  <span className="w-20 px-2 py-1 text-right text-xs text-gray-200">
+                    {formatCurrencyMXN(producto.promocion)}
+                  </span>
+                </div>
+                {/* Columna Precio Normal (editable como antes) */}
                 <div className="flex flex-col items-start">
                   <label className="text-gray-400 mb-1 text-[10px]">P. Normal</label>
                   <input
@@ -462,7 +517,7 @@ export default function ProductosItems() {
                 </div>
               </div> 
             ))}
-            {!loading && productosFiltradosYOrdenados.length === 0 && ( // Mostrar mensaje si no hay productos y no está cargando
+            {!loading && productosFiltradosYOrdenados.length === 0 && ( 
               <div className="text-center py-8 bg-dark-800/50 rounded-lg border border-dark-700/50">
                 <Package size={48} className="mx-auto text-gray-600 mb-3" />
                 <p className="text-gray-400">
@@ -475,7 +530,7 @@ export default function ProductosItems() {
           )}
           </div> 
         )}
-      </div> {/* <--- Este es el cierre del div "overflow-x-auto rounded-lg ..." */}
+      </div> 
 
       {modalActivo && productoEditando && (
         <ModalEditarProducto
@@ -514,6 +569,10 @@ export default function ProductosItems() {
                        <div>
                           <label htmlFor="promocion" className="block text-sm font-medium text-gray-300 mb-1">Precio de Venta (Promoción)</label>
                           <input type="number" id="promocion" name="promocion" min="0" step="0.01" value={newProductForm.promocion} onChange={handleNewProductInputChange} className="w-full border border-dark-700 bg-dark-900 px-3 py-2 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-gray-200" />
+                      </div>
+                       <div>
+                          <label htmlFor="descuento_lote" className="block text-sm font-medium text-gray-300 mb-1">Precio Venta (Dscto. Lote)</label> {/* Nuevo campo en el formulario de añadir */}
+                          <input type="number" id="descuento_lote" name="descuento_lote" min="0" step="0.01" value={newProductForm.descuento_lote} onChange={handleNewProductInputChange} className="w-full border border-dark-700 bg-dark-900 px-3 py-2 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-gray-200" />
                       </div>
                        <div>
                           <label htmlFor="costo_final_usd" className="block text-sm font-medium text-gray-300 mb-1">Costo Final (USD)</label>

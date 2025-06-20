@@ -122,8 +122,9 @@ export default function Checkout() {
 
             const { data: cli, error: cliErr } = await supabase.from('clientes').select('id, nombre, telefono');
             if (cliErr) toast.error("Error al cargar clientes."); else setClientes(cli || []);
-
-            const { data: prod, error: prodErr } = await supabase.from('productos').select('*');
+            
+            // CAMBIO CLAVE: Cargar 'descuento_lote' de la base de datos
+            const { data: prod, error: prodErr } = await supabase.from('productos').select('*, descuento_lote');
             if (prodErr) toast.error("Error al cargar productos.");
             else {
                 const prodMapped = (prod || []).map(p => {
@@ -167,12 +168,9 @@ export default function Checkout() {
     }, [clienteSeleccionado]);
 
     // useEffect 3: Procesa los datos del presupuesto desde location.state y asigna estados
-    // Depende de `productos` para mapear los nombres de los productos correctamente
     useEffect(() => {
         const budget = location.state?.budgetData;
-        // Solo procesar si hay budgetData Y la lista de productos ya está cargada
         if (budget && productos.length > 0) {
-            // Asigna el cliente y los productos de venta del presupuesto
             if (budget.clientes) {
                 setClienteSeleccionado(budget.clientes);
             } else {
@@ -181,19 +179,22 @@ export default function Checkout() {
 
             if (budget.presupuesto_items?.length) {
                 const itemsFromBudget = budget.presupuesto_items.map(item => {
-                    // `productos` ya debería tener datos aquí
                     const fullProductInfo = productos.find(p => p.id === item.producto_id);
+                    // CAMBIO CLAVE: Obtener precio de venta efectivo del presupuesto para que Checkout lo use como precio_unitario
+                    let precioVentaEfectivoPresupuesto = parseFloat(item.precio_unitario) || 0; // Usar el precio unitario del presupuesto directamente
+
                     return {
                         id: item.producto_id,
                         nombre: fullProductInfo?.nombre || item.productos?.nombre || item.descripcion || 'Producto Desconocido',
                         cantidad: parseFloat(item.cantidad) || 0,
-                        promocion: parseFloat(item.precio_unitario) || 0, // Usar directamente el precio unitario del presupuesto
-                        // CORRECCIÓN CLAVE AQUÍ: Asegurar total_parcial se calcula o toma correctamente.
-                        total: parseFloat(item.subtotal_item) || ((parseFloat(item.cantidad) || 0) * (parseFloat(item.precio_unitario) || 0)),
-                        precio_unitario: parseFloat(item.precio_unitario) || 0, // Añadir precio_unitario para HtmlTicketDisplay
-                        total_parcial: parseFloat(item.subtotal_item) || ((parseFloat(item.cantidad) || 0) * (parseFloat(item.precio_unitario) || 0)), // Añadir total_parcial para HtmlTicketDisplay
+                        promocion: fullProductInfo?.promocion || 0, // Mantener la promoción original del producto si existe
+                        precio_normal: fullProductInfo?.precio_normal || 0, // Mantener precio_normal original
+                        descuento_lote: fullProductInfo?.descuento_lote || 0, // Asegurarse de tener descuento_lote
+                        // Asignar el precio efectivo del presupuesto a precio_unitario y total_parcial
+                        precio_unitario: precioVentaEfectivoPresupuesto,
+                        total_parcial: (parseFloat(item.cantidad) || 0) * precioVentaEfectivoPresupuesto,
                         stock: fullProductInfo ? (parseFloat(fullProductInfo.stock) || 0) : 0,
-                        imagenUrl: fullProductInfo?.imagenUrl || ''
+                        imagenUrl: fullProductInfo?.imagenUrl || fullProductInfo?.imagen || ''
                     };
                 });
                 const validItems = itemsFromBudget.filter(item => item.cantidad > 0);
@@ -203,48 +204,34 @@ export default function Checkout() {
                 toast.warn("El presupuesto no contiene productos válidos.");
                 setProductosVenta([]);
             }
-
+            
             setDiscountType(budget.tipo_descuento || 'Sin descuento');
             setDiscountValue(parseFloat(budget.valor_descuento) || 0);
             setGastosEnvio(parseFloat(budget.gastos_envio) || 0);
-            setPaymentType(budget.forma_pago || '');
+            // La forma de pago del presupuesto no se pasa directamente al modal, pero se puede setear aquí si es un valor predefinido
+            // setPaymentType(budget.forma_pago || ''); // Esto podría ser un problema si el presupuesto tiene forma_pago 'Crédito cliente' y el modal no la gestiona bien al inicio. Se mantiene en blanco para que el usuario la elija.
             setBudgetSourceId(budget.id);
 
             if (location.state?.budgetData) {
               navigate(location.pathname, { replace: true, state: {} });
             }
 
-        } else if (location.state?.budgetData && productos.length === 0) {
-            // Depuración: Si hay budgetData pero los productos aún no cargan, esperamos.
-            // console.log("Checkout: Datos de presupuesto presentes, pero productos aún cargando. Esperando..."); // Depuración eliminada
-            // debugger; // Depurador eliminado
         } else if (!location.state?.budgetData && budgetSourceId !== null) {
-            // Limpiar budgetSourceId si ya no hay datos de presupuesto en location.state
             setBudgetSourceId(null);
         }
     }, [location.state, productos, navigate, location.pathname, budgetSourceId]);
 
     // NUEVO useEffect 4: Lógica para abrir el modal de venta una vez que todos los datos necesarios estén cargados
     useEffect(() => {
-        // console.log("Depuración de apertura de modal. budgetSourceId:", budgetSourceId, "loadingUserLocal:", loadingUserLocal, "currentUser:", currentUser?.id, "loadingSaldoCliente:", loadingSaldoCliente, "infoClienteConSaldo:", infoClienteConSaldo?.client_id, "productosVenta.length:", productosVenta.length); // Depuración eliminada
-        // debugger; // Depurador eliminado
-        // console.trace("Pila de llamadas para la apertura del modal"); // Depuración eliminada
-
-        // Solo intenta abrir el modal si hay un budgetSourceId (viene de un presupuesto)
-        // Y si el usuario local ya cargó (currentUser y no loadingUserLocal)
-        // Y si el saldo del cliente ya cargó (infoClienteConSaldo y no loadingSaldoCliente)
-        // Y si tenemos productos en el carrito (productosVenta)
-        if (budgetSourceId &&
-            !loadingUserLocal && currentUser && currentUser.id &&
+        if (budgetSourceId && 
+            !loadingUserLocal && currentUser && currentUser.id && 
             !loadingSaldoCliente && infoClienteConSaldo && infoClienteConSaldo.client_id &&
             productosVenta.length > 0) {
-
-            // Si el modal no está ya visible, ábrelo
-            if (!showSaleModal) {
+            
+            if (!showSaleModal) { 
                 setTimeout(() => {
-                    // console.log("Intentando abrir el modal de venta automáticamente..."); // Depuración eliminada
-                    openSaleModal();
-                }, 50);
+                    openSaleModal(); 
+                }, 50); 
             }
         }
     }, [budgetSourceId, loadingUserLocal, currentUser, loadingSaldoCliente, infoClienteConSaldo, productosVenta, showSaleModal]);
@@ -261,7 +248,8 @@ export default function Checkout() {
 
     const { totalItems, originalSubtotal, subtotalConDescuento, discountAmount, totalAntesDeCredito } = useMemo(() => {
         try {
-            const calculatedOriginalSubtotal = productosVenta.reduce((sum, p) => sum + (p.cantidad * (p.promocion ?? p.precio_normal ?? 0)), 0);
+            // El originalSubtotal se calcula sobre el 'precio_unitario' que ya debe reflejar la jerarquía
+            const calculatedOriginalSubtotal = productosVenta.reduce((sum, p) => sum + (p.cantidad * (p.precio_unitario ?? 0)), 0);
             const calculatedTotalItems = productosVenta.reduce((sum, p) => sum + p.cantidad, 0);
             let calculatedSubtotalConDescuento = calculatedOriginalSubtotal;
             let calculatedDiscountAmount = 0;
@@ -289,35 +277,43 @@ export default function Checkout() {
         }
     }, [usarSaldoFavor, saldoAFavorDisponible, totalAntesDeCredito]);
 
-    // RENOMBRAMOS totalFinalAPagar a montoRestanteAPagarPorCliente para mayor claridad
-    // Y la variable 'total' en ventaData ahora usará totalAntesDeCredito
     const montoRestanteAPagarPorCliente = useMemo(() => totalAntesDeCredito - montoAplicadoDelSaldoFavor, [totalAntesDeCredito, montoAplicadoDelSaldoFavor]);
 
     const onAddToCart = producto => {
         if ((parseFloat(producto.stock) || 0) <= 0) { toast.error('Producto sin stock.'); return; }
+        
+        // CAMBIO CLAVE AQUÍ: Lógica para determinar el precio de venta efectivo
+        let precioVenta = 0;
+        if (producto.descuento_lote > 0) { // Prioridad 1: descuento_lote
+            precioVenta = producto.descuento_lote;
+        } else if (producto.promocion > 0) { // Prioridad 2: promocion
+            precioVenta = producto.promocion;
+        } else { // Prioridad 3: precio_normal
+            precioVenta = producto.precio_normal;
+        }
+        precioVenta = Math.max(0, precioVenta); // Asegurar que el precio no sea negativo
+
         setProductosVenta(prev => {
             const existe = prev.find(p => p.id === producto.id);
-            const precioVenta = producto.promocion ?? producto.precio_normal ?? 0; // Usar promocion o precio_normal
             if (existe) {
                 const stockTotalProducto = productos.find(p => p.id === producto.id)?.stock || 0;
                 if (existe.cantidad + 1 > stockTotalProducto) { toast.error('Stock insuficiente.'); return prev; }
-                return prev.map(p => p.id === producto.id ? {
-                    ...p,
-                    cantidad: p.cantidad + 1,
-                    // CORRECCIÓN: Calcular total y total_parcial usando el precio de venta unitario
-                    total: (p.cantidad + 1) * precioVenta,
-                    total_parcial: (p.cantidad + 1) * precioVenta, // Para la base de datos
-                    precio_unitario: precioVenta // Para la base de datos
+                return prev.map(p => p.id === producto.id ? { 
+                    ...p, 
+                    cantidad: p.cantidad + 1, 
+                    precio_unitario: precioVenta, // Asegurar que precio_unitario se actualiza si el precio base cambia
+                    total_parcial: (p.cantidad + 1) * precioVenta 
                 } : p);
             }
-            return [...prev, {
-                ...producto,
-                cantidad: 1,
-                // CORRECCIÓN: Inicializar total, total_parcial y precio_unitario
-                total: precioVenta,
-                total_parcial: precioVenta,
-                precio_unitario: precioVenta,
-                stock: producto.stock
+            return [...prev, { 
+                ...producto, 
+                cantidad: 1, 
+                precio_unitario: precioVenta, // Usar el precio de venta efectivo
+                total_parcial: precioVenta, // total_parcial es el precio unitario por 1 cantidad
+                // Asegurarse de tener las propiedades promocion y precio_normal para el ticket si se necesitan allí
+                promocion: producto.promocion, 
+                precio_normal: producto.precio_normal,
+                descuento_lote: producto.descuento_lote // Incluir para el ticket
             }];
         });
     };
@@ -329,62 +325,73 @@ export default function Checkout() {
         setProductosVenta(prev => prev.map(p => {
             if (p.id === productoId) {
                 const stockTotalProducto = productos.find(prod => prod.id === p.id)?.stock || 0;
-                const precioVenta = p.promocion ?? p.precio_normal ?? 0; // Usar promocion o precio_normal
-                if (isNaN(newQuantity) || newQuantity < 1) return { ...p, cantidad: 1, total: precioVenta, total_parcial: precioVenta, precio_unitario: precioVenta };
+                
+                // CAMBIO CLAVE AQUÍ: Lógica para determinar el precio de venta efectivo al actualizar cantidad
+                let precioVenta = 0;
+                if (p.descuento_lote > 0) { // Prioridad 1: descuento_lote
+                    precioVenta = p.descuento_lote;
+                } else if (p.promocion > 0) { // Prioridad 2: promocion
+                    precioVenta = p.promocion;
+                } else { // Prioridad 3: precio_normal
+                    precioVenta = p.precio_normal;
+                }
+                precioVenta = Math.max(0, precioVenta); // Asegurar que el precio no sea negativo
+
+                if (isNaN(newQuantity) || newQuantity < 1) return { ...p, cantidad: 1, precio_unitario: precioVenta, total_parcial: precioVenta };
                 if (newQuantity > stockTotalProducto) {
                     toast.error(`Stock máximo: ${stockTotalProducto}`);
-                    return { ...p, cantidad: stockTotalProducto, total: stockTotalProducto * precioVenta, total_parcial: stockTotalProducto * precioVenta, precio_unitario: precioVenta };
+                    return { ...p, cantidad: stockTotalProducto, precio_unitario: precioVenta, total_parcial: stockTotalProducto * precioVenta };
                 }
-                return { ...p, cantidad: newQuantity, total: newQuantity * precioVenta, total_parcial: newQuantity * precioVenta, precio_unitario: precioVenta };
+                return { ...p, cantidad: newQuantity, precio_unitario: precioVenta, total_parcial: newQuantity * precioVenta };
             }
             return p;
         }).filter(p => p.cantidad > 0));
     };
 
     const onQuickSaleAdd = ({ nombre, promocion, cantidad, total }) => {
-        // Generar un ID temporal para productos de venta rápida
         const tempId = `quick-${Date.now()}-${Math.random()}`;
+        // Para venta rápida, el "promocion" que llega ya es el precio de venta.
+        const precioVenta = promocion; 
+
         setProductosVenta(prev => {
-            const precioVenta = promocion; // Para venta rápida, promocion es el precio de venta.
             return [...prev, {
-                id: tempId, // Usar ID temporal
+                id: tempId,
                 nombre: nombre,
                 cantidad: cantidad,
-                promocion: promocion, // Mantener promocion como precio de venta
-                // CORRECCIÓN: Asegurar total, total_parcial y precio_unitario se establecen
-                total: total, // total ya viene calculado desde QuickSaleModal
+                precio_unitario: precioVenta, // Usar el precio directo de venta rápida
                 total_parcial: total,
-                precio_unitario: precioVenta,
-                stock: Infinity // Stock infinito para productos de venta rápida
+                // No hay precio_normal, promocion ni descuento_lote para productos rápidos, si no se obtienen.
+                // Si HtmlTicketDisplay los necesita, se podrían inicializar a 0 o N/A aquí.
+                promocion: 0, // No aplica o es el precio Venta
+                precio_normal: 0, // No aplica
+                descuento_lote: 0, // No aplica
+                stock: Infinity 
             }];
         });
     };
 
 
     const openSaleModal = () => {
-        // Verificar aquí que el usuario ha terminado de cargar Y que es un usuario válido.
         if (loadingUserLocal) {
             toast.error("Cargando información de usuario, por favor espera.");
             return;
         }
-        if (!currentUser || !currentUser.id) {
-            toast.error("Inicia sesión para vender.");
-            return;
+        if (!currentUser || !currentUser.id) { 
+            toast.error("Inicia sesión para vender."); 
+            return; 
         }
-        // Verificar aquí que el cliente ha terminado de cargar Y que es un cliente válido.
         if (loadingSaldoCliente) {
             toast.error("Cargando saldo del cliente, por favor espera.");
             return;
         }
-        if (!infoClienteConSaldo?.client_id) { toast.error('Selecciona un cliente.'); return; }
+        if (!infoClienteConSaldo?.client_id) { toast.error('Selecciona un cliente.'); return; } 
         if (productosVenta.length === 0) { toast.error('Agrega productos.'); return; }
         setShowSaleModal(true);
     };
 
     const handleFinalize = async () => {
         setProcessing(true);
-        // Validaciones
-        if (!currentUser?.id || !infoClienteConSaldo?.client_id || productosVenta.length === 0 || (montoRestanteAPagarPorCliente > 0 && !paymentType)) { // Usar montoRestanteAPagarPorCliente
+        if (!currentUser?.id || !infoClienteConSaldo?.client_id || productosVenta.length === 0 || (montoRestanteAPagarPorCliente > 0 && !paymentType)) {
             toast.error('Faltan datos para finalizar la venta.'); setProcessing(false); return;
         }
 
@@ -409,10 +416,10 @@ export default function Checkout() {
                 vendedor_id: currentUser.id,
                 fecha: now.toISOString(),
                 subtotal: originalSubtotal,
-                forma_pago: montoRestanteAPagarPorCliente === 0 && montoAplicadoDelSaldoFavor > 0 ? 'SALDO_A_FAVOR' : paymentType, // Usar montoRestanteAPagarPorCliente
+                forma_pago: montoRestanteAPagarPorCliente === 0 && montoAplicadoDelSaldoFavor > 0 ? 'SALDO_A_FAVOR' : paymentType,
                 tipo_descuento: discountType,
                 valor_descuento: discountAmount,
-                total: totalAntesDeCredito, // ¡CORREGIDO: Ahora usa el total real de la compra!
+                total: totalAntesDeCredito,
                 monto_credito_aplicado: montoAplicadoDelSaldoFavor,
                 enganche: parseFloat(enganche) || 0,
                 gastos_envio: parseFloat(gastosEnvio) || 0,
@@ -432,20 +439,18 @@ export default function Checkout() {
             }
 
             if (paymentType === 'Crédito cliente') {
-                const montoACredito = montoRestanteAPagarPorCliente - (parseFloat(enganche) || 0); // Usar montoRestanteAPagarPorCliente
+                const montoACredito = montoRestanteAPagarPorCliente - (parseFloat(enganche) || 0);
                 const movimientosCuenta = [];
                 if (montoACredito > 0) movimientosCuenta.push({ cliente_id: infoClienteConSaldo.client_id, tipo_movimiento: 'CARGO_VENTA', monto: montoACredito, referencia_venta_id: ventaId, descripcion: `Venta ${codigo}` });
-                // ELIMINAR EL SIGUIENTE BLOQUE (ABONO_ENGANCHE)
-                // if ((parseFloat(enganche) || 0) > 0) movimientosCuenta.push({ cliente_id: infoClienteConSaldo.client_id, tipo_movimiento: 'ABONO_ENGANCHE', monto: -(parseFloat(enganche) || 0), referencia_venta_id: ventaId, descripcion: `Enganche Venta ${codigo}` });
                 if (movimientosCuenta.length > 0) {
                     const { error: errMovs } = await supabase.from('movimientos_cuenta_clientes').insert(movimientosCuenta);
                     if (errMovs) { await supabase.from('ventas').delete().eq('id', ventaId); throw errMovs; }
                 }
-            } else if (montoRestanteAPagarPorCliente > 0) { // Solo registrar pago si aún queda algo por pagar y no es crédito
+            } else if (montoRestanteAPagarPorCliente > 0) {
                 const { error: errorMovPago } = await supabase.from('movimientos_cuenta_clientes').insert([{
                     cliente_id: infoClienteConSaldo.client_id,
                     tipo_movimiento: 'PAGO_VENTA',
-                    monto: -(montoRestanteAPagarPorCliente), // Monto restante a pagar
+                    monto: -(montoRestanteAPagarPorCliente),
                     referencia_venta_id: ventaId,
                     descripcion: `Pago Venta ${codigo} (${paymentType})`,
                 }]);
@@ -454,8 +459,6 @@ export default function Checkout() {
 
 
             for (const p of productosVenta) {
-                // Si es un producto de venta rápida, no tiene ID en la tabla 'productos' ni stock real.
-                // Los productos de venta rápida tienen un ID temporal que comienza con 'quick-'.
                 if (!String(p.id).startsWith('quick-')) {
                     const { data: prodCheck } = await supabase.from('productos').select('stock').eq('id', p.id).single();
                     const currentStock = prodCheck?.stock || 0;
@@ -465,69 +468,56 @@ export default function Checkout() {
                     await supabase.from('productos').update({ stock: currentStock - cantidadVendida }).eq('id', p.id);
                     await supabase.from('movimientos_inventario').insert([{ producto_id: p.id, tipo: 'SALIDA', cantidad: cantidadVendida, referencia: codigo, motivo: 'venta', fecha: now.toISOString() }]);
                 }
-                // CORRECCIÓN CLAVE AQUÍ: Asegurar que las propiedades correctas se usan para detalle_venta
                 await supabase.from('detalle_venta').insert([{
                     venta_id: ventaId,
-                    producto_id: String(p.id).startsWith('quick-') ? null : p.id, // Si es 'quick', no hay producto_id real
+                    producto_id: String(p.id).startsWith('quick-') ? null : p.id,
                     cantidad: p.cantidad,
-                    precio_unitario: p.precio_unitario, // Usar la propiedad precio_unitario del producto en productosVenta
-                    total_parcial: p.total_parcial // Usar la propiedad total_parcial del producto en productosVenta
+                    precio_unitario: p.precio_unitario, // Ya debe ser el precio final según la jerarquía
+                    total_parcial: p.total_parcial // Ya debe ser el total parcial calculado
                 }]);
             }
 
             if (budgetSourceId) {
                 await supabase.from('presupuestos').update({ estado: 'Convertido a Venta' }).eq('id', budgetSourceId);
             }
-
+            
             const ticketFormattedDate = formatTicketDateTime(now.toISOString());
 
             let balanceFinalClienteParaTicket = infoClienteConSaldo?.balance !== undefined ? infoClienteConSaldo.balance : 0;
-            // La actualización del balance del cliente en el ticket debe reflejar el impacto de esta venta
-            // Si hubo uso de saldo a favor, ese monto ya redujo el balance
-            // Si fue a crédito, la deuda aumenta
-            // Si fue un pago, el balance disminuye (si no es a crédito)
-
-            // Si se usó saldo a favor, el balance inicial del cliente se reducirá por el monto aplicado
-            // Esto ya se reflejará en la próxima consulta al backend, pero para el ticket actual lo ajustamos
-            // NO se necesita ajustar el balanceFinalClienteParaTicket con montoAplicadoDelSaldoFavor aquí si ya se insertó como 'USO_SALDO_VENTA'
-
-            // Para ventas a crédito: la deuda neta se añade al balance del cliente
             if (paymentType === 'Crédito cliente') {
                 const montoACreditoReal = montoRestanteAPagarPorCliente - (parseFloat(enganche) || 0);
                 if (montoACreditoReal > 0) {
-                     // Solo sumamos la deuda pendiente, el enganche ya está implícito en la deuda neta
                     balanceFinalClienteParaTicket += montoACreditoReal;
                 }
-            } else if (montoRestanteAPagarPorCliente > 0) { // Si es otro tipo de pago y hubo un monto final
-                // Este pago reduce el balance del cliente
+            } else if (montoRestanteAPagarPorCliente > 0) {
                 balanceFinalClienteParaTicket -= montoRestanteAPagarPorCliente;
             }
-
 
             const ticketData = {
                 codigo_venta: codigo,
                 cliente: { id: infoClienteConSaldo.client_id, nombre: infoClienteConSaldo.client_name, telefono: infoClienteConSaldo.telefono || 'N/A' },
                 vendedor: { nombre: vendedorInfo?.nombre || currentUser?.email || 'N/A' },
                 fecha: ticketFormattedDate,
-                // CORRECCIÓN CLAVE AQUÍ: Asegurar que productosVenta se mapea con las propiedades que HtmlTicketDisplay espera
+                // CAMBIO CLAVE: Asegurar que productosVenta se mapea con las propiedades que HtmlTicketDisplay espera
+                // precio_unitario y total_parcial ya deben contener el precio final de venta.
                 productosVenta: productosVenta.map(p => ({
-                    ...p, // Copia todas las propiedades del producto
-                    precio_unitario: p.precio_unitario, // Asegura que precio_unitario esté presente
-                    total_parcial: p.total_parcial // Asegura que total_parcial esté presente
+                    ...p,
+                    precio_unitario: p.precio_unitario, // Ya es el precio final
+                    total_parcial: p.total_parcial // Ya es el total parcial
                 })),
                 originalSubtotal,
                 discountAmount,
                 forma_pago: montoRestanteAPagarPorCliente === 0 && montoAplicadoDelSaldoFavor > 0 ? 'SALDO_A_FAVOR' : paymentType,
                 enganche: parseFloat(enganche) || 0,
                 gastos_envio: parseFloat(gastosEnvio) || 0,
-                total_final: montoRestanteAPagarPorCliente, // total_final del ticket es el monto realmente pagado
+                total_final: montoRestanteAPagarPorCliente,
                 monto_credito_aplicado: montoAplicadoDelSaldoFavor,
                 balance_cuenta: balanceFinalClienteParaTicket,
             };
             setHtmlTicketData(ticketData);
             setShowHtmlTicket(true);
             setShowSaleModal(false);
-
+            
             // Limpiar estados
             setProductosVenta([]); setClienteSeleccionado(null); setPaymentType('');
             setDiscountType('Sin descuento'); setDiscountValue(0); setEnganche(0);
@@ -542,7 +532,7 @@ export default function Checkout() {
     };
 
     const closeHtmlTicket = () => { setShowHtmlTicket(false); setHtmlTicketData(null); };
-
+    
     const clientesParaSelector = useMemo(() => {
         if (!clienteSeleccionado) return clientes;
         return clientes.filter(c => c.id !== clienteSeleccionado.id);
@@ -552,8 +542,8 @@ export default function Checkout() {
         <div className="min-h-screen bg-dark-900 p-4 md:p-8 lg:p-12">
             {/* Encabezado */}
             <div className="flex flex-col md:flex-row items-center justify-between gap-6 mb-8">
-                <button
-                    onClick={() => navigate('/')}
+                <button 
+                    onClick={() => navigate('/')} 
                     className="px-6 py-2 bg-dark-800 text-gray-200 font-semibold rounded-lg shadow-elegant-dark hover:bg-dark-700 transition-colors flex items-center gap-2"
                 >
                     <ArrowLeft size={18} />
@@ -611,12 +601,12 @@ export default function Checkout() {
             {/* Footer Fijo */}
             <div
                 className={`fixed bottom-0 left-0 right-0 p-4 text-center rounded-t-xl shadow-lg flex justify-between items-center transition-colors ${
-                    productosVenta.length === 0 || !infoClienteConSaldo?.client_id || processing || loadingUserLocal
-                    ? 'bg-dark-700 text-gray-500 cursor-not-allowed'
+                    productosVenta.length === 0 || !infoClienteConSaldo?.client_id || processing || loadingUserLocal 
+                    ? 'bg-dark-700 text-gray-500 cursor-not-allowed' 
                     : 'bg-primary-600 text-white cursor-pointer hover:bg-primary-700'
                 }`}
                 onClick={openSaleModal}
-                aria-disabled={productosVenta.length === 0 || !infoClienteConSaldo?.client_id || processing || loadingUserLocal}
+                aria-disabled={productosVenta.length === 0 || !infoClienteConSaldo?.client_id || processing || loadingUserLocal} 
             >
                 <div className="flex-1 text-left">
                     <span className="font-semibold text-lg">{totalItems} item{totalItems !== 1 ? 's' : ''}</span>
