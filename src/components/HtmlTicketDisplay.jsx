@@ -62,16 +62,25 @@ export default function HtmlTicketDisplay({ saleData, onClose, onShareClick }) {
             }
 
             const canvas = await html2canvas(ticketRef.current, {
-                scale: 2,
-                logging: false,
-                useCORS: true,
-                backgroundColor: '#ffffff'
+                scale: 2, // Aumentar escala para mejor resolución
+                logging: true, // CAMBIO: Activar logging para depuración
+                useCORS: true, // Importante si hay imágenes de otra origen
+                backgroundColor: '#ffffff', // Asegurar el fondo blanco para la captura
+                // Añadir una opción para manejar imágenes externas, si el logo está dando problemas
+                // allowTaint: true, // Permitir contenido de imagen "contaminado" para la captura
+                // foreignObjectRendering: true // Usar renderizado de objetos foráneos para SVG/XML
             });
             const imageDataUrl = canvas.toDataURL('image/png', 0.9);
+
+            // CAMBIO: Añadir depuración para el tamaño de la imagen generada
+            console.log("Tamaño de la imagen generada (Data URL length):", imageDataUrl.length);
 
             const blob = await (await fetch(imageDataUrl)).blob();
             const filename = `ticket_venta_${codigo_venta || 'sin_codigo'}.png`;
             const file = new File([blob], filename, { type: 'image/png' });
+
+            // CAMBIO: Añadir depuración para el tamaño del Blob/File
+            console.log("Tamaño del Blob/File:", file.size, "bytes");
 
             if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
                 await navigator.share({
@@ -91,11 +100,20 @@ export default function HtmlTicketDisplay({ saleData, onClose, onShareClick }) {
                 document.body.removeChild(link);
             }
         } catch (error) {
+            // CAMBIO: Registro de errores más detallado
             if (error.name === 'AbortError') {
                 toast('Compartir cancelado.');
+                console.log("Compartir cancelado por el usuario.");
             } else {
                 console.error("Error al generar o compartir la imagen del ticket:", error);
-                toast.error("No se pudo compartir el ticket como imagen. Intenta de nuevo.");
+                // Si el error es de html2canvas, a veces se debe a CORS con imágenes
+                if (error.message.includes('tainted canvas')) {
+                    toast.error("Error de seguridad al generar la imagen (CORS). Asegúrate de que las imágenes estén en el mismo dominio o configuradas para CORS.");
+                } else if (error.message.includes('Failed to fetch')) {
+                     toast.error("Error de red al procesar la imagen. Verifica tu conexión.");
+                } else {
+                    toast.error("No se pudo compartir el ticket como imagen. Intenta de nuevo o descarga.");
+                }
             }
         }
     };
@@ -104,7 +122,14 @@ export default function HtmlTicketDisplay({ saleData, onClose, onShareClick }) {
         if (onShareClick) {
             onShareClick.current = internalHandleShareTicket;
         }
-    }, [onShareClick, internalHandleShareTicket]); // internalHandleShareTicket puede ser una dependencia si lo envuelves en useCallback
+        // internalHandleShareTicket es una dependencia porque se define dentro del componente
+        // y usa variables del scope del componente (codigo_venta, cliente, displayTotalPagado).
+        // Sin embargo, si lo envuelves en useCallback en el padre, React garantiza su estabilidad.
+        // Aquí no está envuelto en useCallback, por lo que React recomienda añadirlo.
+        // Pero en la práctica para una ref, no suele ser crítico a menos que haya renders muy frecuentes e innecesarios.
+        // Para evitar un warning de React, podríamos envolver internalHandleShareTicket en useCallback.
+    }, [onShareClick, internalHandleShareTicket]);
+
 
     return (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[100] p-2" onClick={onClose}>
@@ -125,7 +150,6 @@ export default function HtmlTicketDisplay({ saleData, onClose, onShareClick }) {
                             <img src="/images/PERFUMESELISA.png" alt="Logo Perfumes Elisa" style={{ marginRight: '10px', height: '50px', width: '50px', objectFit: 'contain' }} />
                             <div style={{ textAlign: 'left' }}>
                                 <h2 style={{ fontSize: '1.1rem', fontWeight: 'bold', margin: '0', color: '#000' }}>Ticket de Venta</h2>
-                                {/* CAMBIO CLAVE AQUÍ: Usar directamente la variable codigo_venta */}
                                 <p style={{ fontSize: '0.8rem', color: '#6c757d', margin: '0' }}>#{codigo_venta || 'N/A'}</p>
                             </div>
                         </div>
@@ -205,6 +229,7 @@ export default function HtmlTicketDisplay({ saleData, onClose, onShareClick }) {
                         <p style={{ margin: '2px 0' }}>Visítanos de nuevo pronto.</p>
                     </div>
                 </div>
+                {/* Los botones aquí se mantienen sin cambios, ya que ahora el botón de compartir principal estará en Checkout.jsx */}
                 <div className="p-4 text-center flex justify-center space-x-4 border-t border-dark-700 mt-2">
                     <button
                         onClick={internalHandleShareTicket} // Usar la función interna para compartir
