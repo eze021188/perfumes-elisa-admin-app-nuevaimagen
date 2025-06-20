@@ -35,7 +35,7 @@ export default function ProductosItems() {
       nombre: '', stock: '', precio_normal: '', promocion: '',
       costo_final_usd: '', costo_final_mxn: '', codigo: '',
       categoria: '', imagen_url: '',
-      descuento_lote: '' // Asegurarse de que descuento_lote se inicialice
+      descuento_lote: '' 
   });
   const [isAddingProduct, setIsAddingProduct] = useState(false);
 
@@ -45,7 +45,8 @@ export default function ProductosItems() {
 
   const cargarProductos = async () => {
     setLoading(true); 
-    const { data, error } = await supabase.from('productos').select('*, descuento_lote'); // CAMBIO CLAVE: Cargar descuento_lote
+    // CAMBIO CLAVE: Cargar descuento_lote y promocion
+    const { data, error } = await supabase.from('productos').select('*, descuento_lote, promocion'); 
     if (error) {
       console.error('Error al cargar productos:', error.message);
       toast.error('Error al cargar productos.');
@@ -93,7 +94,7 @@ export default function ProductosItems() {
               if (aValue == null) return sortDirection === 'asc' ? 1 : -1;
               if (bValue == null) return sortDirection === 'asc' ? -1 : 1;
 
-              // Añadir 'descuento_lote' a las columnas numéricas para el ordenamiento
+              // Asegurar que todas las columnas de precios y stock son tratadas como números para ordenamiento
               const numColumns = ['stock', 'promocion', 'precio_normal', 'costo_final_usd', 'costo_final_mxn', 'descuento_lote'];
               if (numColumns.includes(sortColumn)) {
                    const aNum = parseFloat(aValue) || 0;
@@ -161,24 +162,23 @@ export default function ProductosItems() {
     await cargarProductos();
   };
 
-  // CAMBIO CLAVE AQUÍ: handleEditarLocal ahora actualizará 'descuento_lote' en lugar de 'promocion'
-  // Si el campo es 'promocion', lo redirigimos a 'descuento_lote'.
+  // CAMBIO CLAVE AQUÍ: handleEditarLocal ahora actualizará el campo correspondiente (promocion o precio_normal)
   const handleEditarLocal = async (id, campo, valor) => {
-    const targetField = campo === 'promocion' ? 'descuento_lote' : campo; // Redirigir edición de 'promocion' a 'descuento_lote'
     const numericValue = parseFloat(valor);
-    const valueToUpdate = isNaN(numericValue) || numericValue < 0 ? null : numericValue.toFixed(2); // Guardar null si no es válido
+    // Establecer a null si es NaN o negativo, sino a 2 decimales
+    const valueToUpdate = isNaN(numericValue) || numericValue < 0 ? null : numericValue.toFixed(2);
 
     setProductos(prev =>
-      prev.map(p => (p.id === id ? { ...p, [targetField]: valueToUpdate } : p))
+      prev.map(p => (p.id === id ? { ...p, [campo]: valueToUpdate } : p))
     );
 
     // Actualización directa a la base de datos
     const { error } = await supabase.from('productos')
-      .update({ [targetField]: valueToUpdate })
+      .update({ [campo]: valueToUpdate }) // Actualizar el campo directamente, sea 'promocion' o 'precio_normal'
       .eq('id', id);
 
     if (error) {
-      console.error(`Error al actualizar ${targetField} para producto ${id}:`, error.message);
+      console.error(`Error al actualizar ${campo} para producto ${id}:`, error.message);
       toast.error(`Error al actualizar el precio: ${error.message}`);
       cargarProductos(); // Recargar para revertir si hubo un error en la BD
     } else {
@@ -193,13 +193,13 @@ export default function ProductosItems() {
 
       productosFiltradosYOrdenados.forEach(p => {
           if (seleccionados.has(p.id)) {
-              // CAMBIO CLAVE AQUÍ: Solo actualizamos 'descuento_lote' y 'precio_normal' desde esta sección.
-              // 'promocion' ya no es editable directamente en esta vista.
+              // CAMBIO CLAVE AQUÍ: En esta acción masiva, solo se actualizarán 'promocion' y 'precio_normal'.
+              // 'descuento_lote' no se toca desde aquí.
               updates.push({
                   id: p.id,
                   // Asegurarse de enviar los valores como números o null
                   precio_normal: parseFloat(p.precio_normal) || null,
-                  descuento_lote: parseFloat(p.descuento_lote) || null // Asegurarse de que descuento_lote se envíe
+                  promocion: parseFloat(p.promocion) || null // Actualizar promoción original
               });
           }
       });
@@ -273,11 +273,11 @@ export default function ProductosItems() {
           return;
       }
       const stockNum = parseFloat(newProductForm.stock) || 0;
-      const precioNormalNum = parseFloat(newProductForm.precio_normal) || 0; // Usar precioNormalNum
-      const precioPromocionNum = parseFloat(newProductForm.promocion) || null;
+      const precioNormalNum = parseFloat(newProductForm.precio_normal) || 0; 
+      const precioPromocionNum = parseFloat(newProductForm.promocion) || null; // Promoción original
       const costoFinalUsdNum = parseFloat(newProductForm.costo_final_usd) || null;
       const costoFinalMxnNum = parseFloat(newProductForm.costo_final_mxn) || null;
-      const descuentoLoteNum = parseFloat(newProductForm.descuento_lote) || null; // Asegurarse de que se lea descuento_lote
+      const descuentoLoteNum = parseFloat(newProductForm.descuento_lote) || null; // Descuento por lote
 
       if (stockNum < 0 || precioNormalNum < 0 || (precioPromocionNum !== null && precioPromocionNum < 0) || (costoFinalUsdNum !== null && costoFinalUsdNum < 0) || (costoFinalMxnNum !== null && costoFinalMxnNum < 0) || (descuentoLoteNum !== null && descuentoLoteNum < 0)) {
           toast.error('Los valores numéricos no pueden ser negativos.');
@@ -288,13 +288,13 @@ export default function ProductosItems() {
           nombre: newProductForm.nombre.trim(),
           stock: stockNum,
           precio_normal: precioNormalNum,
-          promocion: precioPromocionNum,
+          promocion: precioPromocionNum, // Guardar promoción original
+          descuento_lote: descuentoLoteNum, // Guardar descuento por lote
           costo_final_usd: costoFinalUsdNum,
           costo_final_mxn: costoFinalMxnNum,
           codigo: newProductForm.codigo.trim() || null,
           categoria: newProductForm.categoria.trim() || null,
           imagen_url: newProductForm.imagen_url.trim() || null,
-          descuento_lote: descuentoLoteNum // Incluir descuento_lote en la inserción
       };
       const { error } = await supabase.from('productos').insert([productToInsert]).select().single();
       if (error) {
@@ -427,12 +427,13 @@ export default function ProductosItems() {
             <div className="p-1 cursor-pointer hover:text-gray-200 flex items-center gap-1 whitespace-nowrap" onClick={() => handleSort('nombre')}> 
                 Nombre {sortColumn === 'nombre' && (<span>{sortDirection === 'asc' ? '▲' : '▼'}</span>)}
             </div>
-            {/* CAMBIO: Columna de "Promoción" ahora muestra "Dscto. Lote" editable, y "Promoción" original de solo lectura */}
-            <div className="p-1 text-right cursor-pointer hover:text-gray-200 flex items-center gap-1 justify-end whitespace-nowrap" onClick={() => handleSort('descuento_lote')}> 
-                Dscto. Lote {sortColumn === 'descuento_lote' && (<span>{sortDirection === 'asc' ? '▲' : '▼'}</span>)}
-            </div>
+            {/* CAMBIO CLAVE: Columna "Promoción" editable */}
             <div className="p-1 text-right cursor-pointer hover:text-gray-200 flex items-center gap-1 justify-end whitespace-nowrap" onClick={() => handleSort('promocion')}> 
                 Promoción {sortColumn === 'promocion' && (<span>{sortDirection === 'asc' ? '▲' : '▼'}</span>)}
+            </div>
+            {/* NUEVA COLUMNA: "Dscto. Lote" de solo lectura */}
+            <div className="p-1 text-right cursor-pointer hover:text-gray-200 flex items-center gap-1 justify-end whitespace-nowrap" onClick={() => handleSort('descuento_lote')}> 
+                Dscto. Lote {sortColumn === 'descuento_lote' && (<span>{sortDirection === 'asc' ? '▲' : '▼'}</span>)}
             </div>
             <div className="p-1 text-right cursor-pointer hover:text-gray-200 flex items-center gap-1 justify-end whitespace-nowrap" onClick={() => handleSort('precio_normal')}> 
                 P. Normal {sortColumn === 'precio_normal' && (<span>{sortDirection === 'asc' ? '▲' : '▼'}</span>)}
@@ -477,22 +478,22 @@ export default function ProductosItems() {
                     Stock: {producto.stock ?? 0}
                   </div>
                 </div>
-                {/* CAMBIO CLAVE: Input para editar descuento_lote */}
+                {/* CAMBIO CLAVE: Input para editar Promoción (apunta a promocion) */}
                 <div className="flex flex-col items-start">
-                  <label className="text-gray-400 mb-1 text-[10px]">Dscto. Lote</label>
+                  <label className="text-gray-400 mb-1 text-[10px]">Promoción</label>
                   <input
                     type="number" min="0" step="0.01"
-                    value={(producto.descuento_lote ?? '').toString()}
-                    onChange={e => handleEditarLocal(producto.id, 'descuento_lote', e.target.value)} // CAMBIO: Actualizar descuento_lote
+                    value={(producto.promocion ?? '').toString()}
+                    onChange={e => handleEditarLocal(producto.id, 'promocion', e.target.value)} // CAMBIO: Edita promocion
                     className="w-20 border border-dark-700 bg-dark-900 px-2 py-1 rounded text-right text-xs text-gray-200 focus:ring-primary-500 focus:border-primary-500"
                     placeholder="0.00"
                   />
                 </div>
-                {/* Nueva columna para Promoción (solo lectura) */}
+                {/* NUEVA COLUMNA: Dscto. Lote (solo lectura) */}
                 <div className="flex flex-col items-start">
-                  <label className="text-gray-400 mb-1 text-[10px]">Promoción</label>
+                  <label className="text-gray-400 mb-1 text-[10px]">Dscto. Lote</label>
                   <span className="w-20 px-2 py-1 text-right text-xs text-gray-200">
-                    {formatCurrencyMXN(producto.promocion)}
+                    {formatCurrencyMXN(producto.descuento_lote)} {/* Muestra descuento_lote */}
                   </span>
                 </div>
                 {/* Columna Precio Normal (editable como antes) */}
@@ -571,7 +572,7 @@ export default function ProductosItems() {
                           <input type="number" id="promocion" name="promocion" min="0" step="0.01" value={newProductForm.promocion} onChange={handleNewProductInputChange} className="w-full border border-dark-700 bg-dark-900 px-3 py-2 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-gray-200" />
                       </div>
                        <div>
-                          <label htmlFor="descuento_lote" className="block text-sm font-medium text-gray-300 mb-1">Precio Venta (Dscto. Lote)</label> {/* Nuevo campo en el formulario de añadir */}
+                          <label htmlFor="descuento_lote" className="block text-sm font-medium text-gray-300 mb-1">Precio Venta (Dscto. Lote)</label> 
                           <input type="number" id="descuento_lote" name="descuento_lote" min="0" step="0.01" value={newProductForm.descuento_lote} onChange={handleNewProductInputChange} className="w-full border border-dark-700 bg-dark-900 px-3 py-2 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-gray-200" />
                       </div>
                        <div>

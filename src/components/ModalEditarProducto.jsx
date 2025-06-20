@@ -8,10 +8,9 @@ export default function ModalEditarProducto({ producto, onClose, onGuardado }) {
   const [nombre, setNombre] = useState(producto.nombre || '');
   const [costoFinalUSD, setCostoFinalUSD] = useState(producto.costo_final_usd ?? '');
   const [costoFinalMXN, setCostoFinalMXN] = useState(producto.costo_final_mxn ?? '');
-  // CAMBIO CLAVE: Cambiar 'precioUnitarioUSD' para que refleje y edite 'descuento_lote'
-  const [precioDescuentoLote, setPrecioDescuentoLote] = useState(producto.descuento_lote ?? ''); // NUEVO ESTADO para descuento_lote
-  const [precioNormal, setPrecioNormal] = useState(producto.precio_normal ?? ''); // Mantener precio normal
-  const [promocionOriginal, setPromocionOriginal] = useState(producto.promocion ?? ''); // Mantener promoción original como lectura
+  const [precioDescuentoLote, setPrecioDescuentoLote] = useState(producto.descuento_lote ?? ''); 
+  const [precioNormal, setPrecioNormal] = useState(producto.precio_normal ?? ''); 
+  const [promocionOriginal, setPromocionOriginal] = useState(producto.promocion ?? ''); // <-- CAMBIO CLAVE: Leer la promocion original
 
   const [stock, setStock] = useState(producto.stock ?? '');
   const [imagenURL, setImagenURL] = useState(producto.imagen_url || '');
@@ -23,9 +22,9 @@ export default function ModalEditarProducto({ producto, onClose, onGuardado }) {
     setNombre(producto.nombre || '');
     setCostoFinalUSD(producto.costo_final_usd ?? '');
     setCostoFinalMXN(producto.costo_final_mxn ?? '');
-    setPrecioNormal(producto.precio_normal ?? ''); // Cargar precio_normal
-    setPromocionOriginal(producto.promocion ?? ''); // Cargar promocion original
-    setPrecioDescuentoLote(producto.descuento_lote ?? ''); // Cargar descuento_lote
+    setPrecioNormal(producto.precio_normal ?? ''); 
+    setPromocionOriginal(producto.promocion ?? ''); // <-- CAMBIO CLAVE: Cargar la promocion original
+    setPrecioDescuentoLote(producto.descuento_lote ?? ''); 
     setStock(producto.stock ?? '');
     setImagenURL(producto.imagen_url || '');
     setCategoria(producto.categoria || '');
@@ -38,10 +37,9 @@ export default function ModalEditarProducto({ producto, onClose, onGuardado }) {
       nombre,
       costo_final_usd: parseFloat(costoFinalUSD) || null,
       costo_final_mxn: parseFloat(costoFinalMXN) || null,
-      precio_normal: parseFloat(precioNormal) || null, // Guardar precio_normal
-      descuento_lote: parseFloat(precioDescuentoLote) || null, // CAMBIO CLAVE: Guardar descuento_lote
-      // 'precio_unitario_usd' y 'promocion' ya no se actualizan directamente desde aquí,
-      // 'promocion' se mantiene como referencia o se actualiza desde Gestión de Precios.
+      precio_normal: parseFloat(precioNormal) || null, 
+      promocion: parseFloat(promocionOriginal) || null, // <-- CAMBIO CLAVE: Guardar la promocion original
+      descuento_lote: parseFloat(precioDescuentoLote) || null, // Guardar descuento_lote
       stock: Number(stock) || 0,
       imagen_url: imagenURL.trim() || null,
       categoria: categoria.trim() || null,
@@ -58,7 +56,7 @@ export default function ModalEditarProducto({ producto, onClose, onGuardado }) {
       console.error('Error al guardar producto:', error.message);
       alert(`Ocurrió un error al guardar los cambios: ${error.message}`);
     } else {
-      onGuardado(); // Llama a onGuardado que recarga los productos en ProductosItems.jsx
+      onGuardado(); 
     }
   };
 
@@ -85,7 +83,6 @@ export default function ModalEditarProducto({ producto, onClose, onGuardado }) {
         
         <div className="space-y-4">
           <div>
-            {/* CORRECCIÓN: Eliminar 'block' si ya tienes 'flex' */}
             <label htmlFor="edit-nombre" className="text-sm font-medium text-gray-300 mb-1 flex items-center gap-1">
               <Tag size={16} />
               Nombre
@@ -100,7 +97,6 @@ export default function ModalEditarProducto({ producto, onClose, onGuardado }) {
           </div>
 
           <div>
-            {/* CORRECCIÓN: Eliminar 'block' si ya tienes 'flex' */}
             <label htmlFor="edit-categoria" className="text-sm font-medium text-gray-300 mb-1 flex items-center gap-1">
               <Layers size={16} />
               Categoría
@@ -116,7 +112,6 @@ export default function ModalEditarProducto({ producto, onClose, onGuardado }) {
           </div>
 
           <div>
-            {/* CORRECCIÓN: Eliminar 'block' si ya tienes 'flex' */}
             <label htmlFor="edit-costoFinalUSD" className="text-sm font-medium text-gray-300 mb-1 flex items-center gap-1">
               <DollarSign size={16} />
               Costo final x unidad (USD)
@@ -133,7 +128,6 @@ export default function ModalEditarProducto({ producto, onClose, onGuardado }) {
           </div>
 
           <div>
-            {/* CORRECCIÓN: Eliminar 'block' si ya tienes 'flex' */}
             <label htmlFor="edit-costoFinalMXN" className="text-sm font-medium text-gray-300 mb-1 flex items-center gap-1">
               <DollarSign size={16} />
               Costo final x unidad (MXN)
@@ -149,9 +143,8 @@ export default function ModalEditarProducto({ producto, onClose, onGuardado }) {
             />
           </div>
 
-          {/* CAMBIO CLAVE: Campo para editar el precio normal */}
+          {/* Campo para editar el precio normal */}
           <div>
-            {/* CORRECCIÓN: Eliminar 'block' si ya tienes 'flex' */}
             <label htmlFor="edit-precioNormal" className="text-sm font-medium text-gray-300 mb-1 flex items-center gap-1">
               <DollarSign size={16} />
               Precio Venta (Normal)
@@ -167,35 +160,33 @@ export default function ModalEditarProducto({ producto, onClose, onGuardado }) {
             />
           </div>
 
-          {/* CAMBIO CLAVE: Campo para editar el descuento_lote */}
+          {/* CAMBIO CLAVE: Campo para editar Promoción (original) */}
           <div>
-            {/* CORRECCIÓN: Eliminar 'block' si ya tienes 'flex' */}
-            <label htmlFor="edit-precioDescuentoLote" className="text-sm font-medium text-gray-300 mb-1 flex items-center gap-1">
+            <label htmlFor="edit-promocionOriginal" className="text-sm font-medium text-gray-300 mb-1 flex items-center gap-1">
               <DollarSign size={16} />
-              Precio Venta (Dscto. Lote)
+              Precio Venta (Promoción)
             </label>
             <input
-              type="number"
-              id="edit-precioDescuentoLote"
+              type="number" // Ahora editable
+              id="edit-promocionOriginal"
               min="0"
               step="0.01"
-              value={precioDescuentoLote}
-              onChange={(e) => setPrecioDescuentoLote(e.target.value)}
+              value={promocionOriginal} // Edita promocionOriginal
+              onChange={(e) => setPromocionOriginal(e.target.value)} // Actualiza promocionOriginal
               className="w-full border border-dark-700 bg-dark-900 px-3 py-2 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 text-gray-200"
             />
           </div>
           
-          {/* CAMBIO: Campo de Promoción original, ahora de solo lectura */}
+          {/* NUEVA COLUMNA: Dscto. Lote (solo lectura) */}
           <div>
-            {/* CORRECCIÓN: Eliminar 'block' si ya tienes 'flex' */}
-            <label htmlFor="view-promocionOriginal" className="text-sm font-medium text-gray-300 mb-1 flex items-center gap-1">
+            <label htmlFor="view-precioDescuentoLote" className="text-sm font-medium text-gray-300 mb-1 flex items-center gap-1">
               <DollarSign size={16} />
-              Promoción (Original)
+              Precio Venta (Dscto. Lote)
             </label>
             <input
               type="text" // Solo texto para ser de solo lectura
-              id="view-promocionOriginal"
-              value={(promocionOriginal ?? '').toString()} // Muestra el valor original
+              id="view-precioDescuentoLote"
+              value={(precioDescuentoLote ?? '').toString()} // Muestra el valor de descuento_lote
               className="w-full border border-dark-700 bg-dark-900 px-3 py-2 rounded-md text-gray-400 cursor-not-allowed"
               disabled // Deshabilitar para que sea de solo lectura
             />
@@ -203,7 +194,6 @@ export default function ModalEditarProducto({ producto, onClose, onGuardado }) {
 
 
           <div>
-            {/* CORRECCIÓN: Eliminar 'block' si ya tienes 'flex' */}
             <label htmlFor="edit-stock" className="text-sm font-medium text-gray-300 mb-1 flex items-center gap-1">
               <Package size={16} />
               Stock disponible
@@ -219,7 +209,6 @@ export default function ModalEditarProducto({ producto, onClose, onGuardado }) {
           </div>
 
           <div>
-            {/* CORRECCIÓN: Eliminar 'block' si ya tienes 'flex' */}
             <label htmlFor="edit-imagenURL" className="text-sm font-medium text-gray-300 mb-1 flex items-center gap-1">
               <Image size={16} />
               URL de la imagen del producto
