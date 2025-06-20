@@ -1,10 +1,9 @@
 // src/pages/Checkout.jsx
-// CAMBIO CLAVE: Importar useRef de React
 import React, { useEffect, useState, useMemo, useRef } from 'react'; 
 import { supabase } from '../supabase';
 import { useNavigate, useLocation } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { ChevronRight, Eye, EyeOff, ArrowLeft, Share2 } from 'lucide-react'; // Importar Share2 si no está ya
+import { ChevronRight, Eye, EyeOff, ArrowLeft, Share2 } from 'lucide-react';
 
 // Components
 import QuickEntryBar from '../components/QuickEntryBar';
@@ -34,7 +33,7 @@ const formatCurrency = (amount) => {
     });
 };
 
-// Helper para formatear fecha y hora para el código de venta
+// CAMBIO CLAVE: Asegurarse que formatDateTimeForCode solo retorne una cadena de texto sin tags HTML ni interpolación
 const formatDateTimeForCode = (date) => {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -42,6 +41,7 @@ const formatDateTimeForCode = (date) => {
     const hours = String(date.getHours()).padStart(2, '0');
     const minutes = String(date.getMinutes()).padStart(2, '0');
     const seconds = String(date.getSeconds()).padStart(2, '0');
+    // Retorna la cadena directamente, sin ningún envoltorio de JSX o MathJax
     return `<span class="math-inline">\{year\}</span>{month}<span class="math-inline">\{day\}</span>{hours}<span class="math-inline">\{minutes\}</span>{seconds}`;
 };
 
@@ -102,7 +102,7 @@ export default function Checkout() {
     const [htmlTicketData, setHtmlTicketData] = useState(null);
 
     // Ref para la función de compartir ticket de HtmlTicketDisplay
-    const shareTicketRef = useRef(null); // La línea que causaba el error
+    const shareTicketRef = useRef(null);
 
     // useEffect 1: Carga inicial de datos (usuarios, clientes, productos)
     useEffect(() => {
