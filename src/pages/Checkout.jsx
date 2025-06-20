@@ -33,7 +33,7 @@ const formatCurrency = (amount) => {
     });
 };
 
-// CAMBIO CLAVE: Asegurarse que formatDateTimeForCode solo retorne una cadena de texto sin tags HTML ni interpolación
+// Asegurarse que formatDateTimeForCode solo retorne una cadena de texto sin tags HTML ni interpolación
 const formatDateTimeForCode = (date) => {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -42,7 +42,7 @@ const formatDateTimeForCode = (date) => {
     const minutes = String(date.getMinutes()).padStart(2, '0');
     const seconds = String(date.getSeconds()).padStart(2, '0');
     // Retorna la cadena directamente, sin ningún envoltorio de JSX o MathJax
-    return `<span class="math-inline">\{year\}</span>{month}<span class="math-inline">\{day\}</span>{hours}<span class="math-inline">\{minutes\}</span>{seconds}`;
+    return `${year}${month}${day}${hours}${minutes}${seconds}`;
 };
 
 // Helper para formatear fecha para el ticket en zona horaria específica
@@ -184,17 +184,16 @@ export default function Checkout() {
             if (budget.presupuesto_items?.length) {
                 const itemsFromBudget = budget.presupuesto_items.map(item => {
                     const fullProductInfo = productos.find(p => p.id === item.producto_id);
-                    // CAMBIO CLAVE: Obtener precio de venta efectivo del presupuesto para que Checkout lo use como precio_unitario
-                    let precioVentaEfectivoPresupuesto = parseFloat(item.precio_unitario) || 0; // Usar el precio unitario del presupuesto directamente
+                    // Obtener precio de venta efectivo del presupuesto para que Checkout lo use como precio_unitario
+                    let precioVentaEfectivoPresupuesto = parseFloat(item.precio_unitario) || 0;
 
                     return {
                         id: item.producto_id,
                         nombre: fullProductInfo?.nombre || item.productos?.nombre || item.descripcion || 'Producto Desconocido',
                         cantidad: parseFloat(item.cantidad) || 0,
-                        promocion: fullProductInfo?.promocion || 0, // Mantener la promoción original del producto si existe
-                        precio_normal: fullProductInfo?.precio_normal || 0, // Mantener precio_normal original
-                        descuento_lote: fullProductInfo?.descuento_lote || 0, // Asegurarse de tener descuento_lote
-                        // Asignar el precio efectivo del presupuesto a precio_unitario y total_parcial
+                        promocion: fullProductInfo?.promocion || 0,
+                        precio_normal: fullProductInfo?.precio_normal || 0,
+                        descuento_lote: fullProductInfo?.descuento_lote || 0,
                         precio_unitario: precioVentaEfectivoPresupuesto,
                         total_parcial: (parseFloat(item.cantidad) || 0) * precioVentaEfectivoPresupuesto,
                         stock: fullProductInfo ? (parseFloat(fullProductInfo.stock) || 0) : 0,
@@ -212,8 +211,6 @@ export default function Checkout() {
             setDiscountType(budget.tipo_descuento || 'Sin descuento');
             setDiscountValue(parseFloat(budget.valor_descuento) || 0);
             setGastosEnvio(parseFloat(budget.gastos_envio) || 0);
-            // La forma de pago del presupuesto no se pasa directamente al modal, pero se puede setear aquí si es un valor predefinido
-            // setPaymentType(budget.forma_pago || ''); // Esto podría ser un problema si el presupuesto tiene forma_pago 'Crédito cliente' y el modal no la gestiona bien al inicio. Se mantiene en blanco para que el usuario la elija.
             setBudgetSourceId(budget.id);
 
             if (location.state?.budgetData) {
@@ -353,7 +350,7 @@ export default function Checkout() {
     };
 
     const onQuickSaleAdd = ({ nombre, promocion, cantidad, total }) => {
-        const tempId = `quick-<span class="math-inline">\{Date\.now\(\)\}\-</span>{Math.random()}`;
+        const tempId = `quick-${Date.now()}-${Math.random()}`;
         // Para venta rápida, el "promocion" que llega ya es el precio de venta.
         const precioVenta = promocion; 
 
@@ -488,14 +485,20 @@ export default function Checkout() {
             } // No se resta el balance para otros tipos de pago, ya que no son deudas/créditos.
 
             const ticketData = {
-                codigo_venta: codigo,
-                cliente: { id: infoClienteConSaldo.client_id, nombre: infoClienteConSaldo.client_name, telefono: infoClienteConSaldo.telefono || 'N/A' },
+                codigo_venta: codigo, // Aquí se asigna el código de venta
+                // CORRECCIÓN CLAVE: Asegurarse de asignar el nombre del cliente correctamente.
+                // Usaremos infoClienteConSaldo.client_name directamente.
+                cliente: {
+                    id: infoClienteConSaldo.client_id,
+                    nombre: infoClienteConSaldo.client_name, // <-- CORRECCIÓN: Asignar el nombre del cliente
+                    telefono: infoClienteConSaldo.telefono || 'N/A'
+                },
                 vendedor: { nombre: vendedorInfo?.nombre || currentUser?.email || 'N/A' },
                 fecha: ticketFormattedDate,
                 productosVenta: productosVenta.map(p => ({
                     ...p,
-                    precio_unitario: p.precio_unitario, // Ya es el precio final
-                    total_parcial: p.total_parcial // Ya es el total parcial
+                    precio_unitario: p.precio_unitario,
+                    total_parcial: p.total_parcial
                 })),
                 originalSubtotal,
                 discountAmount,

@@ -1,8 +1,8 @@
 // src/components/HtmlTicketDisplay.jsx
 import React, { useRef } from 'react';
-import { Download, X, Share2 } from 'lucide-react'; // Importar Share2
-import html2canvas from 'html2canvas'; // Importar html2canvas
-import toast from 'react-hot-toast'; // Asegurarse de importar toast si no lo está
+import { Download, X, Share2 } from 'lucide-react';
+import html2canvas from 'html2canvas';
+import toast from 'react-hot-toast';
 
 // Helper simple para formatear moneda
 const formatCurrency = (amount) => {
@@ -18,8 +18,7 @@ const formatCurrency = (amount) => {
     });
 };
 
-// CAMBIO: Ahora HtmlTicketDisplay recibe una prop onShareClick para que el padre pueda disparar el compartir
-export default function HtmlTicketDisplay({ saleData, onClose, onShareClick }) { // Añadir onShareClick
+export default function HtmlTicketDisplay({ saleData, onClose, onShareClick }) {
     if (!saleData) {
         return null;
     }
@@ -48,7 +47,6 @@ export default function HtmlTicketDisplay({ saleData, onClose, onShareClick }) {
             ? (enganche && enganche > 0 ? enganche : 0)
             : total_final;
 
-    // Esta función interna será llamada por onShareClick desde el padre
     const internalHandleShareTicket = async () => {
         if (!ticketRef.current) {
             console.error("Elemento del ticket no encontrado para compartir.");
@@ -82,10 +80,9 @@ export default function HtmlTicketDisplay({ saleData, onClose, onShareClick }) {
                     files: [file],
                 });
                 toast.success('Ticket compartido exitosamente.');
-                onClose(); // Cierra el modal después de compartir
+                onClose();
             } else {
                 toast.info('La función de compartir no está disponible en este dispositivo. Puedes descargarlo.');
-                // Fallback para descargar si no se puede compartir
                 const link = document.createElement('a');
                 link.href = imageDataUrl;
                 link.download = filename;
@@ -103,25 +100,19 @@ export default function HtmlTicketDisplay({ saleData, onClose, onShareClick }) {
         }
     };
 
-    // Si onShareClick es proporcionado, significa que el padre quiere controlar el compartir
-    // En ese caso, la función interna se expone a través de la prop para ser llamada externamente.
-    // Si no, este componente gestiona el botón directamente.
     React.useEffect(() => {
         if (onShareClick) {
             onShareClick.current = internalHandleShareTicket;
         }
-    }, [onShareClick]); // internalHandleShareTicket se recrea en cada render, pero onShareClick.current apunta a la última.
+    }, [onShareClick, internalHandleShareTicket]); // internalHandleShareTicket puede ser una dependencia si lo envuelves en useCallback
 
     return (
-        // Overlay del modal
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[100] p-2" onClick={onClose}>
-            {/* Contenedor principal del modal */}
             <div
                 className="bg-dark-800 rounded-lg shadow-dropdown-dark border border-dark-700 overflow-y-auto max-h-[95vh] w-full"
                 style={{ maxWidth: '400px' }}
                 onClick={(e) => e.stopPropagation()}
             >
-                {/* Contenido del ticket con estilos para captura en fondo blanco */}
                 <div className="ticket-content-printable" ref={ticketRef} style={{
                     fontFamily: 'Arial, sans-serif',
                     color: '#212529',
@@ -134,7 +125,8 @@ export default function HtmlTicketDisplay({ saleData, onClose, onShareClick }) {
                             <img src="/images/PERFUMESELISA.png" alt="Logo Perfumes Elisa" style={{ marginRight: '10px', height: '50px', width: '50px', objectFit: 'contain' }} />
                             <div style={{ textAlign: 'left' }}>
                                 <h2 style={{ fontSize: '1.1rem', fontWeight: 'bold', margin: '0', color: '#000' }}>Ticket de Venta</h2>
-                                <p style={{ fontSize: '0.8rem', color: '#6c757d', margin: '0' }}>#{saleData?.codigo_venta || 'N/A'}</p>
+                                {/* CAMBIO CLAVE AQUÍ: Usar directamente la variable codigo_venta */}
+                                <p style={{ fontSize: '0.8rem', color: '#6c757d', margin: '0' }}>#{codigo_venta || 'N/A'}</p>
                             </div>
                         </div>
                         <p style={{ fontSize: '0.8rem', color: '#6c757d', marginTop: '2px', textAlign: 'center' }}>81 3080 4010 - Ciudad Apodaca, N.L.</p>
@@ -213,9 +205,14 @@ export default function HtmlTicketDisplay({ saleData, onClose, onShareClick }) {
                         <p style={{ margin: '2px 0' }}>Visítanos de nuevo pronto.</p>
                     </div>
                 </div>
-                {/* Los botones aquí se mantienen sin cambios, ya que ahora el botón de compartir principal estará en Checkout.jsx */}
                 <div className="p-4 text-center flex justify-center space-x-4 border-t border-dark-700 mt-2">
-                    {/* El botón de compartir ya no está aquí, lo manejará el padre */}
+                    <button
+                        onClick={internalHandleShareTicket} // Usar la función interna para compartir
+                        className="px-6 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 transition-colors flex items-center"
+                    >
+                        <Share2 size={18} className="mr-1.5" />
+                        Compartir Ticket
+                    </button>
                     <button
                         onClick={onClose}
                         className="px-6 py-2 bg-dark-700 text-gray-200 rounded-md hover:bg-dark-600 transition-colors flex items-center"
