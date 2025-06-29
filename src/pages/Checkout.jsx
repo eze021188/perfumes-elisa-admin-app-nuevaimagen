@@ -48,7 +48,8 @@ const formatDateTimeForCode = (date) => {
 const formatTicketDateTime = (dateString) => {
     if (!dateString) return 'Fecha desconocida';
     try {
-        return new Date(dateString).toLocaleString('es-MX', {
+        const date = new Date(dateString);
+        return date.toLocaleString('es-MX', {
             timeZone: 'America/Mexico_City',
             year: '2-digit',
             month: '2-digit',
@@ -251,7 +252,6 @@ export default function Checkout() {
 
     const { totalItems, originalSubtotal, subtotalConDescuento, discountAmount, totalAntesDeCredito } = useMemo(() => {
         try {
-            // El originalSubtotal se calcula sobre el 'precio_unitario' que ya debe reflejar la jerarquía
             const calculatedOriginalSubtotal = productosVenta.reduce((sum, p) => sum + (p.cantidad * (p.precio_unitario ?? 0)), 0);
             const calculatedTotalItems = productosVenta.reduce((sum, p) => sum + p.cantidad, 0);
             let calculatedSubtotalConDescuento = calculatedOriginalSubtotal;
@@ -452,10 +452,12 @@ export default function Checkout() {
                     if (errMovs) { await supabase.from('ventas').delete().eq('id', ventaId); throw errMovs; }
                 }
             }
-            // NO se registra `PAGO_VENTA` para efectivo/transferencia/tarjeta si no hubo crédito pendiente.
-            // Esos ya son pagos directos de la venta y no afectan el "saldo a favor" del cliente.
+            // Eliminado el bloque `else if (montoRestanteAPagarPorCliente > 0)` para PAGO_VENTA,
+            // ya que transferencias, efectivo, etc. no deben generar movimientos de "saldo a favor".
 
             for (const p of productosVenta) {
+                // Si es un producto de venta rápida, no tiene ID en la tabla 'productos' ni stock real.
+                // Los productos de venta rápida tienen un ID temporal que comienza con 'quick-'.
                 if (!String(p.id).startsWith('quick-')) {
                     const { data: prodCheck } = await supabase.from('productos').select('stock').eq('id', p.id).single();
                     const currentStock = prodCheck?.stock || 0;
@@ -465,12 +467,13 @@ export default function Checkout() {
                     await supabase.from('productos').update({ stock: currentStock - cantidadVendida }).eq('id', p.id);
                     await supabase.from('movimientos_inventario').insert([{ producto_id: p.id, tipo: 'SALIDA', cantidad: cantidadVendida, referencia: codigo, motivo: 'venta', fecha: now.toISOString() }]);
                 }
+                // CAMBIO CLAVE: Asegurar que el producto_id se guarde correctamente en detalle_venta
                 await supabase.from('detalle_venta').insert([{
                     venta_id: ventaId,
-                    producto_id: String(p.id).startsWith('quick-') ? null : p.id,
+                    producto_id: String(p.id).startsWith('quick-') ? null : p.id, // Si es 'quick', no hay producto_id real
                     cantidad: p.cantidad,
-                    precio_unitario: p.precio_unitario,
-                    total_parcial: p.total_parcial
+                    precio_unitario: p.precio_unitario, // Ya debe ser el precio final según la jerarquía
+                    total_parcial: p.total_parcial // Ya debe ser el total parcial calculado
                 }]);
             }
 
@@ -504,8 +507,8 @@ export default function Checkout() {
                 fecha: ticketFormattedDate,
                 productosVenta: productosVenta.map(p => ({
                     ...p,
-                    precio_unitario: p.precio_unitario,
-                    total_parcial: p.total_parcial
+                    precio_unitario: p.precio_unitario, // Ya es el precio final
+                    total_parcial: p.total_parcial // Ya es el total parcial
                 })),
                 originalSubtotal,
                 discountAmount,
@@ -628,9 +631,10 @@ export default function Checkout() {
                     footer={
                         <>
                             <button onClick={() => setShowSaleModal(false)} className="px-4 py-2 bg-dark-700 text-gray-300 rounded-md hover:bg-dark-600" disabled={processing}>Cancelar</button>
-                            {htmlTicketData && ( 
+                            {/* CAMBIO CLAVE: Botón "Compartir Ticket" en el footer de ModalCheckout */}
+                            {htmlTicketData && ( // Solo si ya hay datos de ticket
                                 <button
-                                    onClick={() => shareTicketRef.current && shareTicketRef.current()}
+                                    onClick={() => shareTicketRef.current && shareTicketRef.current()} // Llama a la función de HtmlTicketDisplay a través de la ref
                                     className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 transition-colors flex items-center"
                                     disabled={processing}
                                 >
@@ -677,6 +681,7 @@ export default function Checkout() {
                     />
                 </ModalCheckout>
             )}
+            {/* CAMBIO CLAVE: Pasar la ref a HtmlTicketDisplay */}
             {showHtmlTicket && htmlTicketData && (<HtmlTicketDisplay saleData={htmlTicketData} onClose={closeHtmlTicket} onShareClick={shareTicketRef} />)}
         </div>
     );

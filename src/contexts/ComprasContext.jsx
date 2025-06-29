@@ -15,7 +15,7 @@ export const ComprasProvider = ({ children }) => {
     const { data: cabeceras = [], error: errCab } = await supabase
       .from('compras')
       .select(
-        'id, numero_pedido, proveedor, fecha_compra, descuento_total_usd, gastos_importacion, gastos_envio_usa, otros_gastos, tipo_cambio_dia'
+        'id, numero_pedido, proveedor, fecha_compra, descuento_total_usd, gastos_importacion, gastos_envio_usa, otros_gastos, tipo_cambio_dia, inventario_afectado' // Asegurarse de traer inventario_afectado
       )
       .order('created_at', { ascending: false });
 
@@ -42,8 +42,8 @@ export const ComprasProvider = ({ children }) => {
         .filter(i => i.compra_id === c.id)
         .map(i => ({
           nombreProducto: i.nombre_producto,
-          cantidad: i.cantidad,
-          costoUnitario: Number(i.precio_unitario_usd),
+          cantidad: parseFloat(i.cantidad) || 0,
+          costoUnitario: parseFloat(i.precio_unitario_usd) || 0, // precio_unitario_usd es el costo unitario de compra
         }));
 
       return {
@@ -51,11 +51,12 @@ export const ComprasProvider = ({ children }) => {
         numeroPedido: c.numero_pedido,
         proveedor: c.proveedor,
         fechaCompra: c.fecha_compra,
-        descuentoTotalUSD: parseFloat(c.descuento_total_usd),
-        gastosImportacion: parseFloat(c.gastos_importacion),
-        gastosEnvio: parseFloat(c.gastos_envio_usa),
-        otrosGastos: parseFloat(c.otros_gastos),
-        tipoCambio: parseFloat(c.tipo_cambio_dia),
+        descuentoTotalUSD: parseFloat(c.descuento_total_usd || 0),
+        gastosImportacion: parseFloat(c.gastos_importacion || 0),
+        gastosEnvio: parseFloat(c.gastos_envio_usa || 0),
+        otrosGastos: parseFloat(c.otros_gastos || 0),
+        tipoCambio: parseFloat(c.tipo_cambio_dia || 0), // Tipo de cambio general de la compra
+        inventario_afectado: c.inventario_afectado, // Incluir estado de inventario
         detalleProductos,
       };
     });
@@ -65,7 +66,7 @@ export const ComprasProvider = ({ children }) => {
     setLoading(false);
   };
 
-  // 2) Agregar nueva compra
+  // 2) Agregar nueva compra (esta función no se modifica, ya que los cálculos detallados se hacen al afectar inventario en Compras.jsx)
   const agregarCompra = async compraObj => {
     setLoading(true);
 
@@ -75,9 +76,9 @@ export const ComprasProvider = ({ children }) => {
       fecha_compra,
       descuentoTotalUSD,
       gastosImportacion,
-      gastosEnvio,
+      gastosEnvio, // Esto es gastos_envio_usa
       otrosGastos,
-      tipoCambio,
+      tipoCambio, // Esto es tipo_cambio_dia
       detalleProductos,
     } = compraObj;
 
@@ -124,37 +125,74 @@ export const ComprasProvider = ({ children }) => {
     return nueva;
   };
 
-  // 3) Cálculo de prorrateo de gastos por producto
+  // 3) Cálculo de prorrateo de gastos por producto (AHORA ACTUALIZADO Y CORREGIDO)
   const prorratearGastos = listaCompras => {
     return listaCompras.map(compra => {
       const {
         detalleProductos = [],
+        descuentoTotalUSD = 0, // Descuento total de la compra
+        gastosEnvio = 0, // gastos_envio_usa
         gastosImportacion = 0,
-        gastosEnvio = 0,
         otrosGastos = 0,
-        tipoCambio = 1,
+        tipoCambio = 1, // tipo_cambio_dia (para gastos de envío y costo original)
       } = compra;
 
-      const subtotales = detalleProductos.map(p => p.costoUnitario * p.cantidad);
-      const totalBruto = subtotales.reduce((s, v) => s + v, 0) || 1;
-      const gastosTotales = gastosImportacion + gastosEnvio + otrosGastos;
+      const tipoCambioImportacionDelCompra = compra.tipo_cambio_importacion || 1; // Usar tipo_cambio_importacion si está disponible en la compra, sino 1
 
-      const productosConCostos = detalleProductos.map((p, i) => {
-        const proporción = subtotales[i] / totalBruto;
-        const costoImportPorProd = proporción * gastosTotales;
-        const costoFinalUSD = p.costoUnitario + costoImportPorProd;
+      // Subtotal bruto de productos en USD (para calcular proporciones)
+      const subtotalBrutoUSDAllProducts = detalleProductos.reduce((sum, p) => sum + (p.costoUnitario * p.cantidad), 0);
+      
+      // Manejar caso de subtotal cero para evitar división por cero
+      const divisorProporcion = subtotalBrutoUSDAllProducts > 0 ? subtotalBrutoUSDAllProducts : 1;
+
+      // 1. Convertir gastos a MXN usando sus respectivos tipos de cambio
+      const gastosEnvioUSAMXN = gastosEnvio * tipoCambio; // gastosEnvio es gastos_envio_usa
+      const gastosImportacionMXN = gastosImportacion * tipoCambioImportacionDelCompra;
+      const otrosGastosMXN = otrosGastos * tipoCambio;
+      const descuentoTotalCompraMXN = (descuentoTotalUSD * -1) * tipoCambio; // Descuento total se considera un "gasto negativo"
+
+
+      // Sumar todos los gastos a prorratear en MXN
+      const totalGastosProrratearMXN = gastosEnvioUSAMXN + gastosImportacionMXN + otrosGastosMXN + descuentoTotalCompraMXN;
+      
+      const productosConCostos = detalleProductos.map(p => {
+        // Subtotal del ítem en USD (original)
+        const itemSubtotalUsdOriginal = p.costoUnitario * p.cantidad;
+
+        // Proporción del ítem sobre el subtotal bruto total (para distribuir gastos)
+        const itemProportion = itemSubtotalUsdOriginal / divisorProporcion; // CORRECCIÓN: Definir proporcion aquí
+
+        // Ajuste de gasto prorrateado para el ítem en MXN
+        const ajusteProrrateadoItemMXN = itemProportion * totalGastosProrratearMXN;
+
+        // Costo original del ítem en MXN (precio de compra USD * tipo de cambio general de la compra)
+        const costoOriginalItemMXN = p.costoUnitario * tipoCambio;
+
+        // Costo Total del Ítem en MXN (suma del costo original convertido y el ajuste prorrateado)
+        const costoTotalItemMXN = (costoOriginalItemMXN * p.cantidad) + ajusteProrrateadoItemMXN;
+        
+        // Costo Unitario Final en MXN
+        const costoUnitarioFinalMXN = costoTotalItemMXN / (p.cantidad || 1); // Dividir por cantidad para obtener el unitario
+
+        // Convertir de vuelta a USD para consistencia con costo_final_usd (usando el mismo tipo de cambio del día de la compra)
+        const costoUnitarioFinalUSD = costoUnitarioFinalMXN / (tipoCambio || 1);
+
+
         return {
           ...p,
-          proporción,
-          costoImportPorProducto: costoImportPorProd,
-          costoFinalUSD,
-          costoFinalMXN: costoFinalUSD * tipoCambio,
+          proporcion: itemProportion, // Guardar la proporción para referencia si es necesario
+          ajusteProrrateadoItemMXN,
+          costoOriginalItemMXN,
+          costoTotalItemMXN, // Nuevo campo para el total del ítem con prorrateo
+          costoFinalUSD: parseFloat(costoUnitarioFinalUSD.toFixed(4)), // Formatear para consistencia
+          costoFinalMXN: parseFloat(costoUnitarioFinalMXN.toFixed(2)), // Formatear para consistencia
         };
       });
 
       return {
         ...compra,
         detalleProductos: productosConCostos,
+        totalGastosProrratearMXN, // Añadir al objeto de compra para depuración si es necesario
       };
     });
   };

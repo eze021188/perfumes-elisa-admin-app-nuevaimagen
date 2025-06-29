@@ -1,6 +1,6 @@
 // src/components/compras/ComprasHistorialLista.jsx
 import React, { useEffect } from 'react'; // Importar useEffect para depuración
-import { ChevronUp, ChevronDown, Trash2, Plus, Save, DollarSign, Search, Package, AlertTriangle, Hash } from 'lucide-react'; // Asegúrate de importar Hash
+import { ChevronUp, ChevronDown, Trash2, Plus, Save, DollarSign, Search, Package, AlertTriangle, Hash, RotateCcw } from 'lucide-react'; // Asegúrate de importar Hash y RotateCcw para el icono de revertir
 
 // Helper para formatear moneda
 const formatCurrency = (amount, currency = 'USD') => {
@@ -37,7 +37,8 @@ export default function ComprasHistorialLista({
   nombresSugeridos, 
   existenteProductoInputRef, 
   existenteSugerenciasRef,
-  formatDisplayDate
+  formatDisplayDate,
+  onRevertirAfectarInventario // NUEVA PROP: Función para revertir
 }) {
 
   // Log para depuración: Ver el estado de editingPurchaseItems cuando cambia
@@ -86,13 +87,27 @@ export default function ComprasHistorialLista({
                 <span className={`text-xs font-semibold px-2 py-1 rounded-full ${compraData.compra.inventario_afectado ? 'bg-success-900/50 text-success-300 border border-success-800/50' : 'bg-warning-900/50 text-warning-300 border border-warning-800/50'}`}>
                     {compraData.compra.inventario_afectado ? 'Inventario Afectado' : 'Pendiente Afectar'}
                 </span>
+                {/* Botón Revertir - Visible solo si el inventario fue afectado */}
+                {compraData.compra.inventario_afectado && (
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation(); // Evitar que expanda/colapse
+                            onRevertirAfectarInventario(compraData.compra.id);
+                        }}
+                        className="px-3 py-1 bg-primary-600 text-white text-xs rounded-md hover:bg-primary-700 transition-colors flex items-center gap-1"
+                        title="Revertir Afectación de Inventario"
+                    >
+                        <RotateCcw size={14} />
+                        Revertir
+                    </button>
+                )}
                 <button
                     onClick={(e) => { 
                         e.stopPropagation(); // Detener la propagación para que no se dispare onToggleExpand
                         onEliminarCompra(compraData.compra.id, compraData.compra.inventario_afectado); 
                     }}
                     className="px-3 py-1 bg-error-600 text-white text-xs rounded-md hover:bg-error-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    disabled={compraData.compra.inventario_afectado}
+                    disabled={compraData.compra.inventario_afectado} // Deshabilitar si el inventario está afectado
                     title={compraData.compra.inventario_afectado ? "No se puede eliminar, inventario afectado" : "Eliminar Compra"}
                 >
                     <Trash2 size={14} />
@@ -137,7 +152,7 @@ export default function ComprasHistorialLista({
                           type="text" 
                           inputMode="decimal"
                           value={item.precioUnitarioUSD}
-                          disabled={compraData.compra.inventario_afectado} // Corregido: 'inventario_afectado'
+                          disabled={compraData.compra.inventario_afectado}
                           onChange={(e) => onEditingItemChange(item.id, 'precioUnitarioUSD', e.target.value)}
                           onBlur={() => onEditingItemBlur(item.id, 'precioUnitarioUSD')}
                           className="w-full border border-dark-700 bg-dark-900 p-1.5 rounded text-sm text-right focus:ring-1 focus:ring-primary-500 focus:border-primary-500 text-gray-200 disabled:opacity-60 disabled:cursor-not-allowed" 
@@ -163,7 +178,8 @@ export default function ComprasHistorialLista({
                   <h4 className="text-sm font-semibold text-gray-200 mb-2">Añadir Nuevo Producto a esta Compra</h4>
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
                     <div className="md:col-span-2 relative" ref={existenteProductoInputRef}>
-                       <label htmlFor={`addNombreProd-${compraData.compra.id}`} className="block text-xs text-gray-400 mb-0.5 flex items-center gap-1">
+                       {/* CAMBIO CLAVE: Eliminar 'block' */}
+                       <label htmlFor={`addNombreProd-${compraData.compra.id}`} className="text-xs text-gray-400 mb-0.5 flex items-center gap-1">
                          <Package size={14} />
                          Producto
                        </label>
@@ -192,7 +208,7 @@ export default function ComprasHistorialLista({
                                             onClick={() => onItemParaAgregarChange({target: {name: 'seleccionarSugerencia', value: sug}})} 
                                             className="w-full text-left px-3 py-1.5 text-sm hover:bg-dark-700 text-gray-300"
                                         >
-                                            {sug}
+                                            {sug.nombre} {/* CAMBIO: Acceder a sug.nombre si sugerencias son objetos */}
                                         </button>
                                     </li>
                                 ))}
@@ -200,7 +216,8 @@ export default function ComprasHistorialLista({
                         )}
                     </div>
                     <div>
-                       <label htmlFor={`addCant-${compraData.compra.id}`} className="block text-xs text-gray-400 mb-0.5 flex items-center gap-1">
+                       {/* CAMBIO CLAVE: Eliminar 'block' */}
+                       <label htmlFor={`addCant-${compraData.compra.id}`} className="text-xs text-gray-400 mb-0.5 flex items-center gap-1">
                          <Hash size={14} />
                          Cantidad
                        </label>
@@ -215,7 +232,8 @@ export default function ComprasHistorialLista({
                         />
                     </div>
                     <div>
-                       <label htmlFor={`addPrecio-${compraData.compra.id}`} className="block text-xs text-gray-400 mb-0.5 flex items-center gap-1">
+                       {/* CAMBIO CLAVE: Eliminar 'block' */}
+                       <label htmlFor={`addPrecio-${compraData.compra.id}`} className="text-xs text-gray-400 mb-0.5 flex items-center gap-1">
                          <DollarSign size={14} />
                          Precio USD
                        </label>
@@ -271,7 +289,8 @@ export default function ComprasHistorialLista({
                     </h3>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                       <div>
-                        <label htmlFor={`gastosImp-${compraData.compra.id}`} className="block text-sm font-medium text-gray-300 mb-1 flex items-center gap-1">
+                        {/* CAMBIO CLAVE: Eliminar 'block' */}
+                        <label htmlFor={`gastosImp-${compraData.compra.id}`} className="text-sm font-medium text-gray-300 mb-1 flex items-center gap-1">
                           <DollarSign size={14} />
                           Gastos Importación (USD)
                         </label>
@@ -287,7 +306,8 @@ export default function ComprasHistorialLista({
                         />
                       </div>
                       <div>
-                        <label htmlFor={`tipoCambioImp-${compraData.compra.id}`} className="block text-sm font-medium text-gray-300 mb-1 flex items-center gap-1">
+                        {/* CAMBIO CLAVE: Eliminar 'block' */}
+                        <label htmlFor={`tipoCambioImp-${compraData.compra.id}`} className="text-sm font-medium text-gray-300 mb-1 flex items-center gap-1">
                           <DollarSign size={14} />
                           Tipo Cambio Importación
                         </label>
@@ -303,7 +323,8 @@ export default function ComprasHistorialLista({
                         />
                       </div>
                       <div>
-                        <label htmlFor={`otrosGastos-${compraData.compra.id}`} className="block text-sm font-medium text-gray-300 mb-1 flex items-center gap-1">
+                        {/* CAMBIO CLAVE: Eliminar 'block' */}
+                        <label htmlFor={`otrosGastos-${compraData.compra.id}`} className="text-sm font-medium text-gray-300 mb-1 flex items-center gap-1">
                           <DollarSign size={14} />
                           Otros Gastos (USD)
                         </label>

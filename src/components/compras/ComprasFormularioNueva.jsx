@@ -34,8 +34,8 @@ export default function ComprasFormularioNueva({
   onSeleccionarSugerencia,
   onProductoInputFocus,
   onProductoInputKeyDown,
-  productoInputRef, // Ref para el input de nombre de producto
-  sugerenciasRef // Ref para la lista de sugerencias
+  productoInputRef,
+  sugerenciasRef
 }) {
 
   const calcularSubtotalItems = (items) => {
@@ -57,7 +57,7 @@ export default function ComprasFormularioNueva({
       {/* Campos de Cabecera de la Compra */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
         <div>
-          <label htmlFor="numeroPedido" className="block text-sm font-medium text-gray-300 mb-1 flex items-center gap-1">
+          <label htmlFor="numeroPedido" className="text-sm font-medium text-gray-300 mb-1 flex items-center gap-1">
             <Hash size={16} />
             Número de Pedido/Factura
           </label>
@@ -71,7 +71,7 @@ export default function ComprasFormularioNueva({
             className="w-full border border-dark-700 bg-dark-900 px-3 py-2 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500 text-gray-200" />
         </div>
         <div>
-          <label htmlFor="proveedor" className="block text-sm font-medium text-gray-300 mb-1 flex items-center gap-1">
+          <label htmlFor="proveedor" className="text-sm font-medium text-gray-300 mb-1 flex items-center gap-1">
             <User size={16} />
             Proveedor
           </label>
@@ -85,7 +85,7 @@ export default function ComprasFormularioNueva({
             className="w-full border border-dark-700 bg-dark-900 px-3 py-2 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500 text-gray-200" />
         </div>
         <div>
-          <label htmlFor="fechaCompra" className="block text-sm font-medium text-gray-300 mb-1 flex items-center gap-1">
+          <label htmlFor="fechaCompra" className="text-sm font-medium text-gray-300 mb-1 flex items-center gap-1">
             <Calendar size={16} />
             Fecha de Compra
           </label>
@@ -98,7 +98,7 @@ export default function ComprasFormularioNueva({
             className="w-full border border-dark-700 bg-dark-900 px-3 py-2 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500 text-gray-200" />
         </div>
         <div>
-          <label htmlFor="descuentoTotalUSD" className="block text-sm font-medium text-gray-300 mb-1 flex items-center gap-1">
+          <label htmlFor="descuentoTotalUSD" className="text-sm font-medium text-gray-300 mb-1 flex items-center gap-1">
             <DollarSign size={16} />
             Descuento Total (USD)
           </label>
@@ -113,7 +113,7 @@ export default function ComprasFormularioNueva({
             className="w-full border border-dark-700 bg-dark-900 px-3 py-2 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500 text-right text-gray-200" />
         </div>
         <div>
-          <label htmlFor="gastosEnvioUSA" className="block text-sm font-medium text-gray-300 mb-1 flex items-center gap-1">
+          <label htmlFor="gastosEnvioUSA" className="text-sm font-medium text-gray-300 mb-1 flex items-center gap-1">
             <DollarSign size={16} />
             Gastos Envío USA (USD)
           </label>
@@ -128,7 +128,7 @@ export default function ComprasFormularioNueva({
             className="w-full border border-dark-700 bg-dark-900 px-3 py-2 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500 text-right text-gray-200" />
         </div>
         <div>
-          <label htmlFor="tipoCambioDia" className="block text-sm font-medium text-gray-300 mb-1 flex items-center gap-1">
+          <label htmlFor="tipoCambioDia" className="text-sm font-medium text-gray-300 mb-1 flex items-center gap-1">
             <DollarSign size={16} />
             Tipo de Cambio del Día (USD a MXN)
           </label>
@@ -144,12 +144,25 @@ export default function ComprasFormularioNueva({
         </div>
       </div>
       
+      {/* CAMBIO CLAVE: Sección de Totales y Subtotales (ahora colocada aquí) */}
+      {/* Solo se muestra si hay productos agregados */}
+      {productosAgregados.length > 0 && (
+        <div className="mb-6 p-4 border border-dark-700/50 rounded-lg shadow-inner bg-dark-900/50 text-right font-bold text-gray-100 space-y-1">
+          <p>Subtotal (USD): <span className="font-medium text-gray-200">{formatCurrency(calcularSubtotalItems(productosAgregados), 'USD')}</span></p>
+          <p>Descuento (USD): <span className="font-medium text-gray-200">{formatCurrency(parseFloat(formulario.descuentoTotalUSD || '0'), 'USD')}</span></p>
+          <p>Gastos Envío USA (USD): <span className="font-medium text-gray-200">{formatCurrency(parseFloat(formulario.gastosEnvioUSA || '0'), 'USD')}</span></p>
+          <p>Tipo de Cambio Venta: <span className="font-medium text-gray-200">{parseFloat(formulario.tipoCambioDia || '0').toFixed(2)}</span></p>
+          <p className="text-xl pt-2 border-t border-dark-700">Total Compra (USD): <span className="text-primary-400">{formatCurrency(calcularTotalCompra(productosAgregados, formulario.descuentoTotalUSD), 'USD')}</span></p>
+        </div>
+      )}
+
+
       {/* Formulario para Agregar Productos a la Nueva Compra */}
       <div className="mb-6 p-4 border border-dashed border-dark-700/70 rounded-md bg-dark-900/50">
         <h3 className="text-lg font-semibold text-gray-100 mb-4">Agregar Producto a la Compra</h3>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
           <div className="md:col-span-2 relative" ref={productoInputRef}>
-            <label htmlFor="formNombreProducto" className="block text-sm font-medium text-gray-300 mb-1 flex items-center gap-1">
+            <label htmlFor="formNombreProducto" className="text-sm font-medium text-gray-300 mb-1 flex items-center gap-1">
               <Package size={16} />
               Producto
             </label>
@@ -166,19 +179,19 @@ export default function ComprasFormularioNueva({
                 onChange={(e) => onProductoInputChange(e, false)}
                 onKeyDown={onProductoInputKeyDown} 
                 onFocus={onProductoInputFocus}
-                className="w-full pl-10 border border-dark-700 bg-dark-900 px-3 py-2 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500 text-gray-200" 
+                className="w-full pl-10 p-3 bg-dark-900 border border-dark-700 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500 text-gray-200" 
               />
             </div>
-            {mostrarSugerenciasProducto && sugerenciasProducto.length > 0 && (
+            {mostrarSugerenciasProducto && sugerenciasProducto.length > 0 && ( 
               <ul ref={sugerenciasRef} className="absolute z-10 w-full bg-dark-800 border border-dark-700 rounded-md shadow-dropdown-dark mt-1 max-h-60 overflow-y-auto">
-                {sugerenciasProducto.map((nombre, index) => (
-                  <li key={index}>
+                {sugerenciasProducto.map((sug, index) => (
+                  <li key={sug.id}>
                     <button 
                       type="button" 
-                      onClick={() => onSeleccionarSugerencia(nombre)} 
+                      onClick={() => onSeleccionarSugerencia(sug)} 
                       className="w-full text-left px-3 py-2 text-sm hover:bg-dark-700 focus:bg-dark-700 focus:outline-none text-gray-300"
                     >
-                      {nombre}
+                      {sug.nombre}
                     </button>
                   </li>
                 ))}
@@ -186,7 +199,7 @@ export default function ComprasFormularioNueva({
             )}
           </div>
           <div>
-            <label htmlFor="formCantidad" className="block text-sm font-medium text-gray-300 mb-1 flex items-center gap-1">
+            <label htmlFor="formCantidad" className="text-sm font-medium text-gray-300 mb-1 flex items-center gap-1">
               <Hash size={16} />
               Cantidad
             </label>
@@ -201,7 +214,7 @@ export default function ComprasFormularioNueva({
             />
           </div>
           <div>
-            <label htmlFor="formPrecioUnitarioUSD" className="block text-sm font-medium text-gray-300 mb-1 flex items-center gap-1">
+            <label htmlFor="formPrecioUnitarioUSD" className="text-sm font-medium text-gray-300 mb-1 flex items-center gap-1">
               <DollarSign size={16} />
               Precio Unit. (USD)
             </label>
@@ -249,7 +262,7 @@ export default function ComprasFormularioNueva({
                     <td className="px-4 py-3 text-sm text-gray-400">{i + 1}</td>
                     <td className="px-4 py-3 text-sm font-medium text-gray-200">{p.nombreProducto}</td>
                     <td className="px-4 py-3 text-sm text-gray-300 text-right">{p.cantidad}</td>
-                    <td className="px-4 py-3 text-sm text-gray-300 text-right">{formatCurrency(p.precioUnitarioUSD, 'USD')}</td>
+                    <td className="px-4 py-3 text-sm text-gray-300 text-right">{formatCurrency((p.precioUnitarioUSD || 0), 'USD')}</td>
                     <td className="px-4 py-3 text-sm font-semibold text-gray-200 text-right">{formatCurrency((p.cantidad || 0) * (p.precioUnitarioUSD || 0), 'USD')}</td>
                     <td className="px-4 py-3 text-center text-sm font-medium">
                       <button 
@@ -265,11 +278,7 @@ export default function ComprasFormularioNueva({
               </tbody>
             </table>
           </div>
-          <div className="text-right font-bold text-gray-100 mt-4 space-y-1">
-            <p>Subtotal (USD): {formatCurrency(calcularSubtotalItems(productosAgregados), 'USD')}</p>
-            <p>Descuento (USD): {formatCurrency(parseFloat(formulario.descuentoTotalUSD || '0'), 'USD')}</p>
-            <p className="text-xl">Total Compra (USD): {formatCurrency(calcularTotalCompra(productosAgregados, formulario.descuentoTotalUSD), 'USD')}</p>
-          </div>
+          {/* El div de resumen ya no está aquí, fue movido más arriba */}
           <button 
             onClick={onGuardarCompra} 
             type="button"

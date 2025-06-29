@@ -36,6 +36,20 @@ const formatCurrency = (amount) => {
     });
 };
 
+// NUEVA FUNCIÓN: Redondeo personalizado al múltiplo de 5 más cercano según tus ejemplos
+const roundToNearestFiveSpecific = (num) => {
+    const integerPart = Math.round(num); // Redondea al entero más cercano primero
+    const remainder = integerPart % 5;
+
+    if (remainder === 0) {
+        return integerPart;
+    } else if (remainder <= 2) { // Si el resto es 0, 1, 2, redondea hacia abajo al múltiplo de 5
+        return integerPart - remainder;
+    } else { // Si el resto es 3, 4, redondea hacia arriba al múltiplo de 5
+        return integerPart + (5 - remainder);
+    }
+};
+
 export default function GestionPrecios() {
   const navigate = useNavigate();
 
@@ -52,7 +66,6 @@ export default function GestionPrecios() {
   const [margenMin, setMargenMin] = useState('');
   const [margenMax, setMargenMax] = useState('');
   const [filtroPreciosInvalidos, setFiltroPreciosInvalidos] = useState(false); // true/false
-  // ELIMINADO: const [stockFilter, setStockFilter] = useState('All'); 
 
   // Estados de ordenamiento
   const [sortColumn, setSortColumn] = useState('nombre');
@@ -62,7 +75,7 @@ export default function GestionPrecios() {
   const [selectedProductIds, setSelectedProductIds] = useState(new Set());
 
   // Estado para acciones masivas
-  const [accionMasiva, setAccionMasiva] = useState(''); // 'descuento_porcentaje', 'incremento_monto', etc.
+  const [accionMasiva, setAccionMasiva] = useState(''); // 'descuento_porcentaje', 'incremento_monto', 'establecer_margen_porcentaje_normal', etc.
   const [valorAccionMasiva, setValorAccionMasiva] = useState('');
   const [applyingMassiveAction, setApplyingMassiveAction] = useState(false); // Nuevo estado para feedback visual
 
@@ -300,7 +313,7 @@ export default function GestionPrecios() {
     setEditingCell(null);
 
     // Llamada a Supabase para actualizar el producto individual
-    // Aquí fieldName será 'precio_normal' o 'descuento_lote'
+    // Aquí fieldName será 'precio_normal' o 'descuento_lote' o 'costo_final_mxn'
     const { error } = await supabase
         .from('productos')
         .update({ [fieldName]: updatedValue })
@@ -321,7 +334,7 @@ export default function GestionPrecios() {
       toast.error('Selecciona al menos un producto.');
       return;
     }
-    if (!accionMasiva || (accionMasiva !== 'limpiar_promocion' && (valorAccionMasiva === '' || isNaN(parseFloat(valorAccionMasiva))))) {
+    if (!accionMasiva || (accionMasiva !== 'limpiar_promocion' && (!valorAccionMasiva || isNaN(parseFloat(valorAccionMasiva))))) {
       toast.error('Selecciona una acción y un valor válido.');
       return;
     }
@@ -336,6 +349,11 @@ export default function GestionPrecios() {
         if (accionMasiva.includes('porcentaje') && (valorNum < 0 || valorNum > 100)) {
             toast.error('El porcentaje debe estar entre 0 y 100.');
             return;
+        }
+        // Validación para Establecer Margen %
+        if (accionMasiva.includes('establecer_margen_porcentaje') && (valorNum >= 100)) { // Margen no puede ser 100% o más
+             toast.error('El margen de ganancia debe ser menor al 100%.');
+             return;
         }
     }
 
@@ -352,21 +370,28 @@ export default function GestionPrecios() {
     productosFiltradosYOrdenados.forEach(p => {
         if (selectedProductIds.has(p.id)) {
             let newPrice = null;
-            let targetField = ''; // Campo a actualizar: 'precio_normal' o 'descuento_lote'
-            let currentPrice = 0; // Precio actual sobre el que se aplica la acción
+            let targetField = ''; 
+            let currentPrice = 0; 
 
-            // Determinar el campo objetivo y el precio base para el cálculo
+            // Determinar el campo objetivo y el precio/costo base para el cálculo
             if (accionMasiva.includes('normal')) {
                 targetField = 'precio_normal';
                 currentPrice = p.precio_normal;
-            } else if (accionMasiva.includes('promocion')) { // Las acciones de "promoción" ahora afectan "descuento_lote"
+            } else if (accionMasiva.includes('promocion') && !accionMasiva.includes('margen')) { // Las acciones de "promoción" (excepto margen) afectan "descuento_lote"
                 targetField = 'descuento_lote';
-                // Para cálculos sobre el "precio de promoción", el precio base debe ser el precio de venta efectivo actual
                 currentPrice = p.descuento_lote > 0 ? p.descuento_lote : p.promocion > 0 ? p.promocion : p.precio_normal;
-            } else if (accionMasiva.includes('establecer') && accionMasiva.includes('normal')) {
+            } else if (accionMasiva.includes('costo_mxn') && !accionMasiva.includes('margen')) { // ACCIÓN: Costo MXN, ahora afecta a 'promocion'
+                targetField = 'promocion'; // CAMBIO CLAVE: Afectar 'promocion'
+                currentPrice = p.costo_final_mxn; // Base del cálculo es el costo_final_mxn
+            } else if (accionMasiva.includes('establecer_margen_porcentaje_normal')) {
                 targetField = 'precio_normal';
-            } else if (accionMasiva.includes('establecer') && accionMasiva.includes('promocion')) { // Establecer promoción afecta descuento_lote
-                targetField = 'descuento_lote';
+                currentPrice = p.costo_final_mxn; // Base del cálculo es el costo_final_mxn
+            } else if (accionMasiva.includes('establecer_margen_porcentaje_promocion')) {
+                targetField = 'descuento_lote'; // Afecta descuento_lote para margen sobre promocion
+                currentPrice = p.costo_final_mxn; // Base del cálculo es el costo_final_mxn
+            } else if (accionMasiva.includes('establecer_margen_porcentaje_costo_mxn')) { // Nueva opción de margen en costo, afecta 'promocion'
+                targetField = 'promocion'; // CAMBIO CLAVE: Afectar 'promocion'
+                currentPrice = p.costo_final_mxn; // Base del cálculo es el costo_final_mxn
             }
 
             switch (accionMasiva) {
@@ -375,7 +400,6 @@ export default function GestionPrecios() {
                 case 'incremento_porcentaje_normal':
                 case 'incremento_monto_normal':
                 case 'establecer_normal':
-                    // Estos ya afectan precio_normal
                     newPrice = (accionMasiva === 'establecer_normal') ? valorNum :
                                 (accionMasiva.includes('porcentaje')) ? currentPrice * (1 + (valorNum / 100) * (accionMasiva.includes('descuento') ? -1 : 1)) :
                                 currentPrice + valorNum * (accionMasiva.includes('descuento') ? -1 : 1);
@@ -386,15 +410,36 @@ export default function GestionPrecios() {
                 case 'incremento_porcentaje_promocion':
                 case 'incremento_monto_promocion':
                 case 'establecer_promocion':
-                    // CAMBIO CLAVE: Estas acciones ahora afectan 'descuento_lote'
                     newPrice = (accionMasiva === 'establecer_promocion') ? valorNum :
                                 (accionMasiva.includes('porcentaje')) ? currentPrice * (1 + (valorNum / 100) * (accionMasiva.includes('descuento') ? -1 : 1)) :
                                 currentPrice + valorNum * (accionMasiva.includes('descuento') ? -1 : 1);
                     break;
+                
+                case 'descuento_porcentaje_costo_mxn': 
+                case 'descuento_monto_costo_mxn': 
+                case 'incremento_porcentaje_costo_mxn': 
+                case 'incremento_monto_costo_mxn': 
+                case 'establecer_costo_mxn': 
+                    newPrice = (accionMasiva === 'establecer_costo_mxn') ? valorNum :
+                                (accionMasiva.includes('porcentaje')) ? currentPrice * (1 + (valorNum / 100) * (accionMasiva.includes('descuento') ? -1 : 1)) :
+                                currentPrice + valorNum * (accionMasiva.includes('descuento') ? -1 : 1);
+                    break;
+
+                case 'establecer_margen_porcentaje_normal': 
+                case 'establecer_margen_porcentaje_promocion': 
+                case 'establecer_margen_porcentaje_costo_mxn': 
+                    if (currentPrice === 0) { 
+                         toast.error(`No se puede establecer margen para productos con costo MXN de $0.00.`);
+                         return; 
+                    }
+                    newPrice = currentPrice / (1 - (valorNum / 100));
+                    // Aplicar redondeo al 5 más cercano para margen de ganancia
+                    newPrice = roundToNearestFiveSpecific(newPrice); // CAMBIO CLAVE: Aplicar redondeo
+                    break;
+
                 case 'limpiar_promocion':
-                    // CAMBIO CLAVE: Limpiar Promoción establece 'descuento_lote' a NULL
-                    newPrice = null; // Establecer a NULL en la base de datos
-                    targetField = 'descuento_lote'; // El campo a actualizar es 'descuento_lote'
+                    newPrice = null; 
+                    targetField = 'descuento_lote'; 
                     break;
                 default:
                     break;
@@ -402,11 +447,10 @@ export default function GestionPrecios() {
             
             // Asegurar que los precios no sean negativos y formatear a 2 decimales, o dejar null si es limpiar promoción
             if (newPrice !== null || accionMasiva === 'limpiar_promocion') {
-                // Incluimos el 'nombre' del producto para satisfacer la restricción NOT NULL
                 updates.push({
                     id: p.id,
-                    nombre: p.nombre, // <-- AGREGADO: Incluir el nombre del producto
-                    [targetField]: (newPrice !== null) ? Math.max(0, newPrice).toFixed(2) : null // Si newPrice es null (limpiar promoción), guardar null
+                    nombre: p.nombre, 
+                    [targetField]: (newPrice !== null) ? Math.max(0, newPrice).toFixed(2) : null 
                 });
             }
         }
@@ -419,8 +463,6 @@ export default function GestionPrecios() {
     }
 
     try {
-        // Usamos upsert con onConflict: 'id' para actualizar los productos existentes
-        // Es importante que los valores NULL se envíen como NULL, no como '0.00' si queremos que no tengan valor
         const { error: batchError } = await supabase.from('productos').upsert(updates, { onConflict: 'id' });
 
         if (batchError) {
@@ -428,11 +470,10 @@ export default function GestionPrecios() {
         }
 
         toast.success(`${updates.length} productos actualizados exitosamente.`);
-        setSelectedProductIds(new Set()); // Limpiar selección
+        setSelectedProductIds(new Set()); 
         setAccionMasiva('');
         setValorAccionMasiva('');
-        setValorAccionMasiva(''); // Limpiar también el valor numérico
-        cargarProductos(); // Recargar productos para que los márgenes se actualicen en la UI
+        cargarProductos(); 
     } catch (err) {
         toast.error(`Error al aplicar acción masiva: ${err.message}`);
         console.error('Error masivo de Supabase:', err);
@@ -455,7 +496,7 @@ export default function GestionPrecios() {
       "Costo MXN",
       "P. Normal MXN",
       "Promoción MXN",
-      "Descuento Lote MXN", // Añadido descuento_lote a los headers
+      "Descuento Lote MXN", 
       "Margen MXN",
       "Margen %"
     ];
@@ -467,15 +508,13 @@ export default function GestionPrecios() {
       p.costo_final_mxn.toFixed(2),
       p.precio_normal.toFixed(2),
       p.promocion > 0 ? p.promocion.toFixed(2) : 'N/A',
-      p.descuento_lote > 0 ? p.descuento_lote.toFixed(2) : 'N/A', // Añadido descuento_lote a las filas
+      p.descuento_lote > 0 ? p.descuento_lote.toFixed(2) : 'N/A', 
       p.margen_bruto_mxn.toFixed(2),
       p.margen_bruto_porcentaje.toFixed(1) + '%'
     ]);
 
-    // Combinar encabezados y filas
     const csvContent = [headers.join(','), ...dataRows.map(e => e.join(','))].join('\n');
 
-    // Crear un Blob y un enlace de descarga
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
@@ -483,7 +522,7 @@ export default function GestionPrecios() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    URL.revokeObjectURL(link.href); // Liberar el objeto URL
+    URL.revokeObjectURL(link.href); 
     
     toast.success('Datos exportados a Excel (CSV).');
   };
@@ -568,8 +607,8 @@ export default function GestionPrecios() {
               <option value="All">Todos los Productos</option>
               <option value="Con Promoción">Solo con Promoción</option>
               <option value="Sin Promoción">Solo sin Promoción</option>
-              <option value="Con stock">Sólo con stock</option> {/* NUEVA OPCIÓN */}
-              <option value="Sin stock">Sólo sin stock</option> {/* NUEVA OPCIÓN */}
+              <option value="Con stock">Sólo con stock</option>
+              <option value="Sin stock">Sólo sin stock</option>
             </select>
           </div>
 
@@ -652,9 +691,19 @@ export default function GestionPrecios() {
                 <option value="incremento_porcentaje_promocion">Incremento % (Promoción)</option>
                 <option value="incremento_monto_promocion">Incremento $ (Promoción)</option>
               </optgroup>
+              <optgroup label="Costos">
+                <option value="incremento_porcentaje_costo_mxn">Incremento % (Costo MXN)</option>
+                <option value="incremento_monto_costo_mxn">Incremento $ (Costo MXN)</option>
+                <option value="descuento_porcentaje_costo_mxn">Descuento % (Costo MXN)</option>
+                <option value="descuento_monto_costo_mxn">Descuento $ (Costo MXN)</option>
+                <option value="establecer_costo_mxn">Establecer Costo MXN</option>
+              </optgroup>
               <optgroup label="Establecer Valor">
                 <option value="establecer_normal">Establecer P. Normal</option>
                 <option value="establecer_promocion">Establecer Promoción</option>
+                <option value="establecer_margen_porcentaje_normal">Establecer Margen % (P. Normal)</option>
+                <option value="establecer_margen_porcentaje_promocion">Establecer Margen % (Promoción)</option>
+                <option value="establecer_margen_porcentaje_costo_mxn">Establecer Margen % (Costo MXN)</option>
                 <option value="limpiar_promocion">Limpiar Promoción</option>
               </optgroup>
             </select>
@@ -720,31 +769,31 @@ export default function GestionPrecios() {
               </th>
               {/* Columnas con ordenamiento */}
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-200" onClick={() => handleSort('nombre')}>
-                <div className="flex items-center gap-1">Nombre <Tag size={14}/> {sortColumn === 'nombre' && (sortDirection === 'asc' ? <ChevronUp size={14}/> : <ChevronDown size={14}/>)}</div>
+                <div className="flex items-center gap-1"><span>Nombre</span> <Tag size={14}/> {sortColumn === 'nombre' && (sortDirection === 'asc' ? <ChevronUp size={14}/> : <ChevronDown size={14}/>)}</div>
               </th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-200" onClick={() => handleSort('categoria')}>
-                <div className="flex items-center gap-1">Categoría <Layers size={14}/> {sortColumn === 'categoria' && (sortDirection === 'asc' ? <ChevronUp size={14}/> : <ChevronDown size={14}/>)}</div>
+                <div className="flex items-center gap-1"><span>Categoría</span> <Layers size={14}/> {sortColumn === 'categoria' && (sortDirection === 'asc' ? <ChevronUp size={14}/> : <ChevronDown size={14}/>)}</div>
               </th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-200" onClick={() => handleSort('stock')}>
-                <div className="flex items-center gap-1">Stock <Package size={14}/> {sortColumn === 'stock' && (sortDirection === 'asc' ? <ChevronUp size={14}/> : <ChevronDown size={14}/>)}</div>
+                <div className="flex items-center gap-1"><span>Stock</span> <Package size={14}/> {sortColumn === 'stock' && (sortDirection === 'asc' ? <ChevronUp size={14}/> : <ChevronDown size={14}/>)}</div>
               </th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-200" onClick={() => handleSort('costo_final_mxn')}>
-                <div className="flex items-center gap-1">Costo MXN <DollarSign size={14}/> {sortColumn === 'costo_final_mxn' && (sortDirection === 'asc' ? <ChevronUp size={14}/> : <ChevronDown size={14}/>)}</div>
+                <div className="flex items-center gap-1"><span>Costo MXN</span> <DollarSign size={14}/> {sortColumn === 'costo_final_mxn' && (sortDirection === 'asc' ? <ChevronUp size={14}/> : <ChevronDown size={14}/>)}</div>
               </th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-200" onClick={() => handleSort('precio_normal')}>
-                <div className="flex items-center gap-1">P. Normal MXN <DollarSign size={14}/> {sortColumn === 'precio_normal' && (sortDirection === 'asc' ? <ChevronUp size={14}/> : <ChevronDown size={14}/>)}</div>
+                <div className="flex items-center gap-1"><span>P. Normal MXN</span> <DollarSign size={14}/> {sortColumn === 'precio_normal' && (sortDirection === 'asc' ? <ChevronUp size={14}/> : <ChevronDown size={14}/>)}</div>
               </th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-200" onClick={() => handleSort('descuento_lote')}> {/* CAMBIO: Ahora se ordena por descuento_lote */}
-                <div className="flex items-center gap-1">Dscto. Lote MXN <DollarSign size={14}/> {sortColumn === 'descuento_lote' && (sortDirection === 'asc' ? <ChevronUp size={14}/> : <ChevronDown size={14}/>)}</div> {/* CAMBIO: Texto de columna */}
+              <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-200" onClick={() => handleSort('descuento_lote')}>
+                <div className="flex items-center gap-1"><span>Dscto. Lote MXN</span> <DollarSign size={14}/> {sortColumn === 'descuento_lote' && (sortDirection === 'asc' ? <ChevronUp size={14}/> : <ChevronDown size={14}/>)}</div>
               </th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-200" onClick={() => handleSort('promocion')}> {/* CAMBIO: Promoción MXN ahora se lee de promocion */}
-                <div className="flex items-center gap-1">Promoción MXN <DollarSign size={14}/> {sortColumn === 'promocion' && (sortDirection === 'asc' ? <ChevronUp size={14}/> : <ChevronDown size={14}/>)}</div>
+              <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-200" onClick={() => handleSort('promocion')}>
+                <div className="flex items-center gap-1"><span>Promoción MXN</span> <DollarSign size={14}/> {sortColumn === 'promocion' && (sortDirection === 'asc' ? <ChevronUp size={14}/> : <ChevronDown size={14}/>)}</div>
               </th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-200" onClick={() => handleSort('margen_bruto_mxn')}>
-                <div className="flex items-center gap-1">Margen MXN <DollarSign size={14}/> {sortColumn === 'margen_bruto_mxn' && (sortDirection === 'asc' ? <ChevronUp size={14}/> : <ChevronDown size={14}/>)}</div>
+                <div className="flex items-center gap-1"><span>Margen MXN</span> <DollarSign size={14}/> {sortColumn === 'margen_bruto_mxn' && (sortDirection === 'asc' ? <ChevronUp size={14}/> : <ChevronDown size={14}/>)}</div>
               </th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-200" onClick={() => handleSort('margen_bruto_porcentaje')}>
-                <div className="flex items-center gap-1">Margen % <Percent size={14}/> {sortColumn === 'margen_bruto_porcentaje' && (sortDirection === 'asc' ? <ChevronUp size={14}/> : <ChevronDown size={14}/>)}</div>
+                <div className="flex items-center gap-1"><span>Margen %</span> <Percent size={14}/> {sortColumn === 'margen_bruto_porcentaje' && (sortDirection === 'asc' ? <ChevronUp size={14}/> : <ChevronDown size={14}/>)}</div>
               </th>
             </tr>
           </thead>
@@ -794,27 +843,27 @@ export default function GestionPrecios() {
                   
                   {/* Celda editable para Descuento Lote (antes Promoción) */}
                   <td className="px-4 py-3 text-sm text-right">
-                    {editingCell?.id === p.id && editingCell?.field === 'descuento_lote' ? ( /* CAMBIO: Ahora edita descuento_lote */
+                    {editingCell?.id === p.id && editingCell?.field === 'descuento_lote' ? (
                       <input
                         type="number"
                         step="0.01"
-                        value={p.descuento_lote} /* CAMBIO: Muestra el valor de descuento_lote */
-                        onChange={(e) => handlePriceChange(e, p.id, 'descuento_lote')} /* CAMBIO: Actualiza descuento_lote */
-                        onBlur={(e) => handlePriceBlur(e, p.id, 'descuento_lote')} /* CAMBIO: Actualiza descuento_lote */
+                        value={p.descuento_lote}
+                        onChange={(e) => handlePriceChange(e, p.id, 'descuento_lote')}
+                        onBlur={(e) => handlePriceBlur(e, p.id, 'descuento_lote')}
                         onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }}
                         className="w-24 bg-dark-700 border-dark-600 rounded px-2 py-1 text-right text-gray-200 focus:outline-none focus:ring-1 focus:ring-primary-500"
                         autoFocus
                       />
                     ) : (
-                      <span onClick={() => handleCellClick(p.id, 'promocion')} className={`cursor-pointer hover:text-primary-400 transition-colors ${p.descuento_lote > 0 ? 'text-success-400' : 'text-gray-400'}`}> {/* CAMBIO: Icono y color condicional basado en descuento_lote */}
-                        {p.descuento_lote > 0 ? formatCurrency(p.descuento_lote) : 'N/A'} {/* CAMBIO: Muestra descuento_lote */}
+                      <span onClick={() => handleCellClick(p.id, 'promocion')} className={`cursor-pointer hover:text-primary-400 transition-colors ${p.descuento_lote > 0 ? 'text-success-400' : 'text-gray-400'}`}>
+                        {p.descuento_lote > 0 ? formatCurrency(p.descuento_lote) : 'N/A'}
                       </span>
                     )}
                   </td>
 
                   {/* Nueva columna para Promoción (solo lectura) */}
                   <td className="px-4 py-3 text-sm text-right">
-                    <span className={p.promocion > 0 ? 'text-gray-300' : 'text-gray-400'}> {/* Color del texto de promocion */}
+                    <span className={p.promocion > 0 ? 'text-gray-300' : 'text-gray-400'}>
                       {p.promocion > 0 ? formatCurrency(p.promocion) : 'N/A'}
                     </span>
                   </td>
