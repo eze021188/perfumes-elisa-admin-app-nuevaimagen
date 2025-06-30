@@ -36,18 +36,14 @@ const formatCurrency = (amount) => {
     });
 };
 
-// NUEVA FUNCIÓN: Redondeo personalizado al múltiplo de 5 más cercano según tus ejemplos
-const roundToNearestFiveSpecific = (num) => {
-    const integerPart = Math.round(num); // Redondea al entero más cercano primero
-    const remainder = integerPart % 5;
+// NUEVA FUNCIÓN: Redondeo al múltiplo de 10 más cercano (basado en tus ejemplos)
+const roundToNearestTen = (num) => {
+    return Math.round(num / 10) * 10;
+};
 
-    if (remainder === 0) {
-        return integerPart;
-    } else if (remainder <= 2) { // Si el resto es 0, 1, 2, redondea hacia abajo al múltiplo de 5
-        return integerPart - remainder;
-    } else { // Si el resto es 3, 4, redondea hacia arriba al múltiplo de 5
-        return integerPart + (5 - remainder);
-    }
+// NUEVA FUNCIÓN DE REDONDEO: Al múltiplo de 5 más cercano (para precio normal)
+const roundToNearestFive = (num) => {
+    return Math.round(num / 5) * 5;
 };
 
 export default function GestionPrecios() {
@@ -376,7 +372,7 @@ export default function GestionPrecios() {
             // Determinar el campo objetivo y el precio/costo base para el cálculo
             if (accionMasiva.includes('normal')) {
                 targetField = 'precio_normal';
-                currentPrice = p.precio_normal;
+                currentPrice = p.promocion; // CAMBIO CLAVE: Base del incremento es 'promocion'
             } else if (accionMasiva.includes('promocion') && !accionMasiva.includes('margen')) { // Las acciones de "promoción" (excepto margen) afectan "descuento_lote"
                 targetField = 'descuento_lote';
                 currentPrice = p.descuento_lote > 0 ? p.descuento_lote : p.promocion > 0 ? p.promocion : p.precio_normal;
@@ -403,6 +399,7 @@ export default function GestionPrecios() {
                     newPrice = (accionMasiva === 'establecer_normal') ? valorNum :
                                 (accionMasiva.includes('porcentaje')) ? currentPrice * (1 + (valorNum / 100) * (accionMasiva.includes('descuento') ? -1 : 1)) :
                                 currentPrice + valorNum * (accionMasiva.includes('descuento') ? -1 : 1);
+                    newPrice = roundToNearestFive(newPrice); // CAMBIO CLAVE: Redondear a 5 en 5 para precio_normal
                     break;
 
                 case 'descuento_porcentaje_promocion':
@@ -433,8 +430,8 @@ export default function GestionPrecios() {
                          return; 
                     }
                     newPrice = currentPrice / (1 - (valorNum / 100));
-                    // Aplicar redondeo al 5 más cercano para margen de ganancia
-                    newPrice = roundToNearestFiveSpecific(newPrice); // CAMBIO CLAVE: Aplicar redondeo
+                    // Aplicar redondeo al 10 más cercano para margen de ganancia
+                    newPrice = roundToNearestTen(newPrice); 
                     break;
 
                 case 'limpiar_promocion':
@@ -520,7 +517,6 @@ export default function GestionPrecios() {
     link.href = URL.createObjectURL(blob);
     link.setAttribute('download', 'gestion_precios_productos.csv');
     document.body.appendChild(link);
-    link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(link.href); 
     
@@ -769,31 +765,31 @@ export default function GestionPrecios() {
               </th>
               {/* Columnas con ordenamiento */}
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-200" onClick={() => handleSort('nombre')}>
-                <div className="flex items-center gap-1"><span>Nombre</span> <Tag size={14}/> {sortColumn === 'nombre' && (sortDirection === 'asc' ? <ChevronUp size={14}/> : <ChevronDown size={14}/>)}</div>
+                <div className="flex items-center gap-1"><span>Nombre</span> <Tag size={14}/> {sortColumn === 'nombre' ? (sortDirection === 'asc' ? <ChevronUp size={14}/> : <ChevronDown size={14}/>) : null}</div>
               </th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-200" onClick={() => handleSort('categoria')}>
-                <div className="flex items-center gap-1"><span>Categoría</span> <Layers size={14}/> {sortColumn === 'categoria' && (sortDirection === 'asc' ? <ChevronUp size={14}/> : <ChevronDown size={14}/>)}</div>
+                <div className="flex items-center gap-1"><span>Categoría</span> <Layers size={14}/> {sortColumn === 'categoria' ? (sortDirection === 'asc' ? <ChevronUp size={14}/> : <ChevronDown size={14}/>) : null}</div>
               </th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-200" onClick={() => handleSort('stock')}>
-                <div className="flex items-center gap-1"><span>Stock</span> <Package size={14}/> {sortColumn === 'stock' && (sortDirection === 'asc' ? <ChevronUp size={14}/> : <ChevronDown size={14}/>)}</div>
+                <div className="flex items-center gap-1"><span>Stock</span> <Package size={14}/> {sortColumn === 'stock' ? (sortDirection === 'asc' ? <ChevronUp size={14}/> : <ChevronDown size={14}/>) : null}</div>
               </th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-200" onClick={() => handleSort('costo_final_mxn')}>
-                <div className="flex items-center gap-1"><span>Costo MXN</span> <DollarSign size={14}/> {sortColumn === 'costo_final_mxn' && (sortDirection === 'asc' ? <ChevronUp size={14}/> : <ChevronDown size={14}/>)}</div>
+                <div className="flex items-center gap-1"><span>Costo MXN</span> <DollarSign size={14}/> {sortColumn === 'costo_final_mxn' ? (sortDirection === 'asc' ? <ChevronUp size={14}/> : <ChevronDown size={14}/>) : null}</div>
               </th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-200" onClick={() => handleSort('precio_normal')}>
-                <div className="flex items-center gap-1"><span>P. Normal MXN</span> <DollarSign size={14}/> {sortColumn === 'precio_normal' && (sortDirection === 'asc' ? <ChevronUp size={14}/> : <ChevronDown size={14}/>)}</div>
+                <div className="flex items-center gap-1"><span>P. Normal MXN</span> <DollarSign size={14}/> {sortColumn === 'precio_normal' ? (sortDirection === 'asc' ? <ChevronUp size={14}/> : <ChevronDown size={14}/>) : null}</div>
               </th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-200" onClick={() => handleSort('descuento_lote')}>
-                <div className="flex items-center gap-1"><span>Dscto. Lote MXN</span> <DollarSign size={14}/> {sortColumn === 'descuento_lote' && (sortDirection === 'asc' ? <ChevronUp size={14}/> : <ChevronDown size={14}/>)}</div>
+                <div className="flex items-center gap-1"><span>Dscto. Lote MXN</span> <DollarSign size={14}/> {sortColumn === 'descuento_lote' ? (sortDirection === 'asc' ? <ChevronUp size={14}/> : <ChevronDown size={14}/>) : null}</div>
               </th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-200" onClick={() => handleSort('promocion')}>
-                <div className="flex items-center gap-1"><span>Promoción MXN</span> <DollarSign size={14}/> {sortColumn === 'promocion' && (sortDirection === 'asc' ? <ChevronUp size={14}/> : <ChevronDown size={14}/>)}</div>
+                <div className="flex items-center gap-1"><span>Promoción MXN</span> <DollarSign size={14}/> {sortColumn === 'promocion' ? (sortDirection === 'asc' ? <ChevronUp size={14}/> : <ChevronDown size={14}/>) : null}</div>
               </th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-200" onClick={() => handleSort('margen_bruto_mxn')}>
-                <div className="flex items-center gap-1"><span>Margen MXN</span> <DollarSign size={14}/> {sortColumn === 'margen_bruto_mxn' && (sortDirection === 'asc' ? <ChevronUp size={14}/> : <ChevronDown size={14}/>)}</div>
+                <div className="flex items-center gap-1"><span>Margen MXN</span> <DollarSign size={14}/> {sortColumn === 'margen_bruto_mxn' ? (sortDirection === 'asc' ? <ChevronUp size={14}/> : <ChevronDown size={14}/>) : null}</div>
               </th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-200" onClick={() => handleSort('margen_bruto_porcentaje')}>
-                <div className="flex items-center gap-1"><span>Margen %</span> <Percent size={14}/> {sortColumn === 'margen_bruto_porcentaje' && (sortDirection === 'asc' ? <ChevronUp size={14}/> : <ChevronDown size={14}/>)}</div>
+                <div className="flex items-center gap-1"><span>Margen %</span> <Percent size={14}/> {sortColumn === 'margen_bruto_porcentaje' ? (sortDirection === 'asc' ? <ChevronUp size={14}/> : <ChevronDown size={14}/>) : null}</div>
               </th>
             </tr>
           </thead>

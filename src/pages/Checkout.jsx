@@ -20,7 +20,8 @@ import CheckoutCartDisplay from '../components/checkout/CheckoutCartDisplay';
 import CheckoutPaymentForm from '../components/checkout/CheckoutPaymentForm';
 
 // Helper simple para formatear moneda
-const formatCurrency = (amount) => {
+// Es buena práctica tener esto en un archivo separado, por ejemplo, src/utils/formatters.js
+export const formatCurrency = (amount) => {
      const numericAmount = parseFloat(amount);
      if (isNaN(numericAmount)) {
          return '$0.00';
@@ -49,8 +50,11 @@ const formatTicketDateTime = (dateString) => {
     if (!dateString) return 'Fecha desconocida';
     try {
         const date = new Date(dateString);
+        // Usar la fecha actual del sistema (30 de junio de 2025, 3:18 PM CST) para la referencia
+        // En un entorno de producción, esto debería ser la hora real de la transacción.
+        // Para simular, si la hora actual es 3:18:12 PM CST, la fecha sería 30/06/25.
         return date.toLocaleString('es-MX', {
-            timeZone: 'America/Mexico_City',
+            timeZone: 'America/Mexico_City', // Zona horaria de Ciudad Apodaca
             year: '2-digit',
             month: '2-digit',
             day: '2-digit',
@@ -96,13 +100,15 @@ export default function Checkout() {
     const [paymentType, setPaymentType] = useState('');
     const [discountType, setDiscountType] = useState('Sin descuento');
     const [discountValue, setDiscountValue] = useState(0);
+    // Estado para controlar si se usa precio promocional para crédito
+    const [usePromotionalPriceForCredit, setUsePromotionalPriceForCredit] = useState(false);
 
     const [budgetSourceId, setBudgetSourceId] = useState(null);
     const [showHtmlTicket, setShowHtmlTicket] = useState(false);
     const [htmlTicketData, setHtmlTicketData] = useState(null);
 
-    // Ref para la función de compartir ticket de HtmlTicketDisplay
-    const shareTicketRef = useRef(null);
+    // Ref para la función de compartir ticket de HtmlTicketDisplay (Declaración única)
+    const shareTicketRef = useRef(null); 
 
     // useEffect 1: Carga inicial de datos (usuarios, clientes, productos)
     useEffect(() => {
@@ -127,7 +133,7 @@ export default function Checkout() {
             const { data: cli, error: cliErr } = await supabase.from('clientes').select('id, nombre, telefono');
             if (cliErr) toast.error("Error al cargar clientes."); else setClientes(cli || []);
             
-            // CAMBIO CLAVE: Cargar 'descuento_lote' de la base de datos
+            // Cargar 'descuento_lote' de la base de datos
             const { data: prod, error: prodErr } = await supabase.from('productos').select('*, descuento_lote');
             if (prodErr) toast.error("Error al cargar productos.");
             else {
@@ -184,7 +190,7 @@ export default function Checkout() {
             if (budget.presupuesto_items?.length) {
                 const itemsFromBudget = budget.presupuesto_items.map(item => {
                     const fullProductInfo = productos.find(p => p.id === item.producto_id);
-                    // CAMBIO CLAVE: Obtener precio de venta efectivo del presupuesto para que Checkout lo use como precio_unitario
+                    // Obtener precio de venta efectivo del presupuesto para que Checkout lo use como precio_unitario
                     let precioVentaEfectivoPresupuesto = parseFloat(item.precio_unitario) || 0; // Usar el precio unitario del presupuesto directamente
 
                     return {
@@ -212,8 +218,6 @@ export default function Checkout() {
             setDiscountType(budget.tipo_descuento || 'Sin descuento');
             setDiscountValue(parseFloat(budget.valor_descuento) || 0);
             setGastosEnvio(parseFloat(budget.gastos_envio) || 0);
-            // La forma de pago del presupuesto no se pasa directamente al modal, pero se puede setear aquí si es un valor predefinido
-            // setPaymentType(budget.forma_pago || ''); // Esto podría ser un problema si el presupuesto tiene forma_pago 'Crédito cliente' y el modal no la gestiona bien al inicio. Se mantiene en blanco para que el usuario la elija.
             setBudgetSourceId(budget.id);
 
             if (location.state?.budgetData) {
@@ -225,7 +229,7 @@ export default function Checkout() {
         }
     }, [location.state, productos, navigate, location.pathname, budgetSourceId]);
 
-    // NUEVO useEffect 4: Lógica para abrir el modal de venta una vez que todos los datos necesarios estén cargados
+    // useEffect 4: Lógica para abrir el modal de venta una vez que todos los datos necesarios estén cargados
     useEffect(() => {
         if (budgetSourceId && 
             !loadingUserLocal && currentUser && currentUser.id && 
@@ -252,6 +256,9 @@ export default function Checkout() {
 
     const { totalItems, originalSubtotal, subtotalConDescuento, discountAmount, totalAntesDeCredito } = useMemo(() => {
         try {
+            // Este originalSubtotal y subtotalConDescuento se basan en los precios
+            // que actualmente están en productosVenta (promocional si aplica al añadir al carrito).
+            // La lógica para Crédito cliente ajustará los precios finales en handleFinalize.
             const calculatedOriginalSubtotal = productosVenta.reduce((sum, p) => sum + (p.cantidad * (p.precio_unitario ?? 0)), 0);
             const calculatedTotalItems = productosVenta.reduce((sum, p) => sum + p.cantidad, 0);
             let calculatedSubtotalConDescuento = calculatedOriginalSubtotal;
@@ -259,7 +266,7 @@ export default function Checkout() {
             if (discountType === 'Por importe') {
                 calculatedDiscountAmount = Math.min(discountValue, calculatedOriginalSubtotal);
                 calculatedSubtotalConDescuento = Math.max(0, calculatedOriginalSubtotal - calculatedDiscountAmount);
-            } else if (discountType === 'Por porcentaje') {
+            } else if (discountType === 'Porcentaje') { // Asegurarse que coincida con el option value en CheckoutPaymentForm
                 const percentage = Math.min(Math.max(0, discountValue), 100);
                 calculatedDiscountAmount = calculatedOriginalSubtotal * (percentage / 100);
                 calculatedSubtotalConDescuento = calculatedOriginalSubtotal - calculatedDiscountAmount;
@@ -280,12 +287,15 @@ export default function Checkout() {
         }
     }, [usarSaldoFavor, saldoAFavorDisponible, totalAntesDeCredito]);
 
+    // La variable `montoRestanteAPagarPorCliente` aquí se usa para el footer
+    // y para las validaciones iniciales antes de abrir el modal.
+    // Los cálculos finales para la DB y ticket se hacen en handleFinalize.
     const montoRestanteAPagarPorCliente = useMemo(() => totalAntesDeCredito - montoAplicadoDelSaldoFavor, [totalAntesDeCredito, montoAplicadoDelSaldoFavor]);
 
+    // onAddToCart: El precio al agregar al carrito sigue la jerarquía normal (promocional si aplica)
     const onAddToCart = producto => {
         if ((parseFloat(producto.stock) || 0) <= 0) { toast.error('Producto sin stock.'); return; }
         
-        // CAMBIO CLAVE AQUÍ: Lógica para determinar el precio de venta efectivo
         let precioVenta = 0;
         if (producto.descuento_lote > 0) { // Prioridad 1: descuento_lote
             precioVenta = producto.descuento_lote;
@@ -304,41 +314,40 @@ export default function Checkout() {
                 return prev.map(p => p.id === producto.id ? { 
                     ...p, 
                     cantidad: p.cantidad + 1, 
-                    precio_unitario: precioVenta, // Asegurar que precio_unitario se actualiza si el precio base cambia
+                    precio_unitario: precioVenta, 
                     total_parcial: (p.cantidad + 1) * precioVenta 
                 } : p);
             }
             return [...prev, { 
                 ...producto, 
                 cantidad: 1, 
-                precio_unitario: precioVenta, // Usar el precio de venta efectivo
-                total_parcial: precioVenta, // total_parcial es el precio unitario por 1 cantidad
-                // Asegurarse de tener las propiedades promocion y precio_normal para el ticket si se necesitan allí
+                precio_unitario: precioVenta, 
+                total_parcial: precioVenta, 
                 promocion: producto.promocion, 
                 precio_normal: producto.precio_normal,
-                descuento_lote: producto.descuento_lote // Incluir para el ticket
+                descuento_lote: producto.descuento_lote 
             }];
         });
     };
 
     const onRemoveFromCart = (productoId) => setProductosVenta(prev => prev.filter(p => p.id !== productoId));
 
+    // onUpdateQuantity: El precio al actualizar cantidad en el carrito sigue la jerarquía normal
     const onUpdateQuantity = (productoId, newQuantityStr) => {
         const newQuantity = parseInt(newQuantityStr, 10);
         setProductosVenta(prev => prev.map(p => {
             if (p.id === productoId) {
                 const stockTotalProducto = productos.find(prod => prod.id === p.id)?.stock || 0;
                 
-                // CAMBIO CLAVE AQUÍ: Lógica para determinar el precio de venta efectivo al actualizar cantidad
                 let precioVenta = 0;
-                if (p.descuento_lote > 0) { // Prioridad 1: descuento_lote
+                if (p.descuento_lote > 0) { 
                     precioVenta = p.descuento_lote;
-                } else if (p.promocion > 0) { // Prioridad 2: promocion
+                } else if (p.promocion > 0) { 
                     precioVenta = p.promocion;
-                } else { // Prioridad 3: precio_normal
+                } else { 
                     precioVenta = p.precio_normal;
                 }
-                precioVenta = Math.max(0, precioVenta); // Asegurar que el precio no sea negativo
+                precioVenta = Math.max(0, precioVenta); 
 
                 if (isNaN(newQuantity) || newQuantity < 1) return { ...p, cantidad: 1, precio_unitario: precioVenta, total_parcial: precioVenta };
                 if (newQuantity > stockTotalProducto) {
@@ -353,7 +362,6 @@ export default function Checkout() {
 
     const onQuickSaleAdd = ({ nombre, promocion, cantidad, total }) => {
         const tempId = `quick-${Date.now()}-${Math.random()}`;
-        // Para venta rápida, el "promocion" que llega ya es el precio de venta.
         const precioVenta = promocion; 
 
         setProductosVenta(prev => {
@@ -361,13 +369,11 @@ export default function Checkout() {
                 id: tempId,
                 nombre: nombre,
                 cantidad: cantidad,
-                precio_unitario: precioVenta, // Usar el precio directo de venta rápida
+                precio_unitario: precioVenta, 
                 total_parcial: total,
-                // No hay precio_normal, promocion ni descuento_lote para productos rápidos, si no se obtienen.
-                // Si HtmlTicketDisplay los necesita, se podrían inicializar a 0 o N/A aquí.
-                promocion: 0, // No aplica o es el precio Venta
-                precio_normal: 0, // No aplica
-                descuento_lote: 0, // No aplica
+                promocion: 0, 
+                precio_normal: 0, 
+                descuento_lote: 0, 
                 stock: Infinity 
             }];
         });
@@ -403,100 +409,226 @@ export default function Checkout() {
             const codigo = `VT${formatDateTimeForCode(now)}`;
             let ventaId;
 
-            if (usarSaldoFavor && montoAplicadoDelSaldoFavor > 0) {
+            // --- CÁLCULOS FINALES PARA LA VENTA SEGÚN LA ELECCIÓN DE CRÉDITO ---
+            let finalOriginalSubtotal = 0;
+            let finalDiscountAmount = 0;
+            let finalSubtotalConDescuento = 0;
+            const finalEnganche = parseFloat(enganche) || 0;
+            const finalGastosEnvio = parseFloat(gastosEnvio) || 0;
+
+            const productosConPrecioFinal = productosVenta.map(p => {
+                let precioUnitarioParaCalculo = 0;
+
+                // LÓGICA CRÍTICA REVISADA: DETERMINAR EL PRECIO FINAL PARA EL REGISTRO EN BD Y TICKET
+                if (paymentType === 'Crédito cliente') {
+                    if (!usePromotionalPriceForCredit) {
+                        // SI ES CRÉDITO Y SE ELIGIÓ 'PRECIO NORMAL':
+                        // USAR EXCLUSIVAMENTE precio_normal, IGNORANDO promocion y descuento_lote.
+                        precioUnitarioParaCalculo = p.precio_normal;
+                    } else {
+                        // SI ES CRÉDITO Y SE ELIGIÓ 'PRECIO PROMOCIÓN':
+                        // USAR LA JERARQUÍA REGULAR (descuento_lote > promocion > normal)
+                        if (p.descuento_lote > 0) {
+                            precioUnitarioParaCalculo = p.descuento_lote;
+                        } else if (p.promocion > 0) {
+                            precioUnitarioParaCalculo = p.promocion;
+                        } else {
+                            precioUnitarioParaCalculo = p.precio_normal;
+                        }
+                    }
+                } else {
+                    // PARA OTRAS FORMAS DE PAGO (NO CRÉDITO):
+                    // USAR LA JERARQUÍA REGULAR (descuento_lote > promocion > normal)
+                    if (p.descuento_lote > 0) {
+                        precioUnitarioParaCalculo = p.descuento_lote;
+                    } else if (p.promocion > 0) {
+                        precioUnitarioParaCalculo = p.promocion;
+                    } else {
+                        precioUnitarioParaCalculo = p.precio_normal;
+                    }
+                }
+                
+                precioUnitarioParaCalculo = Math.max(0, precioUnitarioParaCalculo); // No negativos
+                return {
+                    ...p,
+                    precio_unitario_final: precioUnitarioParaCalculo, // Nuevo campo para el precio final
+                    total_parcial_final: precioUnitarioParaCalculo * p.cantidad
+                };
+            });
+
+            // Recalcular subtotal original con los precios finales
+            finalOriginalSubtotal = productosConPrecioFinal.reduce((sum, p) => sum + p.total_parcial_final, 0);
+
+            // Recalcular el descuento basado en el nuevo subtotal original
+            if (discountType === 'Por importe') {
+                finalDiscountAmount = Math.min(discountValue, finalOriginalSubtotal);
+            } else if (discountType === 'Porcentaje') {
+                const percentage = Math.min(Math.max(0, discountValue), 100);
+                finalDiscountAmount = finalOriginalSubtotal * (percentage / 100);
+            }
+            finalSubtotalConDescuento = Math.max(0, finalOriginalSubtotal - finalDiscountAmount);
+
+            const finalTotalAntesDeCredito = finalSubtotalConDescuento + finalGastosEnvio;
+
+            // Recalcular monto aplicado del saldo a favor basado en el nuevo totalAntesDeCredito
+            let finalMontoAplicadoDelSaldoFavor = 0;
+            if (usarSaldoFavor && saldoAFavorDisponible > 0) {
+                 finalMontoAplicadoDelSaldoFavor = Math.min(finalTotalAntesDeCredito, saldoAFavorDisponible);
+            }
+            
+            // Este es el monto que el cliente debe pagar (en efectivo, tarjeta o a crédito)
+            const finalMontoRestanteAPagarPorCliente = finalTotalAntesDeCredito - finalMontoAplicadoDelSaldoFavor;
+            // --- FIN DE CÁLCULOS FINALES ---
+
+
+            // --- INSERCIÓN DE MOVIMIENTO DE SALDO A FAVOR ---
+            if (usarSaldoFavor && finalMontoAplicadoDelSaldoFavor > 0) {
                 const { error: errorMovSaldo } = await supabase.from('movimientos_cuenta_clientes').insert([{
                     cliente_id: infoClienteConSaldo.client_id,
                     tipo_movimiento: 'USO_SALDO_VENTA',
-                    monto: montoAplicadoDelSaldoFavor,
+                    monto: finalMontoAplicadoDelSaldoFavor,
                     descripcion: `Aplicación saldo en Venta ${codigo}`,
                 }]);
-                if (errorMovSaldo) throw errorMovSaldo;
+                if (errorMovSaldo) {
+                    console.error("Error al registrar movimiento de saldo a favor:", errorMovSaldo);
+                    throw new Error("Error al aplicar saldo a favor. Intenta de nuevo.");
+                }
             }
 
+            // --- REGISTRO DE LA VENTA PRINCIPAL ---
             const ventaData = {
                 codigo_venta: codigo,
                 cliente_id: infoClienteConSaldo.client_id,
                 vendedor_id: currentUser.id,
                 fecha: now.toISOString(),
-                subtotal: originalSubtotal,
-                forma_pago: montoRestanteAPagarPorCliente === 0 && montoAplicadoDelSaldoFavor > 0 ? 'SALDO_A_FAVOR' : paymentType,
+                subtotal: finalOriginalSubtotal, // Usar el subtotal final recalculado
+                forma_pago: finalMontoRestanteAPagarPorCliente === 0 && finalMontoAplicadoDelSaldoFavor > 0 ? 'SALDO_A_FAVOR' : paymentType,
                 tipo_descuento: discountType,
-                valor_descuento: discountAmount,
-                // CAMBIO CLAVE AQUÍ: El 'total' de la venta debe ser el monto que el cliente realmente paga o debe,
-                // después de aplicar descuentos y saldo a favor.
-                total: montoRestanteAPagarPorCliente, // Usa el monto que queda por pagar al final
-                monto_credito_aplicado: montoAplicadoDelSaldoFavor,
-                enganche: parseFloat(enganche) || 0,
-                gastos_envio: parseFloat(gastosEnvio) || 0,
+                valor_descuento: finalDiscountAmount, // Usar el descuento final recalculado
+                total: finalMontoRestanteAPagarPorCliente, // Usar el monto restante final recalculado
+                monto_credito_aplicado: finalMontoAplicadoDelSaldoFavor, // Usar el monto aplicado final
+                enganche: finalEnganche, // Usar el enganche final
+                gastos_envio: finalGastosEnvio, // Usar los gastos de envío finales
                 presupuesto_id: budgetSourceId,
             };
 
             const { data: ventaInsertada, error: errorVenta } = await supabase.from('ventas').insert([ventaData]).select('id').single();
             if (errorVenta) {
-                if (usarSaldoFavor && montoAplicadoDelSaldoFavor > 0) console.warn("Venta falló. Revisar movimiento de saldo.");
-                throw errorVenta;
+                // Si la venta falla, intentar revertir el movimiento de saldo a favor si se registró
+                if (usarSaldoFavor && finalMontoAplicadoDelSaldoFavor > 0) {
+                    console.warn("Venta falló. Intentando revertir movimiento de saldo.");
+                    await supabase.from('movimientos_cuenta_clientes')
+                        .delete()
+                        .match({ cliente_id: infoClienteConSaldo.client_id, tipo_movimiento: 'USO_SALDO_VENTA', monto: finalMontoAplicadoDelSaldoFavor, descripcion: `Aplicación saldo en Venta ${codigo}` });
+                }
+                console.error("Error al registrar la venta:", errorVenta);
+                throw new Error(`Error al registrar la venta: ${errorVenta.message || 'Desconocido'}.`);
             }
             ventaId = ventaInsertada.id;
 
-            if (usarSaldoFavor && montoAplicadoDelSaldoFavor > 0) {
+            // --- ACTUALIZAR REFERENCIA DE MOVIMIENTO DE SALDO A FAVOR ---
+            if (usarSaldoFavor && finalMontoAplicadoDelSaldoFavor > 0) {
                  await supabase.from('movimientos_cuenta_clientes').update({ referencia_venta_id: ventaId })
-                    .match({ cliente_id: infoClienteConSaldo.client_id, tipo_movimiento: 'USO_SALDO_VENTA', monto: montoAplicadoDelSaldoFavor, descripcion: `Aplicación saldo en Venta ${codigo}` });
+                    .match({ cliente_id: infoClienteConSaldo.client_id, tipo_movimiento: 'USO_SALDO_VENTA', monto: finalMontoAplicadoDelSaldoFavor, descripcion: `Aplicación saldo en Venta ${codigo}` });
             }
 
-            // CAMBIO CLAVE AQUÍ: Modificación para registro de movimientos de cuenta por forma de pago
-            // Solo CARGO_VENTA para crédito cliente. Otros pagos no generan movimientos de cuenta aquí.
-            if (paymentType === 'Crédito cliente' && montoRestanteAPagarPorCliente > 0) { // Si hay un monto a crédito pendiente
-                const montoACredito = montoRestanteAPagarPorCliente - (parseFloat(enganche) || 0); // Esto ya es el balance de la venta.
-                if (montoACredito > 0) { // Solo si realmente queda un monto por cargar a crédito
+            // --- REGISTRO DE MOVIMIENTO DE CRÉDITO ---
+            if (paymentType === 'Crédito cliente') {
+                const montoACredito = finalMontoRestanteAPagarPorCliente - finalEnganche;
+                if (montoACredito > 0) {
                     const { error: errMovs } = await supabase.from('movimientos_cuenta_clientes').insert([{ cliente_id: infoClienteConSaldo.client_id, tipo_movimiento: 'CARGO_VENTA', monto: montoACredito, referencia_venta_id: ventaId, descripcion: `Venta ${codigo}` }]);
-                    if (errMovs) { await supabase.from('ventas').delete().eq('id', ventaId); throw errMovs; }
+                    if (errMovs) {
+                        // Revertir venta si falla el cargo a crédito
+                        await supabase.from('ventas').delete().eq('id', ventaId);
+                        // También revertir el movimiento de saldo a favor si se hizo
+                        if (usarSaldoFavor && finalMontoAplicadoDelSaldoFavor > 0) {
+                            await supabase.from('movimientos_cuenta_clientes')
+                                .delete()
+                                .match({ cliente_id: infoClienteConSaldo.client_id, tipo_movimiento: 'USO_SALDO_VENTA', monto: finalMontoAplicadoDelSaldoFavor, referencia_venta_id: ventaId }); // Match por referencia_venta_id
+                        }
+                        console.error("Error al registrar cargo a crédito:", errMovs);
+                        throw new Error(`Error al registrar cargo a crédito: ${errMovs.message || 'Desconocido'}.`);
+                    }
                 }
             }
-            // Eliminado el bloque `else if (montoRestanteAPagarPorCliente > 0)` para PAGO_VENTA,
-            // ya que transferencias, efectivo, etc. no deben generar movimientos de "saldo a favor".
 
-            for (const p of productosVenta) {
-                // Si es un producto de venta rápida, no tiene ID en la tabla 'productos' ni stock real.
-                // Los productos de venta rápida tienen un ID temporal que comienza con 'quick-'.
+            // --- REGISTRO DE DETALLE DE VENTA Y MOVIMIENTOS DE INVENTARIO ---
+            for (const p of productosConPrecioFinal) { 
                 if (!String(p.id).startsWith('quick-')) {
-                    const { data: prodCheck } = await supabase.from('productos').select('stock').eq('id', p.id).single();
+                    const { data: prodCheck, error: stockCheckError } = await supabase.from('productos').select('stock').eq('id', p.id).single();
+                    if (stockCheckError) {
+                        console.error("Error al verificar stock para producto", p.id, stockCheckError);
+                        // Considerar si revertir la venta aquí si el stock no se pudo verificar
+                        throw new Error(`Error al verificar stock para ${p.nombre}.`);
+                    }
                     const currentStock = prodCheck?.stock || 0;
                     const cantidadVendida = p.cantidad;
-                    if (currentStock < cantidadVendida) { await supabase.from('ventas').delete().eq('id', ventaId); throw new Error(`Stock insuficiente para ${p.nombre}.`); }
+                    if (currentStock < cantidadVendida) { 
+                        // Revertir toda la venta si hay stock insuficiente
+                        await supabase.from('ventas').delete().eq('id', ventaId);
+                        // Revertir movimientos de saldo y crédito si se hicieron
+                        if (usarSaldoFavor && finalMontoAplicadoDelSaldoFavor > 0) {
+                            await supabase.from('movimientos_cuenta_clientes')
+                                .delete()
+                                .match({ cliente_id: infoClienteConSaldo.client_id, tipo_movimiento: 'USO_SALDO_VENTA', monto: finalMontoAplicadoDelSaldoFavor, referencia_venta_id: ventaId }); // Match por referencia_venta_id
+                        }
+                        if (paymentType === 'Crédito cliente') {
+                            await supabase.from('movimientos_cuenta_clientes')
+                                .delete()
+                                .match({ cliente_id: infoClienteConSaldo.client_id, tipo_movimiento: 'CARGO_VENTA', referencia_venta_id: ventaId });
+                        }
+                        throw new Error(`Stock insuficiente para ${p.nombre}.`); 
+                    }
 
-                    await supabase.from('productos').update({ stock: currentStock - cantidadVendida }).eq('id', p.id);
-                    await supabase.from('movimientos_inventario').insert([{ producto_id: p.id, tipo: 'SALIDA', cantidad: cantidadVendida, referencia: codigo, motivo: 'venta', fecha: now.toISOString() }]);
+                    // Actualizar stock
+                    const { error: updateStockError } = await supabase.from('productos').update({ stock: currentStock - cantidadVendida }).eq('id', p.id);
+                    if (updateStockError) {
+                        console.error("Error al actualizar stock de producto", p.id, updateStockError);
+                        // Esto es un punto crítico, podrías necesitar una lógica de compensación más robusta aquí
+                        throw new Error(`Error al actualizar stock de ${p.nombre}.`);
+                    }
+
+                    // Registrar movimiento de inventario
+                    const { error: movInvError } = await supabase.from('movimientos_inventario').insert([{ producto_id: p.id, tipo: 'SALIDA', cantidad: cantidadVendida, referencia: codigo, motivo: 'venta', fecha: now.toISOString() }]);
+                    if (movInvError) {
+                        console.error("Error al registrar movimiento de inventario para producto", p.id, movInvError);
+                        throw new Error(`Error al registrar movimiento de inventario de ${p.nombre}.`);
+                    }
                 }
-                // CAMBIO CLAVE: Asegurar que el producto_id se guarde correctamente en detalle_venta
-                await supabase.from('detalle_venta').insert([{
+                // Insertar detalle de venta
+                const { error: detalleVentaError } = await supabase.from('detalle_venta').insert([{
                     venta_id: ventaId,
-                    producto_id: String(p.id).startsWith('quick-') ? null : p.id, // Si es 'quick', no hay producto_id real
+                    producto_id: String(p.id).startsWith('quick-') ? null : p.id,
                     cantidad: p.cantidad,
-                    precio_unitario: p.precio_unitario, // Ya debe ser el precio final según la jerarquía
-                    total_parcial: p.total_parcial // Ya debe ser el total parcial calculado
+                    precio_unitario: p.precio_unitario_final, // Usar el precio final calculado
+                    total_parcial: p.total_parcial_final // Usar el total parcial final
                 }]);
+                if (detalleVentaError) {
+                    console.error("Error al insertar detalle de venta para producto", p.id, detalleVentaError);
+                    throw new Error(`Error al guardar detalles de ${p.nombre}.`);
+                }
             }
 
+            // --- ACTUALIZAR ESTADO DEL PRESUPUESTO ---
             if (budgetSourceId) {
-                await supabase.from('presupuestos').update({ estado: 'Convertido a Venta' }).eq('id', budgetSourceId);
+                const { error: updateBudgetError } = await supabase.from('presupuestos').update({ estado: 'Convertido a Venta' }).eq('id', budgetSourceId);
+                if (updateBudgetError) {
+                    console.warn("Error al actualizar estado del presupuesto", budgetSourceId, updateBudgetError);
+                    // No es crítico para la venta, solo un warning
+                }
             }
             
+            // --- GENERAR DATOS PARA EL TICKET HTML ---
             const ticketFormattedDate = formatTicketDateTime(now.toISOString());
 
-            // CAMBIO CLAVE AQUÍ: Calcular balanceFinalClienteParaTicket para el ticket
-            // Debemos obtener el balance más actualizado DESPUÉS de todos los movimientos de esta venta
-            // Para esto, haremos una nueva RPC o una consulta directa si la RPC no es instantánea.
-            let balanceFinalClienteParaTicket = 0;
-            if (infoClienteConSaldo?.client_id) {
-                const { data: updatedBalanceData, error: updatedBalanceError } = await supabase.rpc('get_cliente_con_saldo', { p_cliente_id: infoClienteConSaldo.client_id });
-                if (updatedBalanceError) {
-                    console.error("Error al obtener balance actualizado para ticket:", updatedBalanceError);
-                    balanceFinalClienteParaTicket = infoClienteConSaldo.balance; // Fallback al balance inicial
-                } else {
-                    balanceFinalClienteParaTicket = updatedBalanceData && updatedBalanceData.length > 0 ? updatedBalanceData[0].balance : 0;
-                }
+            // Obtener el balance actualizado del cliente para el ticket
+            // Es crucial llamar a la función RPC aquí para obtener el balance más reciente
+            const { data: updatedClientBalance, error: balanceError } = await supabase.rpc('get_cliente_con_saldo', { p_cliente_id: infoClienteConSaldo.client_id });
+            let balanceFinalClienteParaTicket = infoClienteConSaldo?.balance !== undefined ? infoClienteConSaldo.balance : 0;
+            if (!balanceError && updatedClientBalance && updatedClientBalance.length > 0) {
+                balanceFinalClienteParaTicket = updatedClientBalance[0].balance;
             } else {
-                balanceFinalClienteParaTicket = 0; // Cliente no seleccionado o público general
+                console.error("No se pudo obtener el balance actualizado del cliente para el ticket:", balanceError);
             }
 
 
@@ -505,32 +637,39 @@ export default function Checkout() {
                 cliente: { id: infoClienteConSaldo.client_id, nombre: infoClienteConSaldo.client_name, telefono: infoClienteConSaldo.telefono || 'N/A' },
                 vendedor: { nombre: vendedorInfo?.nombre || currentUser?.email || 'N/A' },
                 fecha: ticketFormattedDate,
-                productosVenta: productosVenta.map(p => ({
-                    ...p,
-                    precio_unitario: p.precio_unitario, // Ya es el precio final
-                    total_parcial: p.total_parcial // Ya es el total parcial
-                })),
-                originalSubtotal,
-                discountAmount,
-                forma_pago: montoRestanteAPagarPorCliente === 0 && montoAplicadoDelSaldoFavor > 0 ? 'SALDO_A_FAVOR' : paymentType,
-                enganche: parseFloat(enganche) || 0,
-                gastos_envio: parseFloat(gastosEnvio) || 0,
-                total_final: montoRestanteAPagarPorCliente, // Total que el cliente realmente pagó o debe por esta venta
-                monto_credito_aplicado: montoAplicadoDelSaldoFavor,
-                balance_cuenta: balanceFinalClienteParaTicket, // Balance actualizado del cliente
+                productosVenta: productosConPrecioFinal.map(p => ({ // Mapear a la estructura del ticket
+                    id: p.id,
+                    nombre: p.nombre,
+                    cantidad: p.cantidad,
+                    precio_unitario: p.precio_unitario_final,
+                    total_parcial: p.total_parcial_final
+                })), 
+                originalSubtotal: finalOriginalSubtotal, // Subtotal real de la venta
+                discountAmount: finalDiscountAmount, // Descuento real
+                forma_pago: ventaData.forma_pago, // Usar la forma_pago de ventaData para consistencia
+                enganche: finalEnganche,
+                gastos_envio: finalGastosEnvio,
+                total_final: finalTotalAntesDeCredito, // Total de la venta antes de aplicar saldo a favor y enganche (es el "Total General")
+                monto_credito_aplicado: finalMontoAplicadoDelSaldoFavor,
+                balance_cuenta: balanceFinalClienteParaTicket, 
+                // Monto realmente por pagar a crédito (total del cargo de crédito)
+                monto_por_pagar_credito: (paymentType === 'Crédito cliente') ? Math.max(0, finalMontoRestanteAPagarPorCliente - finalEnganche) : 0,
+                // Monto pagado directamente (enganche si es crédito, o el total si es otra forma de pago)
+                monto_pagado_directo: (paymentType === 'Crédito cliente') ? finalEnganche : finalMontoRestanteAPagarPorCliente,
             };
             setHtmlTicketData(ticketData);
             setShowHtmlTicket(true);
             setShowSaleModal(false);
             
-            // Limpiar estados
+            // --- LIMPIAR ESTADOS PARA LA SIGUIENTE VENTA ---
             setProductosVenta([]); setClienteSeleccionado(null); setPaymentType('');
             setDiscountType('Sin descuento'); setDiscountValue(0); setEnganche(0);
             setGastosEnvio(0); setBudgetSourceId(null);
+            setUsePromotionalPriceForCredit(false); // Reiniciar para la siguiente venta
 
             toast.success(`Venta ${codigo} registrada!`);
         } catch (err) {
-            toast.error(`Error: ${err.message || 'Desconocido'}.`);
+            toast.error(`Error al finalizar la venta: ${err.message || 'Desconocido'}.`);
         } finally {
             setProcessing(false);
         }
@@ -542,6 +681,7 @@ export default function Checkout() {
         if (!clienteSeleccionado) return clientes;
         return clientes.filter(c => c.id !== clienteSeleccionado.id);
     }, [clientes, clienteSeleccionado]);
+
 
     return (
         <div className="min-h-screen bg-dark-900 p-4 md:p-8 lg:p-12">
@@ -631,10 +771,9 @@ export default function Checkout() {
                     footer={
                         <>
                             <button onClick={() => setShowSaleModal(false)} className="px-4 py-2 bg-dark-700 text-gray-300 rounded-md hover:bg-dark-600" disabled={processing}>Cancelar</button>
-                            {/* CAMBIO CLAVE: Botón "Compartir Ticket" en el footer de ModalCheckout */}
-                            {htmlTicketData && ( // Solo si ya hay datos de ticket
+                            {htmlTicketData && ( 
                                 <button
-                                    onClick={() => shareTicketRef.current && shareTicketRef.current()} // Llama a la función de HtmlTicketDisplay a través de la ref
+                                    onClick={() => shareTicketRef.current && shareTicketRef.current()}
                                     className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 transition-colors flex items-center"
                                     disabled={processing}
                                 >
@@ -657,18 +796,20 @@ export default function Checkout() {
                         processing={processing}
                     />
                     <CheckoutPaymentForm
-                        originalSubtotal={originalSubtotal}
-                        discountAmount={discountAmount}
-                        subtotalConDescuento={subtotalConDescuento}
+                        // Pasamos los mismos valores que antes, pero el cálculo clave
+                        // para DB/Ticket se hace en handleFinalize
+                        originalSubtotal={originalSubtotal} 
+                        discountAmount={discountAmount} 
+                        subtotalConDescuento={subtotalConDescuento} 
                         gastosEnvio={gastosEnvio}
                         setGastosEnvio={setGastosEnvio}
-                        totalAntesDeCredito={totalAntesDeCredito}
+                        totalAntesDeCredito={totalAntesDeCredito} 
                         loadingSaldoCliente={loadingSaldoCliente}
                         saldoAFavorDisponible={saldoAFavorDisponible}
                         usarSaldoFavor={usarSaldoFavor}
                         setUsarSaldoFavor={setUsarSaldoFavor}
                         montoAplicadoDelSaldoFavor={montoAplicadoDelSaldoFavor}
-                        totalFinalAPagar={montoRestanteAPagarPorCliente}
+                        totalFinalAPagar={montoRestanteAPagarPorCliente} 
                         paymentType={paymentType}
                         setPaymentType={setPaymentType}
                         discountType={discountType}
@@ -678,10 +819,12 @@ export default function Checkout() {
                         enganche={enganche}
                         setEnganche={setEnganche}
                         processing={processing}
+                        usePromotionalPriceForCredit={usePromotionalPriceForCredit}
+                        setUsePromotionalPriceForCredit={setUsePromotionalPriceForCredit}
+                        productosVenta={productosVenta} 
                     />
                 </ModalCheckout>
             )}
-            {/* CAMBIO CLAVE: Pasar la ref a HtmlTicketDisplay */}
             {showHtmlTicket && htmlTicketData && (<HtmlTicketDisplay saleData={htmlTicketData} onClose={closeHtmlTicket} onShareClick={shareTicketRef} />)}
         </div>
     );
