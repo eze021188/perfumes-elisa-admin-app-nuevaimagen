@@ -115,6 +115,24 @@ export default function Compras() {
 
   const [loading, setLoading] = useState(true); 
 
+  // Nuevo useEffect para cargar los nombres de los productos para las sugerencias
+  useEffect(() => {
+    const fetchProductNames = async () => {
+      const { data, error } = await supabase
+        .from('productos')
+        .select('id, nombre'); // Obtener tanto el ID como el nombre
+
+      if (error) {
+        console.error('Error al cargar nombres de productos para sugerencias:', error.message);
+        toast.error('Error al cargar nombres de productos para sugerencias.');
+      } else {
+        setNombresSugeridos(data || []);
+      }
+    };
+
+    fetchProductNames();
+  }, []); // Se ejecuta una sola vez al montar el componente
+
   const fetchComprasMemoized = useCallback(async () => {
     setLoading(true); 
     const { data: cabeceras = [], error: errCab } = await supabase
