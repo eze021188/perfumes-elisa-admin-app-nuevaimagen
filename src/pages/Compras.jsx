@@ -120,7 +120,7 @@ export default function Compras() {
     const fetchProductNames = async () => {
       const { data, error } = await supabase
         .from('productos')
-        .select('id, nombre, last_cost_usd'); // Obtener ID, nombre y last_cost_usd
+        .select('id, nombre'); // Obtener solo ID y nombre
 
       if (error) {
         console.error('Error al cargar nombres de productos para sugerencias:', error.message);
@@ -249,7 +249,8 @@ export default function Compras() {
         toast.success('Inventario revertido con éxito. Compra modificable.', { id: 'revertirInv' });
         fetchComprasMemoized(); 
         setExpandedIdx(null); 
-    } catch (err) {
+    }
+    catch (err) {
         toast.error(`Error al revertir inventario: ${err.message}`, { id: 'revertirInv' });
         console.error("Error general en revertirAfectarInventario:", err);
     }
@@ -339,12 +340,13 @@ export default function Compras() {
             setSugerenciasProductoForm(filtradas.slice(0, 10)); 
             setMostrarSugerenciasProductoForm(true); 
             
+            // Eliminar la lógica de autocompletado de precio aquí ya que no se usará last_cost_usd
             if (filtradas.length === 1 && filtradas[0].nombre.toLowerCase() === trimmedValue.toLowerCase()) {
                 console.log("DEBUG: handleProductoFormInputChange - Exact match found, auto-selecting:", filtradas[0].nombre);
                 setProductoForm(prev => ({ 
                     ...prev, 
                     producto_id: filtradas[0].id, 
-                    precioUnitarioUSD: (filtradas[0].last_cost_usd || 0).toFixed(2) // Set price for exact match
+                    // precioUnitarioUSD ya no se autocompleta aquí
                 }));
             } else {
                 setProductoForm(prev => ({...prev, producto_id: null, precioUnitarioUSD: '0.00'})); // Reset price if no exact match
@@ -366,7 +368,8 @@ export default function Compras() {
         ...prev, 
         nombreProducto: sugerencia.nombre, 
         producto_id: sugerencia.id,
-        precioUnitarioUSD: (sugerencia.last_cost_usd || 0).toFixed(2) // Establecer el precio sugerido
+        // Eliminar el autocompletado de precio aquí ya que no se usará last_cost_usd
+        // precioUnitarioUSD: (sugerencia.last_cost_usd || 0).toFixed(2) 
     }));
     setSugerenciasProductoForm([]);
     setMostrarSugerenciasProductoForm(false);
@@ -578,7 +581,7 @@ export default function Compras() {
                 nombreProducto: nombreActual, 
                 producto_id: selectedProduct ? selectedProduct.id : null, 
                 mostrarSugerencias: name !== 'seleccionarSugerencia',
-                precioUnitarioUSD: selectedProduct ? (selectedProduct.last_cost_usd || 0).toFixed(2) : '0.00' // Set price for existing item
+                // Eliminado: precioUnitarioUSD: selectedProduct ? (selectedProduct.last_cost_usd || 0).toFixed(2) : '0.00' 
             }));
             
             if (nombreActual.trim() === '' || name === 'seleccionarSugerencia') {
@@ -790,7 +793,7 @@ export default function Compras() {
                         stock: nuevoStockTotal, 
                         costo_final_usd: parseFloat(nuevoCostoPromedioUSD.toFixed(4)),
                         costo_final_mxn: parseFloat(nuevoCostoPromedioMXN.toFixed(2)),
-                        last_cost_usd: parseFloat(precioUnitarioUSD.toFixed(4)) // Actualizar last_cost_usd con el precio de esta compra
+                        // last_cost_usd ya no se actualiza aquí
                     }).eq('id', prodEnCatalogo.id).then(response => ({...response, producto_id_original: prodEnCatalogo.id, cantidad_comprada: cantidadCompra})) 
                 );
             } else { 
