@@ -431,11 +431,6 @@ export default function Compras() {
     if (!formulario.numeroPedido || !formulario.proveedor || productosAgregados.length === 0) {
       toast.error('Completa la cabecera y agrega al menos un producto.'); return;
     }
-    if (productosAgregados.some(p => !p.producto_id)) {
-      if (!window.confirm('Algunos productos no tienen un ID asociado (podrían ser nuevos o no seleccionados del catálogo). ¿Deseas continuar y registrarlos sin un ID de producto en la base de datos de productos?')) {
-        return;
-      }
-    }
 
     const descuento = parseFloat(formulario.descuentoTotalUSD || '0');
     const gastosEnvio = parseFloat(formulario.gastosEnvioUSA || '0');
@@ -473,11 +468,49 @@ export default function Compras() {
       .insert(compraDataToInsert).select('id').single();
 
     if (errCompra) { toast.error('Error al guardar la compra: ' + errCompra.message); return; }
-    const itemsToInsert = productosAgregados.map(item => ({
-      compra_id: newCompra.id, nombre_producto: item.nombreProducto,
-      cantidad: item.cantidad, precio_unitario_usd: item.precioUnitarioUSD,
-      producto_id: item.producto_id 
-    }));
+    
+    // --- Lógica para manejar productos nuevos y existentes ---
+    const itemsToInsert = [];
+    for (const item of productosAgregados) {
+        let currentProductId = item.producto_id;
+
+        // Si el producto no tiene un ID asociado, intentar crearlo en la tabla 'productos'
+        if (!currentProductId) {
+            const { data: newProduct, error: newProductError } = await supabase
+                .from('productos')
+                .insert({
+                    nombre: item.nombreProducto,
+                    stock: 0, // El stock se ajustará al afectar inventario
+                    costo_final_usd: parseFloat(item.precioUnitarioUSD || '0'),
+                    costo_final_mxn: parseFloat(item.precioUnitarioUSD || '0') * (parseFloat(formulario.tipoCambioDia || '0') || 1),
+                    last_cost_usd: parseFloat(item.precioUnitarioUSD || '0') // Establecer el last_cost_usd inicial
+                })
+                .select('id')
+                .single();
+
+            if (newProductError) {
+                console.error('Error al crear nuevo producto:', newProductError.message);
+                toast.error(`Error al crear producto "${item.nombreProducto}". No se registrará en esta compra.`);
+                continue; // Saltar este ítem si no se puede crear el producto
+            }
+            currentProductId = newProduct.id; // Asignar el ID del nuevo producto
+            toast.success(`Producto "${item.nombreProducto}" creado y asociado.`);
+        }
+
+        itemsToInsert.push({
+            compra_id: newCompra.id,
+            nombre_producto: item.nombreProducto,
+            cantidad: item.cantidad,
+            precio_unitario_usd: item.precioUnitarioUSD,
+            producto_id: currentProductId // Usar el ID (existente o recién creado)
+        });
+    }
+
+    if (itemsToInsert.length === 0 && productosAgregados.length > 0) {
+        toast.error('No se pudieron agregar productos a la compra. Revisa los errores.');
+        return;
+    }
+
     const { error: errItems } = await supabase.from('compra_items').insert(itemsToInsert);
     if (errItems) { toast.error('Error al guardar ítems. Cabecera pudo ser creada.'); return; }
     
@@ -736,12 +769,7 @@ export default function Compras() {
             const costoUnitarioFinalUSD = costoUnitarioFinalMXN / (tipoCambioDiaDelCompra || 1);
 
 
-            let prodEnCatalogo = catalogo.find(x => x.nombre === p.nombreProducto);
-            // Si el ítem ya tiene un producto_id (viene de una edición de compra existente)
-            // y ese ID se encuentra en el catálogo, usar ese. Esto es más robusto.
-            if (p.producto_id && catalogo.some(catProd => catProd.id === p.producto_id)) {
-                prodEnCatalogo = catalogo.find(catProd => catProd.id === p.producto_id);
-            }
+            let prodEnCatalogo = catalogo.find(x => x.id === p.producto_id); // Buscar por ID, que es más fiable
             
             if (prodEnCatalogo) {
                 const stockActual = parseFloat(prodEnCatalogo.stock) || 0;
@@ -761,19 +789,15 @@ export default function Compras() {
                     supabase.from('productos').update({
                         stock: nuevoStockTotal, 
                         costo_final_usd: parseFloat(nuevoCostoPromedioUSD.toFixed(4)),
-                        costo_final_mxn: parseFloat(nuevoCostoPromedioMXN.toFixed(2))
+                        costo_final_mxn: parseFloat(nuevoCostoPromedioMXN.toFixed(2)),
+                        last_cost_usd: parseFloat(precioUnitarioUSD.toFixed(4)) // Actualizar last_cost_usd con el precio de esta compra
                     }).eq('id', prodEnCatalogo.id).then(response => ({...response, producto_id_original: prodEnCatalogo.id, cantidad_comprada: cantidadCompra})) 
                 );
             } else { 
-                // Si el producto no existe en el catálogo, insertarlo como nuevo.
-                // Aquí, el producto_id del item de compra será NULL si no se encontró un producto existente.
-                productOperations.push(
-                    supabase.from('productos').insert({
-                        nombre: p.nombreProducto, stock: cantidadCompra,
-                        costo_final_usd: parseFloat(costoUnitarioFinalUSD.toFixed(4)),
-                        costo_final_mxn: parseFloat(costoUnitarioFinalMXN.toFixed(2))
-                    }).select('id').single().then(response => ({...response, cantidad_comprada: cantidadCompra})) 
-                );
+                // Esto no debería ocurrir si la lógica de `guardarCompra` funciona correctamente
+                // creando el producto si no existe. Pero como fallback, lo manejamos.
+                console.error(`Producto con ID ${p.producto_id} y nombre "${p.nombreProducto}" no encontrado en el catálogo para afectar inventario.`);
+                toast.error(`Error: Producto "${p.nombreProducto}" no encontrado en el catálogo para afectar inventario.`);
             }
         }
         
