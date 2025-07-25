@@ -486,7 +486,7 @@ export default function Compras() {
                     stock: 0, // El stock se ajustará al afectar inventario
                     costo_final_usd: parseFloat(item.precioUnitarioUSD || '0'),
                     costo_final_mxn: parseFloat(item.precioUnitarioUSD || '0') * (parseFloat(formulario.tipoCambioDia || '0') || 1),
-                    last_cost_usd: parseFloat(item.precioUnitarioUSD || '0') // Establecer el last_cost_usd inicial
+                    // Eliminado: last_cost_usd: parseFloat(item.precioUnitarioUSD || '0') // Establecer el last_cost_usd inicial
                 })
                 .select('id')
                 .single();
@@ -793,7 +793,7 @@ export default function Compras() {
                         stock: nuevoStockTotal, 
                         costo_final_usd: parseFloat(nuevoCostoPromedioUSD.toFixed(4)),
                         costo_final_mxn: parseFloat(nuevoCostoPromedioMXN.toFixed(2)),
-                        // last_cost_usd ya no se actualiza aquí
+                        // Eliminado: last_cost_usd ya no se actualiza aquí
                     }).eq('id', prodEnCatalogo.id).then(response => ({...response, producto_id_original: prodEnCatalogo.id, cantidad_comprada: cantidadCompra})) 
                 );
             } else { 
