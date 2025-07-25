@@ -120,7 +120,7 @@ export default function Compras() {
     const fetchProductNames = async () => {
       const { data, error } = await supabase
         .from('productos')
-        .select('id, nombre'); // Obtener tanto el ID como el nombre
+        .select('id, nombre, last_cost_usd'); // Obtener ID, nombre y last_cost_usd
 
       if (error) {
         console.error('Error al cargar nombres de productos para sugerencias:', error.message);
@@ -330,7 +330,7 @@ export default function Compras() {
             console.log("DEBUG: handleProductoFormInputChange - Value is empty, hiding suggestions.");
             setSugerenciasProductoForm([]);
             setMostrarSugerenciasProductoForm(false);
-            setProductoForm(prev => ({...prev, producto_id: null})); 
+            setProductoForm(prev => ({...prev, producto_id: null, precioUnitarioUSD: '0.00'})); // Reset price
         } else {
             console.log("DEBUG: handleProductoFormInputChange - Nombres sugeridos (master list):", nombresSugeridos); 
             const filtradas = nombresSugeridos.filter(p => p.nombre.toLowerCase().includes(trimmedValue.toLowerCase()));
@@ -341,9 +341,13 @@ export default function Compras() {
             
             if (filtradas.length === 1 && filtradas[0].nombre.toLowerCase() === trimmedValue.toLowerCase()) {
                 console.log("DEBUG: handleProductoFormInputChange - Exact match found, auto-selecting:", filtradas[0].nombre);
-                setProductoForm(prev => ({ ...prev, producto_id: filtradas[0].id }));
+                setProductoForm(prev => ({ 
+                    ...prev, 
+                    producto_id: filtradas[0].id, 
+                    precioUnitarioUSD: (filtradas[0].last_cost_usd || 0).toFixed(2) // Set price for exact match
+                }));
             } else {
-                setProductoForm(prev => ({...prev, producto_id: null}));
+                setProductoForm(prev => ({...prev, producto_id: null, precioUnitarioUSD: '0.00'})); // Reset price if no exact match
             }
         }
     }
@@ -358,7 +362,12 @@ export default function Compras() {
 
   const handleSeleccionarSugerenciaNuevaCompra = useCallback((sugerencia) => {
     console.log("DEBUG: handleSeleccionarSugerenciaNuevaCompra - Selected suggestion:", sugerencia);
-    setProductoForm(prev => ({ ...prev, nombreProducto: sugerencia.nombre, producto_id: sugerencia.id }));
+    setProductoForm(prev => ({ 
+        ...prev, 
+        nombreProducto: sugerencia.nombre, 
+        producto_id: sugerencia.id,
+        precioUnitarioUSD: (sugerencia.last_cost_usd || 0).toFixed(2) // Establecer el precio sugerido
+    }));
     setSugerenciasProductoForm([]);
     setMostrarSugerenciasProductoForm(false);
   }, []);
@@ -531,10 +540,16 @@ export default function Compras() {
         } else if (name === 'nombreProducto' || name === 'seleccionarSugerencia') {
             const nombreActual = name === 'seleccionarSugerencia' ? value.nombre : e.target.value; 
             const selectedProduct = nombresSugeridos.find(p => p.nombre === nombreActual);
-            setItemParaAgregarAExistente(prev => ({ ...prev, nombreProducto: nombreActual, producto_id: selectedProduct ? selectedProduct.id : null, mostrarSugerencias: name !== 'seleccionarSugerencia' }));
+            setItemParaAgregarAExistente(prev => ({ 
+                ...prev, 
+                nombreProducto: nombreActual, 
+                producto_id: selectedProduct ? selectedProduct.id : null, 
+                mostrarSugerencias: name !== 'seleccionarSugerencia',
+                precioUnitarioUSD: selectedProduct ? (selectedProduct.last_cost_usd || 0).toFixed(2) : '0.00' // Set price for existing item
+            }));
             
             if (nombreActual.trim() === '' || name === 'seleccionarSugerencia') {
-                setItemParaAgregarAExistente(prev => ({...prev, sugerencias: [], mostrarSugerencias: false, producto_id: null}));
+                setItemParaAgregarAExistente(prev => ({...prev, sugerencias: [], mostrarSugerencias: false, producto_id: null, precioUnitarioUSD: '0.00'})); // Reset price
             } else {
                 const filtradas = nombresSugeridos.filter(p => p.nombre.toLowerCase().includes(nombreActual.toLowerCase()));
                 setItemParaAgregarAExistente(prev => ({...prev, sugerencias: filtradas.slice(0,10), mostrarSugerencias: filtradas.length > 0 && name !== 'seleccionarSugerencia'}));
